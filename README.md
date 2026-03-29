@@ -22,7 +22,7 @@ DMEWS/
 ```bash
 cd Backend
 npm install
-npm run dev
+node server.js
 ```
 
 API base URL: **http://localhost:4000**
@@ -45,7 +45,7 @@ Open **http://localhost:3000**. The app fetches data from the Backend API (`NEXT
 
 ## Running both
 
-1. Start the **Backend** (terminal 1): `cd Backend && npm run dev`
+1. Start the **Backend** (terminal 1): `cd Backend && node server.js`
 2. Start the **Frontend** (terminal 2): `cd Frontend && npm run dev`
 3. Use the app at http://localhost:3000
 
