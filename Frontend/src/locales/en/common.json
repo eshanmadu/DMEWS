@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "alerts": "Alerts",
+    "incidents": "Incidents",
+    "shelters": "Shelters",
+    "login": "Login",
+    "signup": "Sign up",
+    "logout": "Logout",
+    "profile": "Profile",
+    "volunteer": "Volunteer"
+  },
+  "flood": {
+    "high": "⚠ FLOOD WARNING — HIGH RISK: {{districts}}. Stay safe. Follow official instructions.",
+    "medium": "📢 FLOOD WARNING — MEDIUM RISK: {{districts}}. Be prepared. Monitor updates."
+  },
+  "emergency": {
+    "title": "Emergency hotlines",
+    "subtitle": "Save these numbers. Call immediately in an emergency.",
+    "tapToCall": "Tap to call",
+    "emergency": "Emergency",
+    "police": "Police emergency",
+    "ambulance": "Free ambulance",
+    "fire": "Fire & rescue",
+    "disaster": "Disaster management"
+  },
+  "home": {
+    "riskStripTitle": "Live risk map of Sri Lanka",
+    "riskStripSubtitle": "District colours update automatically when admins change risk levels.",
+    "weatherStripTitle": "Live risk & weather map of Sri Lanka",
+    "weatherStripSubtitle": "District-level conditions with manual risk levels from admins."
+  },
+  "footer": {
+    "brandDesc": "Disaster Management & Early Warning System for Sri Lanka. Stay informed, stay prepared.",
+    "builtForCommunities": "Built for communities",
+    "quickLinksTitle": "Quick links",
+    "getHelpTitle": "Get help",
+    "emergency": "Emergency: 117",
+    "helpText": "Contact your local disaster management centre for alerts and shelter information.",
+    "adminLogin": "Admin login",
+    "copyright": "© {{year}} DMEWS · DisasterWatch. All rights reserved.",
+    "language": "Language",
+    "english": "English",
+    "sinhala": "සිංහල"
+  },
+  "loginPage": {
+    "title": "Log in to your account",
+    "subtitle": "Use your email and password",
+    "email": "Email",
+    "password": "Password",
+    "emailPlaceholder": "you@example.com",
+    "passwordPlaceholder": "Your password",
+    "submit": "Log in",
+    "submitting": "Logging in...",
+    "noAccount": "Don't have an account?",
+    "signUpLink": "Sign up",
+    "fail": "Failed to log in.",
+    "networkError": "Network error. Please try again."
+  },
+  "signupPage": {
+    "heroTitle": "DisasterWatch",
+    "heroSubtitle": "Join the early warning network",
+    "heroBody": "Create an operator account to manage alerts and incidents for your district.",
+    "title": "Create an account",
+    "subtitle": "All fields except name are required. Your district will be used to personalise risk and weather information.",
+    "profilePicture": "Profile picture",
+    "avatarHint": "Choose an avatar to use as your profile picture.",
+    "name": "Name",
+    "namePlaceholder": "Operator name (optional)",
+    "district": "District",
+    "selectDistrict": "Select your district",
+    "email": "Email",
+    "mobile": "Mobile number",
+    "mobilePlaceholder": "e.g. 0771234567",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "passwordPlaceholder": "At least 6 characters",
+    "confirmPlaceholder": "Re-enter password",
+    "submit": "Sign up",
+    "submitting": "Creating account...",
+    "hasAccount": "Already have an account?",
+    "loginLink": "Log in",
+    "passwordMismatch": "Passwords do not match.",
+    "fail": "Failed to sign up.",
+    "networkError": "Network error. Please try again."
+  },
+  "sos": {
+    "button": "SOS",
+    "hint": "Need urgent help? Tap to alert coordinators.",
+    "dialogTitle": "Request emergency help",
+    "dialogSubtitle": "We’ll notify disaster coordinators with your profile.",
+    "close": "Close",
+    "needLogin": "Sign in required",
+    "needLoginDetail": "We attach your name, district, email, and phone so responders can reach you.",
+    "goLogin": "Log in to send SOS",
+    "confirmText": "This sends an urgent SOS to the admin dashboard with your account details. Only use in a real emergency.",
+    "optionalMessage": "Optional message (location, situation)",
+    "messagePlaceholder": "e.g. Trapped near Kalutara bridge, need evacuation…",
+    "cancel": "Cancel",
+    "sendNow": "Send SOS",
+    "sending": "Sending…",
+    "sent": "SOS sent. Help coordinators have been notified.",
+    "sendFailed": "Could not send SOS. Try again.",
+    "networkError": "Network error. Please try again."
+  },
+  "forecast": {
+    "title": "Daily weather forecast",
+    "subtitle": "Text from Department of Meteorology Sri Lanka via Firecrawl (Sinhala, English & Tamil).",
+    "noText": "No forecast text available.",
+    "noTextSi": "අනාවැකි පෙළ ලබාගත නොහැක.",
+    "noTextTa": "முன்னறிவிப்பு உரை கிடைக்கவில்லை."
+  }
+}
+
