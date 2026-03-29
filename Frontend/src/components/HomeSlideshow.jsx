@@ -16,6 +16,13 @@ import { Autoplay, Pagination, A11y, Mousewheel } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/pagination";
 
+import localFont from "next/font/local";
+
+const savenirsans = localFont({
+  src: "../fonts/SavenirSans.ttf",
+  
+});
+
 const SLIDES = [
   {
     key: "home",
@@ -114,7 +121,7 @@ export function HomeSlideshow() {
               {/* Content */}
               <div className="absolute inset-0 flex items-center">
                 <div className="max-w-2xl px-8">
-                  <h1 className="text-4xl sm:text-5xl font-bold text-white">
+                  <h1 className={`${savenirsans.className} text-4xl sm:text-6xl font-bold tracking-wide text-white`}>
                     {slide.title}
                   </h1>
 
