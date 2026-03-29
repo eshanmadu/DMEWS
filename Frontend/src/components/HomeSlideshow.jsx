@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronUp, ChevronDown } from "lucide-react";
 
 import homeSlide from "@/img/slides/home.png";
 import riskSlide from "@/img/slides/risk.png";
@@ -11,9 +11,9 @@ import weatherSlide from "@/img/slides/weather.png";
 import shelterSlide from "@/img/slides/shelter.png";
 
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Autoplay, Navigation, Pagination, A11y } from "swiper/modules";
+import { Autoplay, Pagination, A11y, Mousewheel } from "swiper/modules";
+
 import "swiper/css";
-import "swiper/css/navigation";
 import "swiper/css/pagination";
 
 const SLIDES = [
@@ -26,7 +26,7 @@ const SLIDES = [
     ctaHref: "/signup",
     ctaLabel: "Sign up",
     ctaClass:
-      "bg-red-600/95 text-white hover:bg-red-600 focus-visible:ring-red-400/60",
+      "bg-gradient-to-r from-red-600 to-rose-600 text-white hover:from-red-700 hover:to-rose-700 shadow-lg shadow-red-500/25",
   },
   {
     key: "risk",
@@ -37,7 +37,7 @@ const SLIDES = [
     ctaHref: "#risk-map",
     ctaLabel: "Open risk map",
     ctaClass:
-      "bg-amber-400/95 text-slate-900 hover:bg-amber-400 focus-visible:ring-amber-300/70",
+      "bg-gradient-to-r from-amber-400 to-orange-400 text-slate-900 hover:from-amber-500 hover:to-orange-500 shadow-lg shadow-amber-500/25",
   },
   {
     key: "weather",
@@ -48,7 +48,7 @@ const SLIDES = [
     ctaHref: "#weather-map",
     ctaLabel: "View forecast",
     ctaClass:
-      "bg-sky-600/95 text-white hover:bg-sky-600 focus-visible:ring-sky-400/70",
+      "bg-gradient-to-r from-sky-600 to-blue-600 text-white hover:from-sky-700 hover:to-blue-700 shadow-lg shadow-sky-500/25",
   },
   {
     key: "shelter",
@@ -59,18 +59,7 @@ const SLIDES = [
     ctaHref: "/shelters",
     ctaLabel: "Find shelters",
     ctaClass:
-      "bg-emerald-600/95 text-white hover:bg-emerald-600 focus-visible:ring-emerald-400/70",
-  },
-  {
-    key: "volunteer",
-    imageSrc: homeSlide,
-    title: "Volunteer for emergencies",
-    subtitle: "Community support when it matters most",
-    body: "Signed-up users can register to volunteer during disasters. Your request is reviewed by an admin before you are verified.",
-    ctaHref: "/volunteer",
-    ctaLabel: "Register as volunteer",
-    ctaClass:
-      "bg-rose-600/95 text-white hover:bg-rose-600 focus-visible:ring-rose-400/70",
+      "bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700 shadow-lg shadow-emerald-500/25",
   },
 ];
 
@@ -80,86 +69,120 @@ export function HomeSlideshow() {
   const [swiper, setSwiper] = useState(null);
 
   return (
-    <section className="mb-8 overflow-hidden rounded-2xl border border-sky-200/80 bg-slate-900 shadow-lg">
-      <div className="relative h-[280px] sm:h-[340px] lg:h-[380px]">
+    <section className="relative mb-12 overflow-hidden rounded-3xl bg-slate-900 shadow-2xl">
+      <div className="relative h-[320px] sm:h-[420px] lg:h-[520px]">
+
         <Swiper
-          modules={[Autoplay, Navigation, Pagination, A11y]}
+          modules={[Autoplay, Pagination, A11y, Mousewheel]}
           onSwiper={setSwiper}
+          direction="vertical"
           slidesPerView={1}
+          speed={900}
           loop
-          speed={650}
-          autoplay={{ delay: 5500, disableOnInteraction: false, pauseOnMouseEnter: true }}
-          pagination={{ clickable: true }}
-          a11y={{ enabled: true }}
-          className="h-full"
+          mousewheel
+          autoplay={{
+            delay: 5000,
+            disableOnInteraction: false,
+          }}
+          pagination={{
+            clickable: true,
+          }}
+          className="h-full modern-vertical-swiper"
         >
           {slides.map((slide) => (
             <SwiperSlide key={slide.key} className="relative h-full">
+
+              {/* Background */}
               {!broken[slide.key] ? (
                 <Image
                   src={slide.imageSrc}
                   alt={slide.title}
                   fill
                   priority={slide.key === "home"}
-                  onError={() => setBroken((p) => ({ ...p, [slide.key]: true }))}
-                  className="object-cover"
+                  onError={() =>
+                    setBroken((p) => ({ ...p, [slide.key]: true }))
+                  }
+                  className="object-cover transition-transform duration-[7000ms] scale-105"
                 />
               ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-sky-900 via-slate-900 to-slate-950" />
+                <div className="absolute inset-0 bg-gradient-to-br from-sky-900 via-slate-900 to-black" />
               )}
 
-              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/75 via-slate-950/35 to-transparent" />
+              {/* Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
 
+              {/* Content */}
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full max-w-2xl px-6 py-6 sm:px-8">
-                  <h1 className="font-oswald text-3xl font-semibold tracking-wide text-white sm:text-4xl">
+                <div className="max-w-2xl px-8">
+                  <h1 className="text-4xl sm:text-5xl font-bold text-white">
                     {slide.title}
                   </h1>
-                  <h2 className="mt-2 text-sm font-semibold uppercase tracking-wide text-sky-100/90 sm:text-base">
+
+                  <p className="mt-2 text-sky-200 uppercase tracking-wider text-sm">
                     {slide.subtitle}
-                  </h2>
-                  <p className="mt-2 max-w-xl text-sm text-sky-100/85 sm:text-base">
+                  </p>
+
+                  <p className="mt-4 text-slate-200">
                     {slide.body}
                   </p>
 
-                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <div className="mt-6 flex gap-3">
                     <Link
                       href={slide.ctaHref}
-                      className={`inline-flex items-center rounded-full px-5 py-2.5 text-sm font-semibold shadow-sm outline-none transition hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${slide.ctaClass}`}
+                      className={`rounded-full px-6 py-3 text-sm font-semibold transition hover:scale-105 ${slide.ctaClass}`}
                     >
                       {slide.ctaLabel}
                     </Link>
+
                     <Link
                       href="/alerts"
-                      className="inline-flex items-center rounded-full bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-sm outline-none transition hover:bg-white/15 hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+                      className="rounded-full border border-white/30 px-6 py-3 text-white hover:bg-white/10 transition"
                     >
                       View alerts
                     </Link>
                   </div>
                 </div>
               </div>
+
             </SwiperSlide>
           ))}
         </Swiper>
 
+        {/* Up button */}
         <button
-          type="button"
           onClick={() => swiper?.slidePrev()}
-          aria-label="Previous slide"
-          className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white backdrop-blur transition hover:bg-white/20"
+          className="absolute top-6 left-1/2 -translate-x-1/2 z-10 rounded-full bg-white/10 p-3 text-white backdrop-blur-md hover:bg-white/20 transition"
         >
-          <ChevronLeft className="h-5 w-5" />
+          <ChevronUp size={22} />
         </button>
+
+        {/* Down button */}
         <button
-          type="button"
           onClick={() => swiper?.slideNext()}
-          aria-label="Next slide"
-          className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white backdrop-blur transition hover:bg-white/20"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 rounded-full bg-white/10 p-3 text-white backdrop-blur-md hover:bg-white/20 transition"
         >
-          <ChevronRight className="h-5 w-5" />
+          <ChevronDown size={22} />
         </button>
+
       </div>
+
+      <style jsx global>{`
+        .modern-vertical-swiper .swiper-pagination {
+          right: 18px;
+        }
+
+        .modern-vertical-swiper .swiper-pagination-bullet {
+          background: rgba(255,255,255,0.6);
+          width: 6px;
+          height: 6px;
+        }
+
+        .modern-vertical-swiper .swiper-pagination-bullet-active {
+          height: 20px;
+          border-radius: 6px;
+          background: linear-gradient(to bottom, #38bdf8, #2563eb);
+        }
+      `}</style>
     </section>
   );
 }
-
