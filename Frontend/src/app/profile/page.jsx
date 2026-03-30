@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import Loader from "@/components/Loader";
 import { AVATARS, avatarSrcById } from "@/lib/avatars";
@@ -19,6 +20,8 @@ import {
   Camera,
   X,
   BadgeCheck,
+  FileText,
+  Users,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -30,35 +33,17 @@ const DISTRICTS = [
   "Monaragala", "Ratnapura", "Kegalle",
 ];
 
-function InputWithIcon({
-  icon: Icon,
-  label,
-  type = "text",
-  value,
-  onChange,
-  placeholder,
-  required,
-  minLength,
-  as = "input",
-  options,
-}) {
-  const base =
-    "w-full rounded-xl border border-slate-300 bg-white py-3 pl-11 pr-4 text-slate-900 placeholder-slate-400 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-200";
+function InputWithIcon({ icon: Icon, label, type = "text", value, onChange, placeholder, required, minLength, as = "input", options }) {
+  const baseClasses = "w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-200";
   return (
     <div className="relative">
-      <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-slate-400">
-        {label}
-      </label>
+      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</label>
       <div className="group relative">
-        <span className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-slate-500 transition group-focus-within:text-teal-400">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-slate-400 transition group-focus-within:text-sky-500">
           <Icon className="h-4 w-4" />
         </span>
         {as === "select" ? (
-          <select
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className={base}
-          >
+          <select value={value} onChange={(e) => onChange(e.target.value)} className={baseClasses}>
             <option value="">Select district</option>
             {(options || []).map((d) => (
               <option key={d} value={d}>{d}</option>
@@ -72,7 +57,7 @@ function InputWithIcon({
             placeholder={placeholder}
             required={required}
             minLength={minLength}
-            className={base}
+            className={baseClasses}
           />
         )}
       </div>
@@ -83,6 +68,7 @@ function InputWithIcon({
 export default function ProfilePage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState(null);
@@ -112,12 +98,13 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!mounted || typeof window === "undefined") return;
-    const token = window.localStorage.getItem("dmews_token");
+    const token = localStorage.getItem("dmews_token");
     if (!token) {
       router.replace("/login");
       return;
     }
-    (async () => {
+
+    const fetchProfile = async () => {
       setProfileLoading(true);
       setProfileError(null);
       try {
@@ -126,11 +113,8 @@ export default function ProfilePage() {
         });
         const data = await res.json();
         if (!res.ok) {
-          if (res.status === 401) {
-            router.replace("/login");
-            return;
-          }
-          setProfileError(data?.message || "Failed to load profile.");
+          if (res.status === 401) router.replace("/login");
+          else setProfileError(data?.message || "Failed to load profile.");
           setProfileLoading(false);
           return;
         }
@@ -145,14 +129,16 @@ export default function ProfilePage() {
       } finally {
         setProfileLoading(false);
       }
-    })();
+    };
+
+    fetchProfile();
   }, [mounted, router]);
 
   async function handleProfileSubmit(e) {
     e.preventDefault();
     setProfileMsg(null);
     setProfileSuccess(null);
-    const token = typeof window !== "undefined" ? window.localStorage.getItem("dmews_token") : null;
+    const token = localStorage.getItem("dmews_token");
     if (!token) {
       router.replace("/login");
       return;
@@ -170,20 +156,15 @@ export default function ProfilePage() {
       const data = await res.json();
       if (!res.ok) {
         setProfileMsg(data?.message || "Failed to update profile.");
-        setProfileSaving(false);
         return;
       }
-      if (data.token) {
-        window.localStorage.setItem("dmews_token", data.token);
-      }
+      if (data.token) localStorage.setItem("dmews_token", data.token);
       if (data.user) {
-        window.localStorage.setItem("dmews_user", JSON.stringify(data.user));
-        if (data.user.district) {
-          window.localStorage.setItem("dmews_user_district", data.user.district);
-        }
+        localStorage.setItem("dmews_user", JSON.stringify(data.user));
+        if (data.user.district) localStorage.setItem("dmews_user_district", data.user.district);
         setProfile(data.user);
       }
-      setProfileSuccess("Profile updated.");
+      setProfileSuccess("Profile updated successfully.");
       window.dispatchEvent(new Event("dmews-auth-changed"));
     } catch {
       setProfileMsg("Network error.");
@@ -204,7 +185,7 @@ export default function ProfilePage() {
       setPasswordMsg("New password must be at least 6 characters.");
       return;
     }
-    const token = typeof window !== "undefined" ? window.localStorage.getItem("dmews_token") : null;
+    const token = localStorage.getItem("dmews_token");
     if (!token) {
       router.replace("/login");
       return;
@@ -217,18 +198,14 @@ export default function ProfilePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          currentPassword: currentPassword,
-          newPassword: newPassword,
-        }),
+        body: JSON.stringify({ currentPassword, newPassword }),
       });
       const data = await res.json();
       if (!res.ok) {
         setPasswordMsg(data?.message || "Failed to change password.");
-        setPasswordSaving(false);
         return;
       }
-      setPasswordSuccess("Password updated.");
+      setPasswordSuccess("Password updated successfully.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmNewPassword("");
@@ -241,12 +218,13 @@ export default function ProfilePage() {
 
   if (!mounted || profileLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center px-4">
-        <div className="flex flex-col items-center gap-4 rounded-2xl bg-white/80 px-10 py-8 shadow-lg ring-1 ring-slate-200">
-          <Loader size="lg" />
-          <span className="text-sm font-medium text-slate-600">
-            Loading profile…
-          </span>
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        <div className="animate-pulse">
+          <div className="mb-8 h-40 w-full rounded-2xl bg-slate-200" />
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="h-80 rounded-2xl bg-slate-100" />
+            <div className="h-80 rounded-2xl bg-slate-100" />
+          </div>
         </div>
       </div>
     );
@@ -268,30 +246,24 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Profile Header Card */}
-      <div className="relative mb-8 overflow-hidden rounded-2xl bg-gradient-to-br from-sky-700 via-sky-600 to-sky-800 shadow-lg">
+      {/* Profile Header with Navigation Links */}
+      <div className="relative mb-8 overflow-hidden rounded-2xl bg-gradient-to-r from-sky-600 to-sky-800 shadow-lg">
         <div className="relative z-10 px-6 py-8 sm:px-8 sm:py-10">
           <div className="flex flex-col items-center gap-6 sm:flex-row sm:gap-8">
             {/* Avatar */}
             <div className="relative">
-              <div className="relative h-28 w-28 overflow-hidden rounded-2xl border-4 border-white/30 bg-sky-500/30 shadow-lg sm:h-32 sm:w-32">
+              <div className="relative h-28 w-28 overflow-hidden rounded-2xl border-4 border-white/30 bg-white/10 shadow-lg sm:h-32 sm:w-32">
                 {activeAvatar ? (
-                  <Image
-                    src={activeAvatar}
-                    alt={displayName}
-                    fill
-                    sizes="128px"
-                    className="object-cover"
-                  />
+                  <Image src={activeAvatar} alt={displayName} fill sizes="128px" className="object-cover" />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sky-100">
+                  <div className="flex h-full w-full items-center justify-center text-white">
                     <User className="h-12 w-12" />
                   </div>
                 )}
               </div>
               <button
                 onClick={() => setAvatarPickerOpen(true)}
-                className="absolute -bottom-2 -right-2 rounded-full bg-sky-800 p-1.5 text-white shadow-md transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2"
+                className="absolute -bottom-2 -right-2 rounded-full bg-white p-1.5 text-sky-600 shadow-md transition hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2"
                 aria-label="Change avatar"
               >
                 <Camera className="h-4 w-4" />
@@ -301,15 +273,8 @@ export default function ProfilePage() {
             {/* User Info */}
             <div className="text-center sm:text-left">
               <div className="flex items-center justify-center gap-2 sm:justify-start">
-                <h1 className="text-2xl font-bold text-white sm:text-3xl">
-                  {displayName}
-                </h1>
-                {profile?.volunteerStatus === "approved" && (
-                  <BadgeCheck
-                    className="h-6 w-6 text-blue-300"
-                    aria-label="Verified volunteer"
-                  />
-                )}
+                <h1 className="text-2xl font-bold text-white sm:text-3xl">{displayName}</h1>
+                {profile?.volunteerStatus === "approved" && <BadgeCheck className="h-6 w-6 text-blue-300" />}
               </div>
               <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-sky-100 sm:justify-start">
                 <span className="flex items-center gap-1.5">
@@ -329,91 +294,79 @@ export default function ProfilePage() {
                   </span>
                 )}
               </div>
-              <div className="mt-4 inline-block rounded-full bg-sky-800/50 px-3 py-1 text-xs font-medium text-sky-100 backdrop-blur-sm">
+              <div className="mt-4 inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
                 Disaster Management & Early Warning System
               </div>
             </div>
           </div>
-        </div>
-        <div className="absolute inset-0 bg-black/10" />
-      </div>
 
-      {/* Two‑column layout for forms */}
+         {/* Navigation Shortcuts */}
+<div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
+  <Link
+    href="/profile/incidents"
+    className="group flex items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white backdrop-blur-md transition hover:bg-white/20 hover:shadow-lg"
+  >
+    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20">
+      <FileText className="h-5 w-5" />
+    </div>
+    <div>
+      <p className="text-sm font-semibold">My Incidents</p>
+      <p className="text-xs text-sky-100">Reports you've submitted</p>
+    </div>
+  </Link>
+
+  <Link
+    href="/profile/missions"
+    className="group flex items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white backdrop-blur-md transition hover:bg-white/20 hover:shadow-lg"
+  >
+    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20">
+      <Users className="h-5 w-5" />
+    </div>
+    <div>
+      <p className="text-sm font-semibold">My Missions</p>
+      <p className="text-xs text-sky-100">Volunteer work you joined</p>
+    </div>
+  </Link>
+</div>
+</div>
+</div>
+      {/* Main Content – Only Personal Info & Security */}
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Edit Profile Card */}
+        {/* Personal Information Card */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100">
-              <User className="h-5 w-5 text-sky-700" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
+              <User className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">
-                Edit Profile
-              </h2>
-              <p className="text-[11px] text-slate-500">
-                Update your personal information.
-              </p>
+              <h2 className="text-sm font-semibold text-slate-900">Personal Information</h2>
+              <p className="text-xs text-slate-500">Update your personal details</p>
             </div>
           </div>
-
           <form onSubmit={handleProfileSubmit} className="space-y-4">
-            <InputWithIcon
-              icon={User}
-              label="Name"
-              value={name}
-              onChange={setName}
-              placeholder="Your name"
-            />
-            <InputWithIcon
-              icon={Mail}
-              label="Email"
-              type="email"
-              required
-              value={email}
-              onChange={setEmail}
-              placeholder="you@example.com"
-            />
-            <InputWithIcon
-              icon={Phone}
-              label="Mobile number"
-              type="tel"
-              value={mobile}
-              onChange={setMobile}
-              placeholder="e.g. 0771234567"
-            />
-            <InputWithIcon
-              icon={MapPin}
-              label="District"
-              value={district}
-              onChange={setDistrict}
-              as="select"
-              options={DISTRICTS}
-            />
-
+            <InputWithIcon icon={User} label="Full Name" value={name} onChange={setName} placeholder="Your name" />
+            <InputWithIcon icon={Mail} label="Email Address" type="email" required value={email} onChange={setEmail} placeholder="you@example.com" />
+            <InputWithIcon icon={Phone} label="Mobile Number" type="tel" value={mobile} onChange={setMobile} placeholder="e.g., 0771234567" />
+            <InputWithIcon icon={MapPin} label="District" value={district} onChange={setDistrict} as="select" options={DISTRICTS} />
             {profileMsg && (
-              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 {profileMsg}
               </div>
             )}
             {profileSuccess && (
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700">
+              <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5 text-sm text-green-700">
                 <CheckCircle className="h-4 w-4 shrink-0" />
                 {profileSuccess}
               </div>
             )}
-
             <button
               type="submit"
               disabled={profileSaving}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-600 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 focus:ring-offset-slate-50 disabled:opacity-70"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-600 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 disabled:opacity-70"
             >
-              {profileSaving ? (
-                <Loader size="sm" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              {profileSaving ? "Saving…" : "Save profile"}
+              {profileSaving ? <Loader size="sm" /> : <Save className="h-4 w-4" />}
+              {profileSaving ? "Saving..." : "Save Changes"}
             </button>
           </form>
         </div>
@@ -421,74 +374,37 @@ export default function ProfilePage() {
         {/* Security Card */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
-              <Shield className="h-5 w-5 text-amber-700" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+              <Shield className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">
-                Security
-              </h2>
-              <p className="text-[11px] text-slate-500">
-                Change your password.
-              </p>
+              <h2 className="text-sm font-semibold text-slate-900">Security</h2>
+              <p className="text-xs text-slate-500">Change your password</p>
             </div>
           </div>
-
           <form onSubmit={handlePasswordSubmit} className="space-y-4">
-            <InputWithIcon
-              icon={Lock}
-              label="Current password"
-              type="password"
-              required
-              value={currentPassword}
-              onChange={setCurrentPassword}
-              placeholder="Enter current password"
-            />
-            <InputWithIcon
-              icon={KeyRound}
-              label="New password"
-              type="password"
-              required
-              minLength={6}
-              value={newPassword}
-              onChange={setNewPassword}
-              placeholder="At least 6 characters"
-            />
-            <InputWithIcon
-              icon={KeyRound}
-              label="Confirm new password"
-              type="password"
-              required
-              minLength={6}
-              value={confirmNewPassword}
-              onChange={setConfirmNewPassword}
-              placeholder="Re-enter new password"
-            />
-
+            <InputWithIcon icon={Lock} label="Current Password" type="password" required value={currentPassword} onChange={setCurrentPassword} placeholder="Enter current password" />
+            <InputWithIcon icon={KeyRound} label="New Password" type="password" required minLength={6} value={newPassword} onChange={setNewPassword} placeholder="At least 6 characters" />
+            <InputWithIcon icon={KeyRound} label="Confirm New Password" type="password" required minLength={6} value={confirmNewPassword} onChange={setConfirmNewPassword} placeholder="Re-enter new password" />
             {passwordMsg && (
-              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 {passwordMsg}
               </div>
             )}
             {passwordSuccess && (
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700">
+              <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5 text-sm text-green-700">
                 <CheckCircle className="h-4 w-4 shrink-0" />
                 {passwordSuccess}
               </div>
             )}
-
             <button
               type="submit"
               disabled={passwordSaving}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 py-2.5 text-sm font-semibold text-slate-50 shadow-sm transition hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-50 disabled:opacity-70"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:opacity-70"
             >
-              {passwordSaving ? (
-                <Loader size="sm" />
-              ) : (
-                <Lock className="h-4 w-4" />
-              )}
-              {passwordSaving ? "Updating…" : "Change password"}
+              {passwordSaving ? <Loader size="sm" /> : <Lock className="h-4 w-4" />}
+              {passwordSaving ? "Updating..." : "Change Password"}
             </button>
           </form>
         </div>
@@ -497,36 +413,20 @@ export default function ProfilePage() {
       {/* Avatar Picker Modal */}
       {avatarPickerOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           role="dialog"
           aria-modal="true"
-          aria-label="Choose a profile picture"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setAvatarPickerOpen(false);
-          }}
+          onClick={(e) => e.target === e.currentTarget && setAvatarPickerOpen(false)}
         >
-          <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-slate-200">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-900">
-                  Choose a profile picture
-                </h3>
-                <p className="mt-0.5 text-[11px] text-slate-500">
-                  Select one avatar. It will be saved when you press “Save profile”.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAvatarPickerOpen(false)}
-                className="inline-flex items-center justify-center rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2"
-                aria-label="Close"
-              >
+              <h3 className="text-lg font-semibold text-slate-900">Choose an avatar</h3>
+              <button onClick={() => setAvatarPickerOpen(false)} className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-500">
                 <X className="h-5 w-5" />
               </button>
             </div>
-
-            <div className="max-h-[60vh] overflow-auto p-5">
-              <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+            <div className="max-h-[60vh] overflow-y-auto p-5">
+              <div className="grid grid-cols-3 gap-4 sm:grid-cols-4">
                 {avatars.map((a) => {
                   const selected = avatar === a.id;
                   return (
@@ -537,22 +437,14 @@ export default function ProfilePage() {
                         setAvatar(a.id);
                         setAvatarPickerOpen(false);
                       }}
-                      className={`group flex flex-col items-center gap-2 rounded-2xl border p-3 text-[11px] font-semibold transition focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2 ${
-                        selected
-                          ? "border-sky-500 bg-sky-50 text-sky-700"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-sky-300 hover:bg-slate-50"
+                      className={`group relative flex flex-col items-center rounded-xl p-2 text-center transition focus:outline-none focus:ring-2 focus:ring-sky-300 ${
+                        selected ? "bg-sky-50 ring-2 ring-sky-500" : "hover:bg-slate-50"
                       }`}
                     >
-                      <div className="relative h-14 w-14 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
-                        <Image
-                          src={a.src}
-                          alt={a.label}
-                          fill
-                          sizes="56px"
-                          className="object-cover"
-                        />
+                      <div className="relative h-16 w-16 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+                        <Image src={a.src} alt={a.label} fill sizes="64px" className="object-cover" />
                       </div>
-                      <span className="line-clamp-1">{a.label}</span>
+                      <span className="mt-2 text-xs font-medium text-slate-700">{a.label}</span>
                     </button>
                   );
                 })}

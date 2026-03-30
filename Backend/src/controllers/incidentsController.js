@@ -57,6 +57,25 @@ async function getIncidents(req, res) {
   }
 }
 
+async function getMyIncidents(req, res) {
+  try {
+    await connectDb();
+    const userIncidents = await IncidentReport.find({ userId: req.userId })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean()
+      .exec();
+
+    const merged = (Array.isArray(userIncidents) ? userIncidents : []).map((d) =>
+      normalizeUserIncident(d)
+    );
+    return res.json(merged);
+  } catch (error) {
+    console.error("My incidents error", error);
+    return res.status(500).json({ message: "Failed to load your incidents." });
+  }
+}
+
 async function createUserIncident(req, res) {
   try {
     if (req.isDevAdmin || req.userId === "dev-admin-session") {
@@ -212,6 +231,7 @@ async function deleteUserIncident(req, res) {
 
 module.exports = {
   getIncidents,
+  getMyIncidents,
   createUserIncident,
   updateUserIncident,
   deleteUserIncident,

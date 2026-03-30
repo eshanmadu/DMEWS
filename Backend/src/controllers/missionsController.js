@@ -235,7 +235,19 @@ async function myMissions(req, res) {
       .exec();
 
     const ids = (joins || []).map((j) => String(j.missionId));
-    return res.json({ missionIds: ids });
+    if (!ids.length) return res.json({ missionIds: [], missions: [] });
+
+    const missions = await Mission.find({ _id: { $in: ids } })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+
+    const counts = await joinedCountsForMissionIds(missions.map((m) => m._id));
+    const out = (Array.isArray(missions) ? missions : []).map((m) =>
+      missionOut(m, counts.get(String(m._id)) || 0)
+    );
+
+    return res.json({ missionIds: ids, missions: out });
   } catch (error) {
     console.error("My missions error", error);
     return res.status(500).json({ message: "Failed to load your missions." });
