@@ -175,7 +175,7 @@ export function Nav() {
                     "rounded-lg px-3 py-2 text-sm font-medium transition",
                     pathname === "/login"
                       ? "bg-white/15 text-white"
-                      : "text-sky-100/80 hover:bg-sky-500/40 hover:text-white"
+                      : "text-sky-100/80 hover:bg-red-500 hover:text-white"
                   )}
                 >
                   {t("nav.login")}
