@@ -1,6 +1,5 @@
 const { connectDb } = require("../db");
 const mongoose = require("mongoose");
-const { MOCK_INCIDENTS } = require("../data");
 const { User } = require("../models/User");
 const { IncidentReport } = require("../models/IncidentReport");
 const { uploadBuffer, isCloudinaryConfigured } = require("../services/cloudinaryUpload");
@@ -24,7 +23,7 @@ function normalizeUserIncident(doc) {
       mobile: o.userSnapshot?.mobile || "",
       avatar: o.userSnapshot?.avatar || "",
     },
-    reportedAt: o.createdAt,
+    reportedAt: o.reportedAt || o.createdAt,
     updatedAt: o.updatedAt,
   };
 }
@@ -41,13 +40,10 @@ async function getIncidents(req, res) {
       .lean()
       .exec();
 
-    const merged = [
-      ...(Array.isArray(MOCK_INCIDENTS) ? MOCK_INCIDENTS : []),
-      ...userIncidents.map((d) => normalizeUserIncident(d)),
-    ].sort(
+    const merged = [...userIncidents.map((d) => normalizeUserIncident(d))].sort(
       (a, b) =>
-        new Date(b?.updatedAt || b?.reportedAt || 0).getTime() -
-        new Date(a?.updatedAt || a?.reportedAt || 0).getTime()
+        new Date(b?.reportedAt || b?.updatedAt || 0).getTime() -
+        new Date(a?.reportedAt || a?.updatedAt || 0).getTime()
     );
 
     return res.json(merged);
@@ -87,11 +83,51 @@ async function createUserIncident(req, res) {
     const district = String(req.body?.district || "").trim();
     const title = String(req.body?.title || "").trim();
     const description = String(req.body?.description || "").trim();
+    const reportedAtRaw = String(req.body?.reportedAt || "").trim();
 
     if (!district || !title || !description) {
       return res.status(400).json({
         message: "district, title and description are required.",
       });
+    }
+
+    function toYMD(date) {
+      return date.toISOString().slice(0, 10); // UTC day boundary
+    }
+
+    function parseReportedAtYMD(ymd) {
+      // Input comes from <input type="date"> as YYYY-MM-DD
+      const parsed = new Date(`${ymd}T00:00:00.000Z`);
+      if (Number.isNaN(parsed.getTime())) return null;
+      return parsed;
+    }
+
+    let reportedAt = null;
+    if (reportedAtRaw) {
+      // Validate the YYYY-MM-DD format quickly.
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(reportedAtRaw)) {
+        return res.status(400).json({ message: "Invalid reportedAt format." });
+      }
+
+      const todayYMD = toYMD(new Date());
+      const minMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const minYMD = toYMD(new Date(minMs));
+
+      if (reportedAtRaw > todayYMD) {
+        return res.status(400).json({
+          message: "reportedAt cannot be in the future.",
+        });
+      }
+      if (reportedAtRaw < minYMD) {
+        return res.status(400).json({
+          message: "reportedAt cannot be older than 7 days.",
+        });
+      }
+
+      reportedAt = parseReportedAtYMD(reportedAtRaw);
+      if (!reportedAt) {
+        return res.status(400).json({ message: "Invalid reportedAt date." });
+      }
     }
 
     await connectDb();
@@ -124,6 +160,7 @@ async function createUserIncident(req, res) {
       district,
       title: title.slice(0, 120),
       description: description.slice(0, 2000),
+      reportedAt,
       media,
       status: "reported",
     });

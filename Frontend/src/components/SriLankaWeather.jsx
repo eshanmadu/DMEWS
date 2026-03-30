@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { SriLankaMap } from "@/components/SriLankaMap";
 import Loader from "@/components/Loader";
+import MapLockFrame from "@/components/MapLockFrame";
 
 function describeWeatherCode(code) {
   if (code == null) return "—";
@@ -239,23 +240,25 @@ export function SriLankaWeather() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)]">
-      <div className="h-[480px] overflow-hidden rounded-xl bg-slate-800">
-        <SriLankaMap
-          onData={(list) => {
-            setDistricts(list);
-            const currentUserDistrict = getUserDistrictFromStorage();
-            if (currentUserDistrict) {
-              setUserDistrict(currentUserDistrict);
-              if (lockToUserDistrict) {
-                setSelectedName(currentUserDistrict);
-                setShowAllDistricts(false);
+      <div className="relative h-[480px] overflow-hidden rounded-xl bg-slate-800">
+        <MapLockFrame className="h-full w-full min-h-0">
+          <SriLankaMap
+            onData={(list) => {
+              setDistricts(list);
+              const currentUserDistrict = getUserDistrictFromStorage();
+              if (currentUserDistrict) {
+                setUserDistrict(currentUserDistrict);
+                if (lockToUserDistrict) {
+                  setSelectedName(currentUserDistrict);
+                  setShowAllDistricts(false);
+                }
               }
-            }
-          }}
-          onHover={setHovered}
-          onSelect={(name) => setSelectedName(name)}
-          selectedDistrict={selectedName}
-        />
+            }}
+            onHover={setHovered}
+            onSelect={(name) => setSelectedName(name)}
+            selectedDistrict={selectedName}
+          />
+        </MapLockFrame>
       </div>
 
       <div className="card flex flex-col gap-4 p-4">

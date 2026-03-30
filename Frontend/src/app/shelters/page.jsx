@@ -13,7 +13,8 @@ import {
   ShieldAlert,
   Navigation,
   PhoneCall,
-  Clock,
+  Filter,
+  X,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -41,7 +42,10 @@ export default function SheltersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [userDistrict, setUserDistrict] = useState(null);
+  const [selectedDistrict, setSelectedDistrict] = useState("");
+  const [districts, setDistricts] = useState([]);
 
+  // Load user district from localStorage
   useEffect(() => {
     let user = null;
     try {
@@ -52,23 +56,48 @@ export default function SheltersPage() {
     setUserDistrict(district || null);
   }, []);
 
+  // Fetch shelters
   useEffect(() => {
     fetch(`${API_BASE}/shelters`)
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) setShelters(data);
-        else setError(data?.message || "Failed to load shelters.");
+        if (Array.isArray(data)) {
+          setShelters(data);
+          // Extract unique districts for filter
+          const uniqueDistricts = [...new Set(data.map(s => s.district).filter(Boolean))].sort();
+          setDistricts(uniqueDistricts);
+        } else {
+          setError(data?.message || "Failed to load shelters.");
+        }
       })
       .catch((e) => setError(e?.message || "Failed to load shelters."))
       .finally(() => setLoading(false));
   }, []);
 
-  const nearYou = userDistrict
-    ? shelters.filter((s) => s.district?.toLowerCase() === userDistrict.toLowerCase())
-    : [];
-  const others = userDistrict
-    ? shelters.filter((s) => s.district?.toLowerCase() !== userDistrict.toLowerCase())
+  // Filter shelters by selected district
+  const filteredByDistrict = selectedDistrict
+    ? shelters.filter(s => s.district === selectedDistrict)
     : shelters;
+
+  // Sort: user's district first, then others
+  const sortedShelters = [...filteredByDistrict].sort((a, b) => {
+    if (!userDistrict) return 0;
+    const aIsUserDistrict = a.district === userDistrict;
+    const bIsUserDistrict = b.district === userDistrict;
+    if (aIsUserDistrict && !bIsUserDistrict) return -1;
+    if (!aIsUserDistrict && bIsUserDistrict) return 1;
+    return 0;
+  });
+
+  // For display grouping (optional, but we keep single grid)
+  const userDistrictShelters = userDistrict
+    ? sortedShelters.filter(s => s.district === userDistrict)
+    : [];
+  const otherShelters = userDistrict
+    ? sortedShelters.filter(s => s.district !== userDistrict)
+    : sortedShelters;
+
+  const handleResetFilter = () => setSelectedDistrict("");
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -84,7 +113,7 @@ export default function SheltersPage() {
                 Evacuation Shelters
               </h1>
               <p className="mt-2 max-w-2xl text-sky-100">
-                Find designated shelters near you. When logged in, we show shelters in your district first.
+                Find designated shelters near you. Shelters in your district are shown first.
               </p>
             </div>
           </div>
@@ -103,50 +132,102 @@ export default function SheltersPage() {
           <Loader />
         </div>
       ) : (
-        <div className="space-y-12">
-          {/* Shelters near you */}
-          {userDistrict && nearYou.length > 0 && (
-            <section>
-              <div className="mb-5 flex items-center gap-2">
-                <div className="rounded-full bg-sky-100 p-2">
-                  <Navigation className="h-5 w-5 text-sky-700" />
-                </div>
-                <h2 className="text-xl font-semibold tracking-tight text-slate-800">
-                  Shelters in your district <span className="text-sky-600">({userDistrict})</span>
-                </h2>
+        <div className="space-y-8">
+          {/* Filter Bar */}
+          {shelters.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm border border-slate-200">
+              <div className="flex items-center gap-2">
+                <Filter className="h-5 w-5 text-slate-500" />
+                <span className="text-sm font-medium text-slate-700">Filter by district:</span>
               </div>
+              <div className="flex flex-1 flex-wrap items-center gap-3">
+                <select
+                  value={selectedDistrict}
+                  onChange={(e) => setSelectedDistrict(e.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                >
+                  <option value="">All districts</option>
+                  {districts.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+                {selectedDistrict && (
+                  <button
+                    onClick={handleResetFilter}
+                    className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-100"
+                  >
+                    <X className="h-4 w-4" />
+                    Clear
+                  </button>
+                )}
+              </div>
+              {userDistrict && (
+                <div className="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full">
+                  ⚡ Your district: <span className="font-medium">{userDistrict}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Shelters Grid */}
+          {sortedShelters.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
+              <Building2 className="mb-4 h-12 w-12 text-slate-300" />
+              <p className="text-slate-600">
+                {selectedDistrict
+                  ? `No shelters found in ${selectedDistrict}. Try a different district.`
+                  : "No shelters listed yet. Check back later or contact your local disaster management centre."}
+              </p>
+              <p className="mt-2 text-sm font-medium text-slate-500">Emergency: 117</p>
+            </div>
+          ) : (
+            <>
+              {/* Optionally show section headers if userDistrict exists and we have both groups */}
+              {userDistrict && userDistrictShelters.length > 0 && (
+                <div className="mb-2 flex items-center gap-2">
+                  <div className="rounded-full bg-sky-100 p-2">
+                    <Navigation className="h-5 w-5 text-sky-700" />
+                  </div>
+                  <h2 className="text-xl font-semibold tracking-tight text-slate-800">
+                    Shelters in your district <span className="text-sky-600">({userDistrict})</span>
+                  </h2>
+                </div>
+              )}
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {nearYou.map((s) => (
+                {userDistrictShelters.map((s) => (
                   <ShelterCard key={s.id} shelter={s} highlight />
                 ))}
               </div>
-            </section>
-          )}
 
-          {/* All shelters / Other shelters */}
-          <section>
-            <div className="mb-5 flex items-center gap-2">
-              <div className="rounded-full bg-sky-100 p-2">
-                <Building2 className="h-5 w-5 text-sky-700" />
-              </div>
-              <h2 className="text-xl font-semibold tracking-tight text-slate-800">
-                {userDistrict && nearYou.length > 0 ? "Other Shelters" : "All Shelters"}
-              </h2>
-            </div>
-            {others.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
-                <Building2 className="mb-4 h-12 w-12 text-slate-300" />
-                <p className="text-slate-600">No shelters listed yet. Check back later or contact your local disaster management centre.</p>
-                <p className="mt-2 text-sm font-medium text-slate-500">Emergency: 117</p>
-              </div>
-            ) : (
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {others.map((s) => (
-                  <ShelterCard key={s.id} shelter={s} />
-                ))}
-              </div>
-            )}
-          </section>
+              {userDistrict && otherShelters.length > 0 && (
+                <>
+                  <div className="mt-8 mb-2 flex items-center gap-2">
+                    <div className="rounded-full bg-slate-100 p-2">
+                      <Building2 className="h-5 w-5 text-slate-600" />
+                    </div>
+                    <h2 className="text-xl font-semibold tracking-tight text-slate-800">
+                      Other Districts
+                    </h2>
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    {otherShelters.map((s) => (
+                      <ShelterCard key={s.id} shelter={s} />
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {!userDistrict && (
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {sortedShelters.map((s) => (
+                    <ShelterCard key={s.id} shelter={s} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
 
           {/* Safety Instructions */}
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -211,7 +292,7 @@ function ShelterCard({ shelter, highlight }) {
       {/* Highlight badge */}
       {highlight && (
         <div className="absolute -top-2 -right-2 rounded-full bg-sky-500 px-2.5 py-0.5 text-xs font-semibold text-white shadow-sm">
-          Near you
+          Your District
         </div>
       )}
 

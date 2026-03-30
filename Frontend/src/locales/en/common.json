@@ -27,7 +27,7 @@
   "home": {
     "riskStripTitle": "Live risk map of Sri Lanka",
     "riskStripSubtitle": "District colours update automatically when admins change risk levels.",
-    "weatherStripTitle": "Live risk & weather map of Sri Lanka",
+    "weatherStripTitle": "Weather map of Sri Lanka",
     "weatherStripSubtitle": "District-level conditions with manual risk levels from admins."
   },
   "footer": {

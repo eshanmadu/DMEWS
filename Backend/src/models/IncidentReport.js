@@ -31,6 +31,9 @@ const IncidentReportSchema = new Schema(
     district: { type: String, required: true, trim: true, index: true },
     title: { type: String, required: true, trim: true, maxlength: 120 },
     description: { type: String, required: true, trim: true, maxlength: 2000 },
+  // Optional user-provided incident date (validated by frontend/backend).
+  // If not provided, we fall back to `createdAt` via timestamps.
+  reportedAt: { type: Date, default: null, index: true },
     media: { type: [MediaSchema], default: [] }, // optional
     status: {
       type: String,

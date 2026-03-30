@@ -11,6 +11,7 @@ import {
   RiskMapStripHeader,
   WeatherMapSectionHeader,
 } from "@/components/HomeMapHeaders";
+import MapLockFrame from "@/components/MapLockFrame";
 
 const SriLankaWeather = dynamic(
   () =>
@@ -48,7 +49,9 @@ export default async function DashboardPage() {
           <div className="mb-2 flex items-center justify-between gap-2">
             <RiskMapStripHeader />
           </div>
-          <RiskMap />
+          <MapLockFrame className="w-full">
+            <RiskMap />
+          </MapLockFrame>
         </section>
       </div>
 

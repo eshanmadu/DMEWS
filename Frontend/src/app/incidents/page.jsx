@@ -81,16 +81,27 @@ function inferDistrict(incident) {
   return first || "Other";
 }
 
+function getIncidentDateBounds() {
+  // Use UTC day boundaries so frontend <input type="date"> values
+  // match backend validation consistently.
+  const maxDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const minMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const minDate = new Date(minMs).toISOString().slice(0, 10);
+  return { minDate, maxDate };
+}
+
 export default function IncidentsPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [districtFilter, setDistrictFilter] = useState("");
 
   // Report form state
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [district, setDistrict] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [reportedAt, setReportedAt] = useState("");
   const [file, setFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState("");
@@ -110,6 +121,15 @@ export default function IncidentsPage() {
     typeof window !== "undefined"
       ? window.localStorage.getItem("dmews_token")
       : null;
+
+  const { minDate, maxDate } = useMemo(() => getIncidentDateBounds(), []);
+
+  useEffect(() => {
+    if (!isReportModalOpen) return;
+    // Default to today when opening the form.
+    setReportedAt(maxDate);
+  }, [isReportModalOpen, maxDate]);
+
   const currentUser = useMemo(() => {
     if (typeof window === "undefined") return null;
     try {
@@ -130,7 +150,10 @@ export default function IncidentsPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/incidents`, { cache: "no-store" });
+      const qs = districtFilter
+        ? `?district=${encodeURIComponent(districtFilter)}`
+        : "";
+      const res = await fetch(`${API_BASE}/incidents${qs}`, { cache: "no-store" });
       const data = await res.json().catch(() => []);
       if (!res.ok) {
         setError(data?.message || "Failed to load incidents.");
@@ -144,7 +167,7 @@ export default function IncidentsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [districtFilter]);
 
   useEffect(() => {
     load();
@@ -157,15 +180,18 @@ export default function IncidentsPage() {
       if (!map.has(d)) map.set(d, []);
       map.get(d).push(r);
     });
-    const out = Array.from(map.entries()).map(([d, list]) => ({
-      district: d,
-      list: list.sort(
+    const out = Array.from(map.entries()).map(([d, list]) => {
+      const sorted = list.sort(
         (a, b) =>
-          new Date(b?.updatedAt || b?.reportedAt || 0).getTime() -
-          new Date(a?.updatedAt || a?.reportedAt || 0).getTime()
-      ),
-    }));
-    out.sort((a, b) => a.district.localeCompare(b.district));
+          new Date(b?.reportedAt || b?.updatedAt || 0).getTime() -
+          new Date(a?.reportedAt || a?.updatedAt || 0).getTime()
+      );
+      const latest = sorted[0]
+        ? new Date(sorted[0]?.reportedAt || sorted[0]?.updatedAt || 0).getTime()
+        : 0;
+      return { district: d, list: sorted, latest };
+    });
+    out.sort((a, b) => b.latest - a.latest);
     return out;
   }, [rows]);
 
@@ -209,12 +235,25 @@ export default function IncidentsPage() {
       setNotice("District, title and description are required.");
       return;
     }
+    if (!reportedAt) {
+      setNotice("Incident date is required.");
+      return;
+    }
+    if (reportedAt > maxDate) {
+      setNotice("You can't choose an upcoming date.");
+      return;
+    }
+    if (reportedAt < minDate) {
+      setNotice("You can only choose a date up to 7 days ago.");
+      return;
+    }
     setSubmitting(true);
     try {
       const fd = new FormData();
       fd.set("district", district);
       fd.set("title", title.trim());
       fd.set("description", description.trim());
+      fd.set("reportedAt", reportedAt);
       if (file) fd.set("media", file);
 
       const res = await fetch(`${API_BASE}/incidents/report`, {
@@ -342,15 +381,35 @@ export default function IncidentsPage() {
         <div className="absolute inset-0 bg-black/5" />
       </div>
 
-      <div className="mb-6 flex justify-end">
-  <button
-    onClick={() => setIsReportModalOpen(true)}
-    className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-300"
-  >
-    <UploadCloud className="h-5 w-5" />
-    Report Incident
-  </button>
-</div>
+      <div className="mb-6 flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Filter by district
+          </label>
+          <select
+            value={districtFilter}
+            onChange={(e) => setDistrictFilter(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+          >
+            <option value="">All districts</option>
+            {DISTRICTS.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            onClick={() => setIsReportModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-300"
+          >
+            <UploadCloud className="h-5 w-5" />
+            Report Incident
+          </button>
+        </div>
+      </div>
 
       {error && (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -430,7 +489,7 @@ export default function IncidentsPage() {
                               </span>
                             </div>
                             <span className="text-xs text-slate-400">
-                              {rel(incident.updatedAt || incident.reportedAt)}
+                              {rel(incident.reportedAt || incident.updatedAt)}
                             </span>
                           </div>
                           <h3 className="mt-3 text-lg font-semibold text-slate-800">
@@ -517,7 +576,7 @@ export default function IncidentsPage() {
 
       {/* Report Incident Modal */}
       {isReportModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-end justify-center p-4 sm:items-center">
+        <div className="fixed inset-0 z-[1200] flex items-end justify-center p-4 sm:items-center">
           <button
             type="button"
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -574,6 +633,23 @@ export default function IncidentsPage() {
                   placeholder="Short headline"
                   required
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Incident date
+                </label>
+                <input
+                  type="date"
+                  value={reportedAt}
+                  onChange={(e) => setReportedAt(e.target.value)}
+                  min={minDate}
+                  max={maxDate}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+                  required
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Can't pick future dates. Oldest allowed is 7 days ago.
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -663,7 +739,7 @@ export default function IncidentsPage() {
 
       {/* Delete Modal */}
       {confirmDelete && (
-        <div className="fixed inset-0 z-[200] flex items-end justify-center p-4 sm:items-center">
+        <div className="fixed inset-0 z-[1200] flex items-end justify-center p-4 sm:items-center">
           <button
             type="button"
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -729,7 +805,7 @@ export default function IncidentsPage() {
 
       {/* Edit Modal */}
       {editingIncident && (
-        <div className="fixed inset-0 z-[200] flex items-end justify-center p-4 sm:items-center">
+        <div className="fixed inset-0 z-[1200] flex items-end justify-center p-4 sm:items-center">
           <button
             type="button"
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"

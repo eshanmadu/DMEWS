@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import Loader from "@/components/Loader";
 
@@ -190,6 +190,39 @@ function getAnimatedWeatherSvg(code, isDay) {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+function invalidateWeatherMapAndMarkers(map, districtsLayer, L) {
+  if (!map || !map.getContainer()) return;
+  try {
+    map.invalidateSize({ animate: false });
+    if (districtsLayer && L) {
+      districtsLayer.eachLayer((lyr) => {
+        try {
+          if (lyr instanceof L.Marker) lyr.update();
+        } catch {
+          // ignore
+        }
+      });
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function scheduleWeatherMapRelayout(map, districtsLayer, L, timeoutBucket) {
+  const bump = () => invalidateWeatherMapAndMarkers(map, districtsLayer, L);
+  bump();
+  queueMicrotask(bump);
+  requestAnimationFrame(() => {
+    bump();
+    requestAnimationFrame(bump);
+  });
+  if (timeoutBucket) {
+    [0, 50, 120, 280, 600].forEach((ms) => {
+      timeoutBucket.push(window.setTimeout(bump, ms));
+    });
+  }
+}
+
 export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -199,45 +232,63 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
   const [districts, setDistricts] = useState([]);
   const [hovered, setHovered] = useState(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!containerRef.current || typeof window === "undefined") return;
 
     let isDisposed = false;
-    let invalidateTimeoutId = null;
+    let initRaf = null;
+    const relayoutTimeouts = [];
+    let map = null;
+    let districtsLayer = null;
+    let ro = null;
 
     const L = require("leaflet");
 
-    const map = L.map(containerRef.current, {
-      center: SRI_LANKA_CENTER,
-      zoom: DEFAULT_ZOOM,
-      minZoom: 6,
-      maxZoom: 14,
-      maxBounds: SRI_LANKA_BOUNDS,
-      maxBoundsViscosity: 0.9,
-    });
-
-    L.tileLayer(BASE_TILE_URL, {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-      subdomains: "abcd",
-      maxZoom: 19,
-    }).addTo(map);
-
-    const districtsLayer = L.layerGroup().addTo(map);
-
-    // Keep Leaflet sized correctly (fixes alignment issues)
-    const ro = new ResizeObserver(() => {
-      if (isDisposed) return;
-      // Avoid Leaflet invalidation while container is hidden/0-sized.
+    function attachMap() {
       const el = containerRef.current;
-      if (!el || el.offsetWidth <= 0 || el.offsetHeight <= 0) return;
-      try {
-        map.invalidateSize();
-      } catch {
-        // ignore
+      if (isDisposed || !el) return;
+
+      if (el.offsetWidth <= 0 || el.offsetHeight <= 0) {
+        initRaf = requestAnimationFrame(attachMap);
+        return;
       }
-    });
-    ro.observe(containerRef.current);
+      initRaf = null;
+
+      map = L.map(el, {
+        center: SRI_LANKA_CENTER,
+        zoom: DEFAULT_ZOOM,
+        minZoom: 6,
+        maxZoom: 14,
+        maxBounds: SRI_LANKA_BOUNDS,
+        maxBoundsViscosity: 0.9,
+      });
+
+      L.tileLayer(BASE_TILE_URL, {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+        subdomains: "abcd",
+        maxZoom: 19,
+      }).addTo(map);
+
+      districtsLayer = L.layerGroup().addTo(map);
+
+      map.whenReady(() => {
+        if (isDisposed || !map) return;
+        invalidateWeatherMapAndMarkers(map, districtsLayer, L);
+      });
+
+      ro = new ResizeObserver(() => {
+        if (isDisposed || !map) return;
+        const obsEl = containerRef.current;
+        if (!obsEl || obsEl.offsetWidth <= 0 || obsEl.offsetHeight <= 0) return;
+        invalidateWeatherMapAndMarkers(map, districtsLayer, L);
+      });
+      ro.observe(el);
+
+      mapRef.current = map;
+
+      loadDistrictWeather();
+    }
 
     async function loadDistrictWeather() {
       try {
@@ -293,6 +344,8 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
           cached.some((d) => typeof d?.weather?.temperature === "number");
 
         const results = cachedOk ? cached : await fetchGoogleDistricts();
+        if (isDisposed || !map || !districtsLayer) return;
+
         const normalizedResults =
           Array.isArray(results) && results.length === DISTRICTS.length
             ? results
@@ -463,14 +516,8 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
           marker.addTo(districtsLayer);
         });
 
-        // Initial size fix once tiles load
-        invalidateTimeoutId = setTimeout(() => {
-          try {
-            map.invalidateSize();
-          } catch {
-            // ignore
-          }
-        }, 50);
+        if (isDisposed || !map || !districtsLayer) return;
+        scheduleWeatherMapRelayout(map, districtsLayer, L, relayoutTimeouts);
 
         setMounted(true);
       } catch (err) {
@@ -480,22 +527,23 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
       }
     }
 
-    loadDistrictWeather();
-
-    mapRef.current = map;
+    attachMap();
 
     return () => {
       isDisposed = true;
-      if (invalidateTimeoutId) {
-        clearTimeout(invalidateTimeoutId);
-        invalidateTimeoutId = null;
-      }
+      if (initRaf != null) cancelAnimationFrame(initRaf);
+      relayoutTimeouts.forEach((id) => clearTimeout(id));
+      relayoutTimeouts.length = 0;
       try {
-        ro.disconnect();
+        ro?.disconnect();
       } catch {
         // ignore
       }
-      map.remove();
+      try {
+        map?.remove();
+      } catch {
+        // ignore
+      }
       mapRef.current = null;
     };
   }, []);
@@ -513,8 +561,8 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
   }, [selectedDistrict]);
 
   return (
-    <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-xl bg-slate-800">
-      <div ref={containerRef} className="h-full min-h-[420px] w-full" />
+    <div className="relative h-full min-h-0 w-full overflow-hidden rounded-xl bg-slate-800">
+      <div ref={containerRef} className="h-full min-h-0 w-full" />
       {!mounted && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-800 text-slate-400">
           <Loader size="md" />

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Loader from "@/components/Loader";
-import { Building2, Plus, MapPin, Pencil, Trash2, Save, X, RefreshCw } from "lucide-react";
+import { Building2, Plus, MapPin, Pencil, Trash2, Save, X, RefreshCw, CheckCircle } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -32,6 +32,8 @@ export function AdminShelters() {
   const [rowBusyId, setRowBusyId] = useState(null);
   const [error, setError] = useState(null);
   const [form, setForm] = useState(initialForm);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [newShelterName, setNewShelterName] = useState("");
 
   function loadShelters() {
     setLoading(true);
@@ -88,6 +90,8 @@ export function AdminShelters() {
       .then((data) => {
         if (data.id) {
           setShelters((prev) => [{ ...data }, ...prev]);
+          setNewShelterName(data.name);
+          setShowConfirmModal(true);
           setForm(initialForm);
         } else {
           setError(data?.message || "Failed to add shelter.");
@@ -188,7 +192,6 @@ export function AdminShelters() {
       <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         {/* Header Section */}
         
-
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-800">
             {error}
@@ -348,7 +351,7 @@ export function AdminShelters() {
                       <td colSpan={7} className="py-12 text-center text-slate-500">
                         <MapPin className="mx-auto mb-2 h-10 w-10 text-slate-300" />
                         No shelters yet. Add one above.
-                      </td>
+                       </td>
                     </tr>
                   ) : (
                     shelters.map((s) => (
@@ -367,7 +370,7 @@ export function AdminShelters() {
                           ) : (
                             s.name
                           )}
-                        </td>
+                         </td>
                         <td className="py-3 px-3 text-slate-600">
                           {editingId === s.id ? (
                             <input
@@ -379,7 +382,7 @@ export function AdminShelters() {
                           ) : (
                             s.location
                           )}
-                        </td>
+                         </td>
                         <td className="py-3 px-3 text-slate-600">
                           {editingId === s.id ? (
                             <select
@@ -396,7 +399,7 @@ export function AdminShelters() {
                           ) : (
                             s.district
                           )}
-                        </td>
+                         </td>
                         <td className="py-3 px-3 tabular-nums text-slate-600">
                           {editingId === s.id ? (
                             <input
@@ -410,7 +413,7 @@ export function AdminShelters() {
                           ) : (
                             s.capacity
                           )}
-                        </td>
+                         </td>
                         <td className="py-3 px-3 text-slate-600">
                           {editingId === s.id ? (
                             <input
@@ -423,7 +426,7 @@ export function AdminShelters() {
                           ) : (
                             s.contact || "—"
                           )}
-                        </td>
+                         </td>
                         <td className="py-3 px-3 text-slate-600">
                           {editingId === s.id ? (
                             <input
@@ -435,7 +438,7 @@ export function AdminShelters() {
                           ) : (
                             s.notes || "—"
                           )}
-                        </td>
+                         </td>
                         <td className="py-3 pr-5 pl-3">
                           <div className="flex items-center gap-2">
                             {editingId === s.id ? (
@@ -478,7 +481,7 @@ export function AdminShelters() {
                               </>
                             )}
                           </div>
-                        </td>
+                         </td>
                       </tr>
                     ))
                   )}
@@ -488,6 +491,31 @@ export function AdminShelters() {
           )}
         </section>
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-all">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex flex-col items-center gap-4 p-6 text-center">
+              <div className="rounded-full bg-emerald-100 p-3">
+                <CheckCircle className="h-8 w-8 text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Shelter Added!</h3>
+                <p className="mt-2 text-slate-600">
+                  <span className="font-medium text-sky-700">{newShelterName}</span> has been successfully added to the list.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 px-4 py-2.5 font-semibold text-white shadow-md transition hover:scale-105 hover:shadow-lg"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
