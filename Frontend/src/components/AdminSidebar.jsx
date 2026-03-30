@@ -12,6 +12,7 @@ import {
   Siren,
   TriangleAlert,
   FileText,
+  Boxes,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/admin/shelters", label: "Shelters", icon: Building2 },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/volunteers", label: "Volunteers", icon: Heart },
+  { href: "/admin/missions", label: "Missions", icon: Boxes },
 ];
 
 export function AdminSidebar() {

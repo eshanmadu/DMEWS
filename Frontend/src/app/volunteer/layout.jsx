@@ -1,6 +1,7 @@
 export const metadata = {
-  title: "Volunteer | DMEWS",
-  description: "Register to volunteer during emergencies (signed-in users).",
+  title: "Volunteer Hub | DMEWS",
+  description:
+    "Join the DisasterWatch volunteer network — active missions, roles, and community impact.",
 };
 
 export default function VolunteerLayout({ children }) {

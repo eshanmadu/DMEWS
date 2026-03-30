@@ -11,6 +11,7 @@ const sheltersRoutes = require("./routes/shelters.routes");
 const authRoutes = require("./routes/auth.routes");
 const volunteersRoutes = require("./routes/volunteers.routes");
 const sosRoutes = require("./routes/sos.routes");
+const missionsRoutes = require("./routes/missions.routes");
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use("/shelters", sheltersRoutes);
 app.use("/auth", authRoutes);
 app.use("/volunteers", volunteersRoutes);
 app.use("/sos", sosRoutes);
+app.use("/missions", missionsRoutes);
 
 module.exports = app;
 
