@@ -26,9 +26,9 @@
   },
   "home": {
     "riskStripTitle": "Live risk map of Sri Lanka",
-    "riskStripSubtitle": "District colours update automatically when admins change risk levels.",
+    "riskStripSubtitle": "District colours automatically update based on changes on risk levels.",
     "weatherStripTitle": "Weather map of Sri Lanka",
-    "weatherStripSubtitle": "District-level conditions with manual risk levels from admins."
+    "weatherStripSubtitle": "District-level conditions with manual risk levels from team."
   },
   "footer": {
     "brandDesc": "Disaster Management & Early Warning System for Sri Lanka. Stay informed, stay prepared.",
@@ -116,9 +116,9 @@
     "becomeVolunteer": "Become a Volunteer",
     "viewMissions": "View Active Missions",
     "missionsTitle": "Active missions",
-    "missionsIntro": "Active missions added by admins. Coordinators will post required volunteers and skills here.",
+    "missionsIntro": "Active missions added by team. Coordinators will post required volunteers and skills here.",
     "missionsLoading": "Loading missions…",
-    "missionsEmpty": "No active missions right now. Admins will add missions when response is needed.",
+    "missionsEmpty": "No active missions right now. Team will add missions when response is needed.",
     "volunteersNeeded": "Volunteers needed",
     "skills": "Skills",
     "urgency": "Urgency",
@@ -153,7 +153,7 @@
     "impactTeaser": "Register below to join missions and have your work counted toward community response.",
     "impactIncidentsCta": "Open incidents & reports",
     "applyTitle": "Volunteer application",
-    "applyIntro": "Submit once. Admins review every application before you receive the blue verified badge.",
+    "applyIntro": "Submit once. Team review every application before you receive the verified badge.",
     "loginToApply": "Log in to apply",
     "signupToApply": "Create an account",
     "needLoginApply": "Sign in to submit your volunteer application."

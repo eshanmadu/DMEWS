@@ -5,7 +5,7 @@ export default function Loading() {
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-900">
       <Loader size="lg" />
       <span className="text-sm font-medium text-slate-100">
-        Loading DMEWS dashboard…
+        Loading DisasterWatch dashboard…
       </span>
     </div>
   );
