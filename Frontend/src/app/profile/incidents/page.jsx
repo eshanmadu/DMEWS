@@ -24,6 +24,16 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+const getIncidentMedia = (media) => {
+  const media0 = Array.isArray(media) ? media[0] : null;
+  if (!media0?.url) return null;
+  const url = media0.url;
+  const isVideo =
+    media0.resourceType === "video" ||
+    String(url).match(/\.(mp4|webm|mov)(\?|$)/i);
+  return { url, isVideo };
+};
+
 export default function MyIncidentsPage() {
   const router = useRouter();
   const [incidents, setIncidents] = useState([]);
@@ -160,6 +170,28 @@ export default function MyIncidentsPage() {
                 {inc.description && (
                   <p className="mt-3 text-sm text-slate-600 line-clamp-3">{inc.description}</p>
                 )}
+
+                {(() => {
+                  const media = getIncidentMedia(inc.media);
+                  if (!media) return null;
+                  return (
+                    <div className="mt-4 overflow-hidden rounded-2xl bg-slate-50">
+                      {media.isVideo ? (
+                        <video
+                          src={media.url}
+                          controls
+                          className="w-full max-h-72 object-cover"
+                        />
+                      ) : (
+                        <img
+                          src={media.url}
+                          alt={inc.title || "Incident media"}
+                          className="w-full rounded-2xl object-cover"
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="mt-4 flex justify-end">
                   <button className="text-xs font-medium text-sky-600 hover:text-sky-700">

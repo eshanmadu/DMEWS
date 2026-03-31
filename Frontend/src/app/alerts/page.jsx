@@ -56,23 +56,7 @@ function safeFormat(dateValue) {
 }
 
 // Safety guidelines for alerts (similar to SheltersPage Do's/Don'ts)
-const ALERT_DOS = [
-  "Stay tuned to official channels (DisasterWatch, local radio) for updates.",
-  "Prepare an emergency kit with essentials (medicines, documents, water).",
-  "Follow instructions from authorities immediately.",
-  "Check on neighbours, especially the elderly or those with disabilities.",
-  "Keep mobile phones charged and have backup power sources ready.",
-  "If evacuation is advised, move early to avoid traffic or blocked routes.",
-];
 
-const ALERT_DONTS = [
-  "Do not ignore official warnings – they are issued for your safety.",
-  "Do not spread rumours or unverified information.",
-  "Do not put yourself at risk by taking unnecessary photos or videos.",
-  "Do not wait until the last moment to act; take pre‑emptive steps.",
-  "Do not use elevators during power outages or flooding.",
-  "Do not return to evacuated areas until declared safe.",
-];
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState([]);
@@ -213,51 +197,7 @@ export default function AlertsPage() {
               </div>
             )}
           </section>
-
-          {/* Safety Instructions */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50 to-amber-50/50 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5 text-amber-600" />
-                <h2 className="text-lg font-semibold text-slate-800">
-                  Alert Response Guidelines
-                </h2>
-              </div>
-              <p className="mt-1 text-sm text-slate-600">
-                Important steps to take when an alert is issued.
-              </p>
-            </div>
-            <div className="grid gap-6 p-5 sm:grid-cols-2">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-emerald-700">
-                  <CheckCircle2 className="h-5 w-5" />
-                  <h3 className="font-semibold">Do&apos;s</h3>
-                </div>
-                <ul className="space-y-2.5">
-                  {ALERT_DOS.map((item, i) => (
-                    <li key={i} className="flex gap-3 text-sm text-slate-700">
-                      <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-500" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-red-700">
-                  <XCircle className="h-5 w-5" />
-                  <h3 className="font-semibold">Don&apos;ts</h3>
-                </div>
-                <ul className="space-y-2.5">
-                  {ALERT_DONTS.map((item, i) => (
-                    <li key={i} className="flex gap-3 text-sm text-slate-700">
-                      <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-500" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
+          
         </div>
       )}
 

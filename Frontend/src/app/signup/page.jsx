@@ -97,8 +97,8 @@ export default function SignupPage() {
   }
 
   return (
-    <>
-      <SignupLanguageModal
+  <>
+   <SignupLanguageModal
         open={langModalOpen}
         onSelected={() => setLangModalOpen(false)}
       />
@@ -115,7 +115,7 @@ export default function SignupPage() {
 
           {/* Left Panel */}
           <div className="hidden flex-col justify-center rounded-l-2xl bg-gradient-to-br from-sky-700 via-sky-600 to-sky-700 px-6 py-8 text-sky-50 sm:flex">
-            <h1 className="font-oswald text-3xl font-semibold tracking-wide">
+            <h1 className="font-oswald font-bold text-3xl  tracking-wide">
               {t("signupPage.heroTitle")}
             </h1>
             <h2 className="mt-2 text-sm font-semibold uppercase tracking-wide text-sky-100">
