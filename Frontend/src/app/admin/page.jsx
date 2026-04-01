@@ -222,7 +222,7 @@ export default async function AdminDashboardPage() {
               <div className="text-4xl font-extrabold tracking-tight text-slate-800">
                 {openIncidentsCount}
               </div>
-              <div className="mt-1 text-sm font-medium text-slate-500">Incidents not resolved</div>
+              <div className="mt-1 text-sm font-medium text-slate-500">Recent Incidents</div>
             </div>
           </div>
 

@@ -9,9 +9,21 @@ import {
   XCircle,
   Clock,
   RefreshCw,
+  Eye,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const SKILL_ORDER = [
+  "First Aid / Medical",
+  "Search & Rescue",
+  "Disaster Relief Distribution",
+  "Technical Support / IT",
+  "Drone Operation",
+  "Communication / Coordination",
+  "Logistics",
+  "Counseling / Psychological Support",
+  "General Volunteer",
+];
 
 function StatusBadge({ status }) {
   const base =
@@ -40,6 +52,7 @@ export default function AdminVolunteersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
+  const [detailRow, setDetailRow] = useState(null);
 
   const load = useCallback(async () => {
     const token = typeof window !== "undefined"
@@ -115,6 +128,11 @@ export default function AdminVolunteersPage() {
     }
   }
 
+  const skillBuckets = SKILL_ORDER.map((skill) => ({
+    skill,
+    rows: rows.filter((r) => Array.isArray(r.skills) && r.skills.includes(skill)),
+  })).filter((b) => b.rows.length > 0);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -170,6 +188,27 @@ export default function AdminVolunteersPage() {
         </div>
       )}
 
+      {!loading && rows.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-800">
+            Volunteer categories by skill
+          </h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {skillBuckets.map((b) => (
+              <span
+                key={b.skill}
+                className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-800"
+              >
+                {b.skill}
+                <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] text-sky-700">
+                  {b.rows.length}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {loading ? (
           <div className="flex justify-center py-16">
@@ -211,14 +250,22 @@ export default function AdminVolunteersPage() {
                     </td>
                     <td className="max-w-xs px-4 py-3 text-slate-600">
                       <p className="line-clamp-3">{row.message || "—"}</p>
-                      {row.skills && (
+                      {Array.isArray(row.skills) && row.skills.length > 0 && (
                         <p className="mt-1 text-xs text-slate-400">
-                          Skills: {row.skills}
+                          Skills: {row.skills.join(", ")}
                         </p>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex flex-wrap justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDetailRow(row)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          View
+                        </button>
                         {row.status !== "approved" && (
                           <button
                             type="button"
@@ -258,6 +305,69 @@ export default function AdminVolunteersPage() {
           </div>
         )}
       </div>
+
+      {detailRow && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/60"
+            onClick={() => setDetailRow(null)}
+            aria-label="Close details"
+          />
+          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+              <h3 className="text-lg font-semibold text-slate-900">Volunteer Details</h3>
+              <button
+                type="button"
+                onClick={() => setDetailRow(null)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-5 px-5 py-5 text-sm">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <p><span className="font-semibold text-slate-700">Status:</span> {detailRow.status}</p>
+                <p><span className="font-semibold text-slate-700">Can travel:</span> {detailRow.canTravelOtherDistricts ? "Yes" : "No"}</p>
+                <p><span className="font-semibold text-slate-700">Full Name:</span> {detailRow.fullName || detailRow.user?.name || "—"}</p>
+                <p><span className="font-semibold text-slate-700">Date of Birth:</span> {detailRow.dateOfBirth ? String(detailRow.dateOfBirth).slice(0, 10) : "—"}</p>
+                <p><span className="font-semibold text-slate-700">Gender:</span> {detailRow.gender || "—"}</p>
+                <p><span className="font-semibold text-slate-700">NIC / ID:</span> {detailRow.nicIdNumber || "—"}</p>
+                <p><span className="font-semibold text-slate-700">Phone:</span> {detailRow.phoneNumber || detailRow.user?.mobile || "—"}</p>
+                <p><span className="font-semibold text-slate-700">Email:</span> {detailRow.emailAddress || detailRow.user?.email || "—"}</p>
+                <p><span className="font-semibold text-slate-700">District / City:</span> {detailRow.districtCity || detailRow.user?.district || "—"}</p>
+                <p><span className="font-semibold text-slate-700">Current Location:</span> {detailRow.currentLocation || "—"}</p>
+              </div>
+
+              <div>
+                <p className="font-semibold text-slate-700">Skills & Expertise</p>
+                <p className="mt-1 text-slate-600">
+                  {Array.isArray(detailRow.skills) && detailRow.skills.length
+                    ? detailRow.skills.join(", ")
+                    : "—"}
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <p><span className="font-semibold text-slate-700">Medical conditions:</span> {detailRow.medicalConditions || "—"}</p>
+                <p><span className="font-semibold text-slate-700">Emergency contact person:</span> {detailRow.emergencyContactPerson || "—"}</p>
+                <p><span className="font-semibold text-slate-700">Emergency contact number:</span> {detailRow.emergencyContactNumber || "—"}</p>
+                <p><span className="font-semibold text-slate-700">Agreed safety guidelines:</span> {detailRow.agreeSafetyGuidelines ? "Yes" : "No"}</p>
+                <p><span className="font-semibold text-slate-700">Agreed emergency contact:</span> {detailRow.agreeEmergencyContact ? "Yes" : "No"}</p>
+                <p><span className="font-semibold text-slate-700">Submitted:</span> {detailRow.createdAt ? new Date(detailRow.createdAt).toLocaleString() : "—"}</p>
+              </div>
+
+              {detailRow.message && (
+                <div>
+                  <p className="font-semibold text-slate-700">Additional message</p>
+                  <p className="mt-1 text-slate-600">{detailRow.message}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

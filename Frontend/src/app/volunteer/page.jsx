@@ -24,6 +24,18 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const HERO_BG =
   "https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?auto=format&fit=crop&w=1920&q=75";
 
+const SKILL_OPTIONS = [
+  "First Aid / Medical",
+  "Search & Rescue",
+  "Disaster Relief Distribution",
+  "Technical Support / IT",
+  "Drone Operation",
+  "Communication / Coordination",
+  "Logistics",
+  "Counseling / Psychological Support",
+  "General Volunteer",
+];
+
 function inferDistrict(incident) {
   if (incident?.district) return incident.district;
   const area = String(incident?.area || "");
@@ -103,9 +115,23 @@ export default function VolunteerPage() {
   const [myMissionIds, setMyMissionIds] = useState(new Set());
   const [joinBusyMissionId, setJoinBusyMissionId] = useState(null);
 
-  const [message, setMessage] = useState("");
-  const [skills, setSkills] = useState("");
-  const [availability, setAvailability] = useState("");
+  const [form, setForm] = useState({
+    fullName: "",
+    dateOfBirth: "",
+    gender: "",
+    nicIdNumber: "",
+    phoneNumber: "",
+    emailAddress: "",
+    districtCity: "",
+    currentLocation: "",
+    canTravelOtherDistricts: false,
+    skills: [],
+    medicalConditions: "",
+    emergencyContactPerson: "",
+    emergencyContactNumber: "",
+    agreeSafetyGuidelines: false,
+    agreeEmergencyContact: false,
+  });
 
   const activeMissions = missions;
 
@@ -192,9 +218,26 @@ export default function VolunteerPage() {
         const data = await res.json().catch(() => ({}));
         if (res.ok && data?.volunteer) {
           setVolunteer(data.volunteer);
-          setMessage(data.volunteer.message || "");
-          setSkills(data.volunteer.skills || "");
-          setAvailability(data.volunteer.availability || "");
+          setForm((prev) => ({
+            ...prev,
+            fullName: data.volunteer.fullName || prev.fullName || "",
+            dateOfBirth: data.volunteer.dateOfBirth
+              ? String(data.volunteer.dateOfBirth).slice(0, 10)
+              : prev.dateOfBirth || "",
+            gender: data.volunteer.gender || prev.gender || "",
+            nicIdNumber: data.volunteer.nicIdNumber || "",
+            phoneNumber: data.volunteer.phoneNumber || prev.phoneNumber || "",
+            emailAddress: data.volunteer.emailAddress || prev.emailAddress || "",
+            districtCity: data.volunteer.districtCity || prev.districtCity || "",
+            currentLocation: data.volunteer.currentLocation || "",
+            canTravelOtherDistricts: Boolean(data.volunteer.canTravelOtherDistricts),
+            skills: Array.isArray(data.volunteer.skills) ? data.volunteer.skills : [],
+            medicalConditions: data.volunteer.medicalConditions || "",
+            emergencyContactPerson: data.volunteer.emergencyContactPerson || "",
+            emergencyContactNumber: data.volunteer.emergencyContactNumber || "",
+            agreeSafetyGuidelines: Boolean(data.volunteer.agreeSafetyGuidelines),
+            agreeEmergencyContact: Boolean(data.volunteer.agreeEmergencyContact),
+          }));
         }
       } catch {
         // ignore
@@ -205,6 +248,22 @@ export default function VolunteerPage() {
 
     if (tok) loadVolunteer(tok);
     else setLoading(false);
+
+    try {
+      const rawUser = typeof window !== "undefined" ? window.localStorage.getItem("dmews_user") : null;
+      const user = rawUser ? JSON.parse(rawUser) : null;
+      if (user) {
+        setForm((prev) => ({
+          ...prev,
+          fullName: prev.fullName || user.name || "",
+          phoneNumber: prev.phoneNumber || user.mobile || "",
+          emailAddress: prev.emailAddress || user.email || "",
+          districtCity: prev.districtCity || user.district || "",
+        }));
+      }
+    } catch {
+      // ignore
+    }
     loadMissions();
     loadMyMissions(tok);
 
@@ -324,6 +383,20 @@ export default function VolunteerPage() {
     }
   }
 
+  function setField(name, value) {
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function toggleSkill(skill) {
+    setForm((prev) => {
+      const has = prev.skills.includes(skill);
+      return {
+        ...prev,
+        skills: has ? prev.skills.filter((s) => s !== skill) : [...prev.skills, skill],
+      };
+    });
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!token) return;
@@ -337,7 +410,7 @@ export default function VolunteerPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ message, skills, availability }),
+        body: JSON.stringify(form),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -715,43 +788,103 @@ export default function VolunteerPage() {
 
           {!approved && (
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  How can you help? *
-                </label>
-                <textarea
-                  required
-                  minLength={10}
-                  rows={5}
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="e.g. First aid, logistics, community outreach, transport in Colombo district…"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder-slate-400 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                />
+              <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                <h3 className="text-sm font-bold text-slate-900">1. Basic Information</h3>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Full Name</label>
+                    <input required value={form.fullName} onChange={(e) => setField("fullName", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Date of Birth</label>
+                    <input required type="date" value={form.dateOfBirth} onChange={(e) => setField("dateOfBirth", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gender</label>
+                    <select required value={form.gender} onChange={(e) => setField("gender", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                      <option value="">Select gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                      <option value="Prefer not to say">Prefer not to say</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">NIC / ID Number (optional)</label>
+                    <input value={form.nicIdNumber} onChange={(e) => setField("nicIdNumber", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Phone Number</label>
+                    <input required value={form.phoneNumber} onChange={(e) => setField("phoneNumber", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Email Address</label>
+                    <input required type="email" value={form.emailAddress} onChange={(e) => setField("emailAddress", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">District / City</label>
+                    <input required value={form.districtCity} onChange={(e) => setField("districtCity", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Current Location</label>
+                    <input required value={form.currentLocation} onChange={(e) => setField("currentLocation", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Can you travel to other districts?</label>
+                  <select value={String(form.canTravelOtherDistricts)} onChange={(e) => setField("canTravelOtherDistricts", e.target.value === "true")} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm sm:w-60">
+                    <option value="false">No</option>
+                    <option value="true">Yes</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Skills (optional)
-                </label>
-                <input
-                  type="text"
-                  value={skills}
-                  onChange={(e) => setSkills(e.target.value)}
-                  placeholder="Languages, certifications, equipment you can bring…"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder-slate-400 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                />
+
+              <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                <h3 className="text-sm font-bold text-slate-900">2. Skills & Expertise</h3>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {SKILL_OPTIONS.map((skill) => (
+                    <label key={skill} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={form.skills.includes(skill)}
+                        onChange={() => toggleSkill(skill)}
+                      />
+                      <span>{skill}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Availability (optional)
-                </label>
-                <input
-                  type="text"
-                  value={availability}
-                  onChange={(e) => setAvailability(e.target.value)}
-                  placeholder="e.g. Weekends, evenings, on-call during warnings"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder-slate-400 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-                />
+
+              <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                <h3 className="text-sm font-bold text-slate-900">3. Health & Safety</h3>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Do you have any medical conditions? (optional)</label>
+                    <textarea rows={3} value={form.medicalConditions} onChange={(e) => setField("medicalConditions", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Emergency Contact Person</label>
+                    <input required value={form.emergencyContactPerson} onChange={(e) => setField("emergencyContactPerson", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Emergency Contact Number</label>
+                    <input required value={form.emergencyContactNumber} onChange={(e) => setField("emergencyContactNumber", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                <h3 className="text-sm font-bold text-slate-900">4. Agreement</h3>
+                <div className="mt-3 space-y-2 text-sm">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={form.agreeSafetyGuidelines} onChange={(e) => setField("agreeSafetyGuidelines", e.target.checked)} />
+                    <span>I agree to follow DisasterWatch safety guidelines.</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={form.agreeEmergencyContact} onChange={(e) => setField("agreeEmergencyContact", e.target.checked)} />
+                    <span>I agree to be contacted during emergencies.</span>
+                  </label>
+                </div>
               </div>
 
               {error && (

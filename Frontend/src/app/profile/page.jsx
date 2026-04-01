@@ -81,7 +81,11 @@ export default function ProfilePage() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState(null);
   const [profileMsg, setProfileMsg] = useState(null);
+  const [leavingVolunteer, setLeavingVolunteer] = useState(false);
+  const [volunteerMsg, setVolunteerMsg] = useState(null);
+  const [volunteerErr, setVolunteerErr] = useState(null);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false); // NEW
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -216,6 +220,48 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleLeaveVolunteer() {
+    const token = localStorage.getItem("dmews_token");
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+    setVolunteerErr(null);
+    setVolunteerMsg(null);
+    setLeavingVolunteer(true);
+    try {
+      const res = await fetch(`${API_BASE}/volunteers/me`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setVolunteerErr(data?.message || "Failed to leave volunteer program.");
+        return;
+      }
+
+      const nextProfile = { ...(profile || {}), volunteerStatus: null };
+      setProfile(nextProfile);
+
+      try {
+        const raw = localStorage.getItem("dmews_user");
+        const parsed = raw ? JSON.parse(raw) : {};
+        localStorage.setItem(
+          "dmews_user",
+          JSON.stringify({ ...parsed, volunteerStatus: null })
+        );
+      } catch {
+        // ignore storage parse errors
+      }
+      window.dispatchEvent(new Event("dmews-auth-changed"));
+      setVolunteerMsg(data?.message || "You have left the volunteer program.");
+    } catch {
+      setVolunteerErr("Network error.");
+    } finally {
+      setLeavingVolunteer(false);
+    }
+  }
+
   if (!mounted || profileLoading) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8">
@@ -300,37 +346,70 @@ export default function ProfilePage() {
             </div>
           </div>
 
-         {/* Navigation Shortcuts */}
-<div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
-  <Link
-    href="/profile/incidents"
-    className="group flex items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white backdrop-blur-md transition hover:bg-white/20 hover:shadow-lg"
-  >
-    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20">
-      <FileText className="h-5 w-5" />
-    </div>
-    <div>
-      <p className="text-sm font-semibold">My Incidents</p>
-      <p className="text-xs text-sky-100">Reports you've submitted</p>
-    </div>
-  </Link>
+          {/* Navigation Shortcuts */}
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
+            <Link
+              href="/profile/incidents"
+              className="group flex items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white backdrop-blur-md transition hover:bg-white/20 hover:shadow-lg"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">My Incidents</p>
+                <p className="text-xs text-sky-100">Reports you've submitted</p>
+              </div>
+            </Link>
 
-  <Link
-    href="/profile/missions"
-    className="group flex items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white backdrop-blur-md transition hover:bg-white/20 hover:shadow-lg"
-  >
-    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20">
-      <Users className="h-5 w-5" />
-    </div>
-    <div>
-      <p className="text-sm font-semibold">My Missions</p>
-      <p className="text-xs text-sky-100">Volunteer work you joined</p>
-    </div>
-  </Link>
-</div>
-</div>
-</div>
-      {/* Main Content – Only Personal Info & Security */}
+            <Link
+              href="/profile/missions"
+              className="group flex items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white backdrop-blur-md transition hover:bg-white/20 hover:shadow-lg"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20">
+                <Users className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">My Missions</p>
+                <p className="text-xs text-sky-100">Volunteer work you joined</p>
+              </div>
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Volunteer section with confirmation button */}
+      {profile?.volunteerStatus && (
+        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50/60 p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Volunteer Program
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Current status:{" "}
+                <span className="font-semibold capitalize text-rose-700">
+                  {profile.volunteerStatus}
+                </span>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowLeaveConfirm(true)} // Open confirmation modal
+              disabled={leavingVolunteer}
+              className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+            >
+              {leavingVolunteer ? "Leaving..." : "Leave volunteer program"}
+            </button>
+          </div>
+          {volunteerErr && (
+            <p className="mt-3 text-sm text-rose-700">{volunteerErr}</p>
+          )}
+          {volunteerMsg && (
+            <p className="mt-3 text-sm text-emerald-700">{volunteerMsg}</p>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-6 md:grid-cols-2">
         {/* Personal Information Card */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -448,6 +527,51 @@ export default function ProfilePage() {
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Leaving Volunteer Program */}
+      {showLeaveConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => e.target === e.currentTarget && setShowLeaveConfirm(false)}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <h3 className="text-lg font-semibold text-slate-900">Confirm leaving volunteer program</h3>
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-500"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-600">
+                Are you sure you want to leave the volunteer program? You will no longer be able to accept missions or receive volunteer-related notifications.
+              </p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowLeaveConfirm(false)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLeaveConfirm(false);
+                    handleLeaveVolunteer();
+                  }}
+                  disabled={leavingVolunteer}
+                  className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-70"
+                >
+                  {leavingVolunteer ? "Leaving..." : "Yes, leave"}
+                </button>
               </div>
             </div>
           </div>

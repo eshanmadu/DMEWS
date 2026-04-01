@@ -5,6 +5,7 @@ const { adminMiddleware } = require("../middleware/adminMiddleware");
 const {
   register,
   me,
+  leave,
   adminList,
   adminSetStatus,
 } = require("../controllers/volunteerController");
@@ -12,6 +13,7 @@ const {
 // Logged-in users (signup required)
 router.post("/register", authMiddleware, register);
 router.get("/me", authMiddleware, me);
+router.delete("/me", authMiddleware, leave);
 
 // Admin
 router.get("/admin/list", adminMiddleware, adminList);

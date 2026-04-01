@@ -41,6 +41,8 @@ export function AdminRiskManagement() {
   const [meteoMapUrl, setMeteoMapUrl] = useState(null);
   const [meteoMapLoading, setMeteoMapLoading] = useState(true);
   const [meteoMapNote, setMeteoMapNote] = useState(null);
+  const [showMeteoPopup, setShowMeteoPopup] = useState(false);
+  const [autoMode, setAutoMode] = useState(false); // <-- New state for system automating toggle
 
   useEffect(() => {
     let cancelled = false;
@@ -171,7 +173,7 @@ export function AdminRiskManagement() {
         </div>
       )}
 
-      {/* Risk map + Met Dept. SL map (URL from Firecrawl scrape of meteo.gov.lk) */}
+      {/* Risk map + Met Dept. SL map */}
       <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
         <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-3">
@@ -190,29 +192,54 @@ export function AdminRiskManagement() {
             <h2 className="text-sm font-semibold text-slate-800">
               Sri Lanka map (Meteorology)
             </h2>
-            <p className="text-xs text-slate-500">
-              Image link resolved via Firecrawl from{" "}
-              <span className="font-medium text-sky-800">meteo.gov.lk</span>
-              {!meteoMapLoading && meteoMapUrl?.includes("SLMap.jpg") ? (
-                <span className="text-slate-400"> · 24h map (SLMap.jpg)</span>
-              ) : null}
-            </p>
+            <button
+              type="button"
+              onClick={() => setShowMeteoPopup(true)}
+              className="ml-auto rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
+            >
+              Open map
+            </button>
           </div>
-          <div className="flex min-h-[280px] flex-1 items-center justify-center bg-slate-100/80 p-3">
-            {meteoMapLoading || !meteoMapUrl ? (
-              <Loader />
-            ) : (
-              <div className="relative aspect-[4/3] w-full max-w-xl">
-                <Image
-                  src={meteoMapUrl}
-                  alt="Sri Lanka map — Department of Meteorology"
-                  fill
-                  className="object-contain object-center"
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                  unoptimized
-                />
-              </div>
-            )}
+          <div className="p-4">
+            <h3 className="text-sm font-semibold text-slate-800">
+              Flood risk rainfall (approx 24h)
+            </h3>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[360px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-3 py-2 font-semibold text-slate-700">District</th>
+                    <th className="px-3 py-2 font-semibold text-slate-700">Flood risk rainfall (approx 24h)</th>
+                   </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  <tr>
+                    <td className="px-3 py-2 text-slate-700">Colombo</td>
+                    <td className="px-3 py-2 text-slate-600">~200-300 mm</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-700">Gampaha</td>
+                    <td className="px-3 py-2 text-slate-600">~200-300 mm</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-700">Ratnapura</td>
+                    <td className="px-3 py-2 text-slate-600">~250-350 mm</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-700">Kalutara</td>
+                    <td className="px-3 py-2 text-slate-600">~250-350 mm</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-700">Galle / Matara</td>
+                    <td className="px-3 py-2 text-slate-600">~200-300 mm</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-700">Dry zone districts</td>
+                    <td className="px-3 py-2 text-slate-600">~150-250 mm</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           {meteoMapNote && (
             <p className="border-t border-slate-100 bg-amber-50/60 px-4 py-2 text-[11px] text-amber-900/90">
@@ -224,10 +251,22 @@ export function AdminRiskManagement() {
 
       {/* Combined table */}
       <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-        <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-3">
-          <Droplets className="h-4 w-4 text-slate-500" />
-          <h2 className="text-sm font-semibold text-slate-800">Districts · rainfall & risk</h2>
-          <p className="text-xs text-slate-500">Last 3 days rain (mm). Update risk level per row.</p>
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Droplets className="h-4 w-4 text-slate-500" />
+            <h2 className="text-sm font-semibold text-slate-800">Districts · rainfall & risk</h2>
+            <p className="text-xs text-slate-500">Last 3 days rain (mm). Update risk level per row.</p>
+          </div>
+          <button
+            onClick={() => setAutoMode((prev) => !prev)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              autoMode
+                ? "bg-green-100 text-green-800 hover:bg-green-200"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            }`}
+          >
+            System automating: {autoMode ? "ON" : "OFF"}
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[520px] text-left text-sm">
@@ -340,6 +379,45 @@ export function AdminRiskManagement() {
                 {savingDistrict === pending.district && <Loader size="sm" />}
                 {savingDistrict === pending.district ? "Saving…" : "Confirm"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMeteoPopup && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/60 p-4">
+          <button
+            type="button"
+            className="absolute inset-0"
+            onClick={() => setShowMeteoPopup(false)}
+            aria-label="Close map popup"
+          />
+          <div className="relative w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-sky-50 px-4 py-3">
+              <h3 className="text-sm font-semibold text-slate-800">Sri Lanka map (Meteorology)</h3>
+              <button
+                type="button"
+                onClick={() => setShowMeteoPopup(false)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex min-h-[420px] items-center justify-center bg-slate-100/80 p-3">
+              {meteoMapLoading || !meteoMapUrl ? (
+                <Loader />
+              ) : (
+                <div className="relative aspect-[4/3] w-full max-w-4xl">
+                  <Image
+                    src={meteoMapUrl}
+                    alt="Sri Lanka map — Department of Meteorology"
+                    fill
+                    className="object-contain object-center"
+                    sizes="(max-width: 1024px) 100vw, 80vw"
+                    unoptimized
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
