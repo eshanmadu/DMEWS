@@ -9,6 +9,7 @@ import homeSlide from "@/img/slides/home.png";
 import riskSlide from "@/img/slides/risk.png";
 import weatherSlide from "@/img/slides/weather.png";
 import shelterSlide from "@/img/slides/shelter.png";
+import personSlide from "@/img/slides/person.png";
 
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, Pagination, A11y, Mousewheel } from "swiper/modules";
@@ -67,6 +68,17 @@ const SLIDES = [
     ctaLabel: "Find shelters",
     ctaClass:
       "bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700 shadow-lg shadow-emerald-500/25",
+  },
+  {
+    key: "persons",
+    imageSrc: personSlide,
+    title: "Missing & found persons",
+    subtitle: "Under incident response",
+    body: "Browse reports of missing people and reunions—linked to local incidents when available.",
+    ctaHref: "/incidents/missing-persons",
+    ctaLabel: "Learn more",
+    ctaClass:
+      "bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-lg shadow-violet-500/25",
   },
 ];
 

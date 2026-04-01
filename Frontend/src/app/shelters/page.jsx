@@ -165,7 +165,7 @@ export default function SheltersPage() {
               </div>
               {userDistrict && (
                 <div className="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full">
-                  ⚡ Your district: <span className="font-medium">{userDistrict}</span>
+                  📌 Your district: <span className="font-medium">{userDistrict}</span>
                 </div>
               )}
             </div>

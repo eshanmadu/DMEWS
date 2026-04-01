@@ -373,9 +373,6 @@ export default function IncidentsPage() {
                 Report local incidents with optional photo/video. Browse updates district by district.
               </p>
             </div>
-            <div>
-              
-            </div>
           </div>
         </div>
         <div className="absolute inset-0 bg-black/5" />
