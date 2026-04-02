@@ -65,7 +65,7 @@ function describeWeatherCode(code) {
 // Map weather code to a simple icon (sun / clouds / rain / storm), aware of day/night
 function getWeatherIcon(code, isDay) {
   if (code == null) return isDay ? "☁️" : "🌙";
-  if (code === 0) return isDay ? "☀️" : "🌙"; // clear sky
+  if (code === 0) return isDay ? "☀️" : "🌕"; // clear sky
   if ([1, 2, 3].includes(code)) return isDay ? "🌤️" : "🌙"; // partly cloudy
   if ([45, 48].includes(code)) return "🌫️"; // fog
   if ([51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) {
@@ -81,20 +81,19 @@ function getAnimatedWeatherSvg(code, isDay) {
   // Clear / sunny
   if (code === 0) {
     if (!isDay) {
-      // Night: moon with subtle glow
+      // Night: full moon with subtle glow
       return `
         <svg width="${baseSize}" height="${baseSize}" viewBox="0 0 40 40">
           <defs>
             <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#e5e7eb"/>
-              <stop offset="100%" stop-color="#9ca3af"/>
+              <stop offset="0%" stop-color="#f8fafc"/>
+              <stop offset="100%" stop-color="#cbd5e1"/>
             </radialGradient>
           </defs>
           <g transform="translate(20,20)">
             <circle r="9" fill="url(#moonGlow)" opacity="0.9">
               <animate attributeName="opacity" values="0.85;1;0.85" dur="3s" repeatCount="indefinite" />
             </circle>
-            <circle r="9" fill="#020617" transform="translate(3,-2)" />
           </g>
         </svg>
       `;

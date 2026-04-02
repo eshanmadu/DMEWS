@@ -15,7 +15,6 @@ import {
   Pencil,
   Save,
   ShieldAlert,
-  UserSearch,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -373,15 +372,6 @@ export default function IncidentsPage() {
               <p className="mt-2 max-w-2xl text-sky-100">
                 Report local incidents with optional photo/video. Browse updates district by district.
               </p>
-            </div>
-            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-              <Link
-                href="/incidents/missing-persons"
-                className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/20"
-              >
-                <UserSearch className="h-5 w-5" />
-                Missing & found persons
-              </Link>
             </div>
           </div>
         </div>

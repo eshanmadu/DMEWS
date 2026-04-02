@@ -102,17 +102,6 @@ function getAccuWindKmh(part) {
   return typeof wind === "number" ? wind : null;
 }
 
-async function fetchJsonWithTimeout(url, timeoutMs = 7000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    return await res.json();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 const locationKeyCache = new Map();
 async function getAccuLocationKey(d) {
   const cacheKey = `name:${String(d.name || "").toLowerCase()}`;
@@ -288,52 +277,6 @@ async function getAccuWeatherForDistrict(d) {
   };
 }
 
-async function getAccuRainForecastForDistrict(d) {
-  const locKey = await getAccuLocationKey(d);
-  const dailyUrl = `https://dataservice.accuweather.com/forecasts/v1/daily/5day/${encodeURIComponent(
-    locKey
-  )}?apikey=${encodeURIComponent(ACCUWEATHER_API_KEY)}&language=en&metric=true&details=true`;
-
-  const dailyObj = await fetchJsonWithTimeout(dailyUrl, 5000);
-  const forecasts = Array.isArray(dailyObj?.DailyForecasts)
-    ? dailyObj.DailyForecasts
-    : [];
-
-  const today = forecasts[0] || null;
-  const tomorrow = forecasts[1] || null;
-
-  const rainToday = (() => {
-    const r0 = getAccuRainMm(today?.Day);
-    const r1 = getAccuRainMm(today?.Night);
-    if (typeof r0 !== "number" && typeof r1 !== "number") return null;
-    return (r0 ?? 0) + (r1 ?? 0);
-  })();
-  const rainTomorrow = (() => {
-    const r0 = getAccuRainMm(tomorrow?.Day);
-    const r1 = getAccuRainMm(tomorrow?.Night);
-    if (typeof r0 !== "number" && typeof r1 !== "number") return null;
-    return (r0 ?? 0) + (r1 ?? 0);
-  })();
-
-  const probToday = (() => {
-    const p0 = getAccuPrecipProb(today?.Day);
-    const p1 = getAccuPrecipProb(today?.Night);
-    if (typeof p0 !== "number" && typeof p1 !== "number") return null;
-    return Math.max(p0 ?? 0, p1 ?? 0);
-  })();
-  const probTomorrow = (() => {
-    const p0 = getAccuPrecipProb(tomorrow?.Day);
-    const p1 = getAccuPrecipProb(tomorrow?.Night);
-    if (typeof p0 !== "number" && typeof p1 !== "number") return null;
-    return Math.max(p0 ?? 0, p1 ?? 0);
-  })();
-
-  return {
-    rainArr: [rainToday, rainTomorrow],
-    probArr: [probToday, probTomorrow],
-  };
-}
-
 let weatherCache = { ts: 0, data: null };
 
 async function getDistrictWeather() {
@@ -372,36 +315,25 @@ async function getDistrictWeather() {
         let codeArr = [null, null];
         let hourlyArr = [];
 
-        let providerName = "openweather";
-        let providerText = null;
-        let rainProvider = providerName;
-        let needOpenWeather = true;
-
         if (ACCUWEATHER_API_KEY) {
-          try {
-            const accu = await getAccuWeatherForDistrict(d);
-            temp = accu.temp;
-            windMs = accu.windMs; // m/s (backend multiplies by 3.6)
-            isDay = accu.isDay ? 1 : 0;
-            maxArr = accu.maxArr;
-            minArr = accu.minArr;
-            rainArr = accu.rainArr;
-            probArr = accu.probArr;
-            windMaxArr = accu.windMaxArr;
-            codeArr = accu.codeArr;
-            hourlyArr = accu.hourlyArr;
-            weatherCode = accu.weatherCode;
-            providerName = "accuweather";
-            providerText = accu.weatherText;
-            rainProvider = "accuweather";
-            needOpenWeather = false;
-          } catch (_accuErr) {
-            // Fallback to OpenWeather per district when AccuWeather fails or rate-limits.
-            needOpenWeather = true;
-          }
-        }
-
-        if (needOpenWeather) {
+          const accu = await getAccuWeatherForDistrict(d);
+          temp = accu.temp;
+          windMs = accu.windMs; // m/s (backend multiplies by 3.6)
+          isDay = accu.isDay ? 1 : 0;
+          maxArr = accu.maxArr;
+          minArr = accu.minArr;
+          rainArr = accu.rainArr;
+          probArr = accu.probArr;
+          windMaxArr = accu.windMaxArr;
+          codeArr = accu.codeArr;
+          hourlyArr = accu.hourlyArr;
+          weatherCode = accu.weatherCode;
+          // Debug fields (frontend ignores extras)
+          var providerName = "accuweather";
+          var providerText = accu.weatherText;
+        } else {
+          var providerName = "openweather";
+          var providerText = null;
           // Try OpenWeather One Call 3.0 first (must INCLUDE hourly).
           try {
           const onecallUrl = `https://api.openweathermap.org/data/3.0/onecall?lat=${d.lat}&lon=${d.lon}&exclude=minutely,alerts&units=metric&appid=${encodeURIComponent(
@@ -601,25 +533,6 @@ async function getDistrictWeather() {
           }
         }
 
-        // Always prefer AccuWeather for rainfall fields when key is available,
-        // even if the district used OpenWeather for other weather values.
-        if (ACCUWEATHER_API_KEY && providerName === "openweather") {
-          try {
-            const accuRain = await getAccuRainForecastForDistrict(d);
-            if (Array.isArray(accuRain?.rainArr)) {
-              rainArr = accuRain.rainArr;
-              rainProvider = "accuweather";
-            }
-            if (Array.isArray(accuRain?.probArr)) probArr = accuRain.probArr;
-          } catch {
-            // Enforce AccuWeather-only rainfall when key is configured.
-            // If AccuWeather rain fails, prefer unavailable values over OpenWeather rain.
-            rainArr = [null, null];
-            probArr = [null, null];
-            rainProvider = "accuweather_unavailable";
-          }
-        }
-
         const code =
           typeof weatherCode === "number"
             ? weatherCode
@@ -660,7 +573,6 @@ async function getDistrictWeather() {
             temperature_2m_max: maxArr,
             temperature_2m_min: minArr,
             precipitation_sum: rainArr,
-            precipitation_provider: rainProvider,
             precipitation_sum_last3days,
             time_last3days,
             precipitation_probability_max: probArr,

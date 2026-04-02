@@ -10,6 +10,16 @@
     "profile": "Profile",
     "volunteer": "Volunteer"
   },
+
+  "slideshow": {
+    "slide1Title": "Welcome to DisasterWatch",
+    "slide1Desc": "Your trusted source for real-time disaster alerts and information in Sri Lanka.",
+    "slide2Title": "Stay informed, stay safe",
+    "slide2Desc": "Get live updates on flood risks, weather conditions, and emergency resources tailored to your district.",
+    "slide3Title": "Join our community",
+    "slide3Desc": "Sign up to receive personalised alerts, access emergency contacts, and contribute to our volunteer network."
+  },
+  
   "flood": {
     "high": "⚠ FLOOD WARNING — HIGH RISK: {{districts}}. Stay safe. Follow official instructions.",
     "medium": "📢 FLOOD WARNING — MEDIUM RISK: {{districts}}. Be prepared. Monitor updates."
