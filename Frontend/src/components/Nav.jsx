@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -11,19 +11,18 @@ import {
   Building2,
   Heart,
   BadgeCheck,
-  ChevronDown,
 } from "lucide-react";
 import Image from "next/image";
 import clsx from "clsx";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { avatarSrcById } from "@/lib/avatars";
 import { useTranslation } from "react-i18next";
 import i18n from "@/lib/i18n";
-
 const linkKeys = [
   { href: "/", key: "dashboard", icon: LayoutDashboard },
   { href: "/alerts", key: "alerts", icon: AlertTriangle },
-  { href: "/incidents", key: "incidents", icon: FileWarning }, // replaced by dropdown
+  { href: "/incidents", key: "incidents", icon: FileWarning },
   { href: "/shelters", key: "shelters", icon: Building2 },
 ];
 
@@ -34,55 +33,6 @@ export function Nav() {
   const { t } = useTranslation();
   const isAdminRoute = pathname?.startsWith("/admin");
 
-  // Dropdown state
-  const [incidentsDropdownOpen, setIncidentsDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const closeTimeoutRef = useRef(null);
-
-  // Dropdown items
-  const dropdownItems = [
-    { href: "/incidents/missing-persons", label: t("nav.findPeople", "Find People") },
-    { href: "/incidents", label: t("nav.reports", "Reports") }, // keep current path
-  ];
-
-  // Close dropdown on route change
-  useEffect(() => {
-    setIncidentsDropdownOpen(false);
-  }, [pathname]);
-
-  // Close dropdown on click outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIncidentsDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  // Hover helpers
-  const openDropdown = () => {
-    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
-    setIncidentsDropdownOpen(true);
-  };
-
-  const closeDropdownWithDelay = () => {
-    closeTimeoutRef.current = setTimeout(() => {
-      setIncidentsDropdownOpen(false);
-    }, 150);
-  };
-
-  const cancelClose = () => {
-    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
-  };
-
-  // Check if any dropdown item is active
-  const isIncidentsActive = dropdownItems.some((item) => pathname === item.href);
-
-  // Language enforcement for admin routes
   useEffect(() => {
     if (!isAdminRoute) return;
     if (i18n.language !== "en") i18n.changeLanguage("en");
@@ -112,10 +62,12 @@ export function Nav() {
     };
   }, [readSession]);
 
+  // Also re-check on route changes in this tab
   useEffect(() => {
     readSession();
   }, [pathname, readSession]);
 
+  // Keep volunteer approval status in sync (e.g. after admin approves).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const token = session?.token;
@@ -162,7 +114,8 @@ export function Nav() {
   }
 
   const isLoggedIn = Boolean(session?.token);
-  const displayName = session?.user?.name || session?.user?.email || "User";
+  const displayName =
+    session?.user?.name || session?.user?.email || "User";
   const avatarId = session?.user?.avatar;
   const avatarSrc = avatarSrcById(avatarId);
   const volunteerApproved = session?.user?.volunteerStatus === "approved";
@@ -181,87 +134,23 @@ export function Nav() {
         </Link>
         <nav className="flex items-center gap-3">
           <div className="flex gap-1">
-            {linkKeys.map(({ href, key: linkKey, icon: Icon }) => {
-              // Replace the Incidents link with dropdown
-              if (linkKey === "incidents") {
-                return (
-                  <div
-                    key="incidents-dropdown"
-                    ref={dropdownRef}
-                    className="relative"
-                    onMouseEnter={openDropdown}
-                    onMouseLeave={closeDropdownWithDelay}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setIncidentsDropdownOpen((prev) => !prev)}
-                      className={clsx(
-                        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
-                        isIncidentsActive || incidentsDropdownOpen
-                          ? "bg-white/15 text-white shadow-sm"
-                          : "text-sky-100/80 hover:bg-sky-500/40 hover:text-white"
-                      )}
-                      aria-expanded={incidentsDropdownOpen}
-                      aria-haspopup="true"
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span className="hidden sm:inline">
-                        {t(`nav.${linkKey}`)}
-                      </span>
-                      <ChevronDown
-                        className={clsx(
-                          "h-3 w-3 transition-transform duration-200",
-                          incidentsDropdownOpen && "rotate-180"
-                        )}
-                      />
-                    </button>
-                    {incidentsDropdownOpen && (
-                      <div
-                        className="absolute left-0 mt-2 min-w-[160px] rounded-md bg-white py-1 shadow-lg ring-1 ring-black/5"
-                        onMouseEnter={cancelClose}
-                        onMouseLeave={closeDropdownWithDelay}
-                        role="menu"
-                        aria-orientation="vertical"
-                      >
-                        {dropdownItems.map((item) => (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            className={clsx(
-                              "block px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100",
-                              pathname === item.href && "bg-gray-100 font-medium"
-                            )}
-                            role="menuitem"
-                            onClick={() => setIncidentsDropdownOpen(false)}
-                          >
-                            {item.label}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-
-              // Regular nav links
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={clsx(
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
-                    pathname === href
-                      ? "bg-white/15 text-white shadow-sm"
-                      : "text-sky-100/80 hover:bg-sky-500/40 hover:text-white"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">
-                    {t(`nav.${linkKey}`)}
-                  </span>
-                </Link>
-              );
-            })}
+            {linkKeys.map(({ href, key: linkKey, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                className={clsx(
+                  "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  pathname === href
+                    ? "bg-white/15 text-white shadow-sm"
+                    : "text-sky-100/80 hover:bg-sky-500/40 hover:text-white"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  {t(`nav.${linkKey}`)}
+                </span>
+              </Link>
+            ))}
             {isLoggedIn && (
               <Link
                 href="/volunteer"
@@ -309,7 +198,9 @@ export function Nav() {
                   href="/profile"
                   className={clsx(
                     "flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 transition hover:bg-white/15",
-                    pathname === "/profile" ? "ring-1 ring-amber-300/60" : ""
+                    pathname === "/profile"
+                      ? "ring-1 ring-amber-300/60"
+                      : ""
                   )}
                 >
                   <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-amber-200/30">
@@ -347,8 +238,10 @@ export function Nav() {
               </>
             )}
           </div>
+          
         </nav>
       </div>
     </header>
   );
 }
+

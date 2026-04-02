@@ -1,6 +1,7 @@
 // Weather data for all Sri Lanka districts.
 // This module keeps a short in-memory cache to avoid hammering the external APIs.
 
+const ACCUWEATHER_API_KEY = process.env.ACCUWEATHER_API_KEY || "";
 const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY || "";
 
 const DISTRICTS_WEATHER = [
@@ -61,11 +62,228 @@ function openWeatherIdToOpenMeteoCode(id) {
   return 2;
 }
 
+function accuPhraseToOpenMeteoCode(phrase) {
+  const p = String(phrase || "").toLowerCase();
+  if (!p) return null;
+
+  if (p.includes("thunder")) return 95;
+  if (p.includes("snow") || p.includes("ice") || p.includes("sleet")) return 73;
+  if (p.includes("fog") || p.includes("mist") || p.includes("haze")) return 45;
+  if (p.includes("drizzle")) return 53;
+  if (p.includes("rain") || p.includes("showers")) return 63;
+  if (p.includes("clear") || p.includes("sunny")) return 0;
+  if (p.includes("partly") || p.includes("mostly")) return 2;
+  if (p.includes("overcast") || p.includes("cloudy")) return 3;
+
+  return null;
+}
+
+function pickAccuMetricValue(obj) {
+  const v = obj?.Metric?.Value ?? obj?.Value ?? null;
+  return typeof v === "number" ? v : null;
+}
+
+function getAccuRainMm(part) {
+  const rain = pickAccuMetricValue(part?.Rain) ?? pickAccuMetricValue(part?.PrecipitationIntensity);
+  return typeof rain === "number" ? rain : null;
+}
+
+function getAccuPrecipProb(part) {
+  const pp = part?.PrecipitationProbability;
+  if (pp && typeof pp === "object") {
+    const v = typeof pp?.Value === "number" ? pp.Value : null;
+    return typeof v === "number" ? v : null;
+  }
+  return typeof pp === "number" ? pp : null;
+}
+
+function getAccuWindKmh(part) {
+  const wind = pickAccuMetricValue(part?.Wind?.Speed);
+  return typeof wind === "number" ? wind : null;
+}
+
+const locationKeyCache = new Map();
+async function getAccuLocationKey(d) {
+  const cacheKey = `name:${String(d.name || "").toLowerCase()}`;
+  if (locationKeyCache.has(cacheKey)) return locationKeyCache.get(cacheKey);
+
+  // Prefer searching by city/district name so the chosen LocationKey matches
+  // what AccuWeather shows for that place (more consistent than geoposition).
+  const searchUrl = `https://dataservice.accuweather.com/locations/v1/cities/search?apikey=${encodeURIComponent(
+    ACCUWEATHER_API_KEY
+  )}&q=${encodeURIComponent(d.name)}&language=en&details=false`;
+
+  const geoUrl = `https://dataservice.accuweather.com/locations/v1/cities/geoposition/search?apikey=${encodeURIComponent(
+    ACCUWEATHER_API_KEY
+  )}&q=${encodeURIComponent(`${d.lat},${d.lon}`)}&language=en&details=false`;
+
+  const p = (async () => {
+    // 1) cities/search
+    try {
+      const list = await fetch(searchUrl).then((r) => r.json());
+      if (Array.isArray(list) && list.length) {
+        // Pick best candidate: prefer Sri Lanka, then city-like results, then highest rank.
+        const picked = list
+          .filter((it) => String(it?.Country?.ID || "").toUpperCase() === "LK")
+          .sort((a, b) => (Number(b?.Rank) || 0) - (Number(a?.Rank) || 0))[0] || list[0];
+        if (picked?.Key) return picked.Key;
+      }
+    } catch {
+      // fall through to geoposition
+    }
+
+    // 2) geoposition/search fallback
+    const data = await fetch(geoUrl).then((r) => r.json());
+    const key = data?.Key;
+    if (!key) throw new Error("AccuWeather location lookup failed.");
+    return key;
+  })();
+
+  // Cache the in-flight promise too.
+  locationKeyCache.set(cacheKey, p);
+  return p;
+}
+
+async function getAccuWeatherForDistrict(d) {
+  const locKey = await getAccuLocationKey(d);
+
+  const currentUrl = `https://dataservice.accuweather.com/currentconditions/v1/${encodeURIComponent(
+    locKey
+  )}?apikey=${encodeURIComponent(ACCUWEATHER_API_KEY)}&language=en&details=true`;
+
+  const dailyUrl = `https://dataservice.accuweather.com/forecasts/v1/daily/5day/${encodeURIComponent(
+    locKey
+  )}?apikey=${encodeURIComponent(ACCUWEATHER_API_KEY)}&language=en&metric=true&details=true`;
+
+  const hourlyUrl = `https://dataservice.accuweather.com/forecasts/v1/hourly/12hour/${encodeURIComponent(
+    locKey
+  )}?apikey=${encodeURIComponent(ACCUWEATHER_API_KEY)}&language=en&metric=true&details=true`;
+
+  const [curArr, dailyObj, hourlyObj] = await Promise.all([
+    fetch(currentUrl).then((r) => r.json()),
+    fetch(dailyUrl).then((r) => r.json()),
+    fetch(hourlyUrl).then((r) => r.json()),
+  ]);
+
+  const cur = Array.isArray(curArr) ? curArr[0] : null;
+  const isDay = cur?.IsDayTime ? 1 : 0;
+  const temp = pickAccuMetricValue(cur?.Temperature);
+  const windspeedKmh = pickAccuMetricValue(cur?.Wind?.Speed);
+  const weatherText =
+    String(cur?.WeatherText || cur?.IconPhrase || cur?.WeatherIconPhrase || "").trim() ||
+    null;
+  // The frontend expects an Open-Meteo-like numeric code.
+  const weatherCode = accuPhraseToOpenMeteoCode(
+    weatherText
+  );
+
+  const forecasts = Array.isArray(dailyObj?.DailyForecasts)
+    ? dailyObj.DailyForecasts
+    : [];
+  const today = forecasts[0] || null;
+  const tomorrow = forecasts[1] || null;
+
+  const todayMax = pickAccuMetricValue(today?.Temperature?.Maximum);
+  const todayMin = pickAccuMetricValue(today?.Temperature?.Minimum);
+  const tomorrowMax = pickAccuMetricValue(tomorrow?.Temperature?.Maximum);
+  const tomorrowMin = pickAccuMetricValue(tomorrow?.Temperature?.Minimum);
+
+  const rainToday = (() => {
+    const r0 = getAccuRainMm(today?.Day);
+    const r1 = getAccuRainMm(today?.Night);
+    if (typeof r0 !== "number" && typeof r1 !== "number") return null;
+    return (r0 ?? 0) + (r1 ?? 0);
+  })();
+  const rainTomorrow = (() => {
+    const r0 = getAccuRainMm(tomorrow?.Day);
+    const r1 = getAccuRainMm(tomorrow?.Night);
+    if (typeof r0 !== "number" && typeof r1 !== "number") return null;
+    return (r0 ?? 0) + (r1 ?? 0);
+  })();
+
+  const probToday = (() => {
+    const p0 = getAccuPrecipProb(today?.Day);
+    const p1 = getAccuPrecipProb(today?.Night);
+    if (typeof p0 !== "number" && typeof p1 !== "number") return null;
+    return Math.max(p0 ?? 0, p1 ?? 0);
+  })();
+  const probTomorrow = (() => {
+    const p0 = getAccuPrecipProb(tomorrow?.Day);
+    const p1 = getAccuPrecipProb(tomorrow?.Night);
+    if (typeof p0 !== "number" && typeof p1 !== "number") return null;
+    return Math.max(p0 ?? 0, p1 ?? 0);
+  })();
+
+  const windTodayKmh = (() => {
+    const w0 = getAccuWindKmh(today?.Day);
+    const w1 = getAccuWindKmh(today?.Night);
+    if (typeof w0 !== "number" && typeof w1 !== "number") return null;
+    return Math.max(w0 ?? 0, w1 ?? 0);
+  })();
+  const windTomorrowKmh = (() => {
+    const w0 = getAccuWindKmh(tomorrow?.Day);
+    const w1 = getAccuWindKmh(tomorrow?.Night);
+    if (typeof w0 !== "number" && typeof w1 !== "number") return null;
+    return Math.max(w0 ?? 0, w1 ?? 0);
+  })();
+
+  const codeToday = accuPhraseToOpenMeteoCode(today?.Day?.IconPhrase || today?.IconPhrase);
+  const codeTomorrow = accuPhraseToOpenMeteoCode(
+    tomorrow?.Day?.IconPhrase || tomorrow?.IconPhrase
+  );
+
+  // AccuWeather hourly endpoint can return either:
+  // - an array of hourly forecast objects, or
+  // - an object wrapper containing `HourlyForecasts`.
+  const hourlyForecasts = Array.isArray(hourlyObj)
+    ? hourlyObj
+    : Array.isArray(hourlyObj?.HourlyForecasts)
+    ? hourlyObj.HourlyForecasts
+    : [];
+
+  const hourlyArr = hourlyForecasts.slice(0, 12).map((h) => {
+    const tMs = new Date(h?.DateTime).getTime();
+    const time = Number.isFinite(tMs) ? Math.floor(tMs / 1000) : 0;
+    const t = pickAccuMetricValue(h?.Temperature);
+    const code = accuPhraseToOpenMeteoCode(
+      h?.IconPhrase || h?.WeatherIconPhrase || h?.WeatherText
+    );
+    return {
+      time,
+      temp: typeof t === "number" ? t : null,
+      code: typeof code === "number" ? code : null,
+    };
+  });
+
+  // Backend currently assumes `windMs` is m/s and multiplies by 3.6 in the response.
+  const windMs = typeof windspeedKmh === "number" ? windspeedKmh / 3.6 : null;
+
+  return {
+    temp: typeof temp === "number" ? temp : null,
+    windMs,
+    isDay: isDay ? 1 : 0,
+    weatherCode: typeof weatherCode === "number" ? weatherCode : null,
+    weatherText,
+    maxArr: [typeof todayMax === "number" ? todayMax : null, typeof tomorrowMax === "number" ? tomorrowMax : null],
+    minArr: [typeof todayMin === "number" ? todayMin : null, typeof tomorrowMin === "number" ? tomorrowMin : null],
+    rainArr: [rainToday, rainTomorrow],
+    probArr: [typeof probToday === "number" ? probToday : null, typeof probTomorrow === "number" ? probTomorrow : null],
+    windMaxArr: [typeof windTodayKmh === "number" ? windTodayKmh : null, typeof windTomorrowKmh === "number" ? windTomorrowKmh : null],
+    codeArr: [
+      typeof codeToday === "number" ? codeToday : null,
+      typeof codeTomorrow === "number" ? codeTomorrow : null,
+    ],
+    hourlyArr,
+  };
+}
+
 let weatherCache = { ts: 0, data: null };
 
 async function getDistrictWeather() {
-  if (!OPENWEATHER_API_KEY) {
-    const err = new Error("OPENWEATHER_API_KEY is not configured.");
+  if (!ACCUWEATHER_API_KEY && !OPENWEATHER_API_KEY) {
+    const err = new Error(
+      "Weather API key is not configured. Set ACCUWEATHER_API_KEY (preferred) or OPENWEATHER_API_KEY."
+    );
     err.status = 500;
     throw err;
   }
@@ -75,7 +293,7 @@ async function getDistrictWeather() {
     return weatherCache.data;
   }
 
-  const concurrency = 4;
+  const concurrency = ACCUWEATHER_API_KEY ? 2 : 4;
   let cursor = 0;
   const out = new Array(DISTRICTS_WEATHER.length);
 
@@ -87,6 +305,7 @@ async function getDistrictWeather() {
         let temp = null;
         let windMs = null;
         let weatherId = null;
+        let weatherCode = null; // Open-Meteo-like numeric code
         let isDay = true;
         let maxArr = [null, null];
         let minArr = [null, null];
@@ -96,8 +315,27 @@ async function getDistrictWeather() {
         let codeArr = [null, null];
         let hourlyArr = [];
 
-        // Try OpenWeather One Call 3.0 first (must INCLUDE hourly).
-        try {
+        if (ACCUWEATHER_API_KEY) {
+          const accu = await getAccuWeatherForDistrict(d);
+          temp = accu.temp;
+          windMs = accu.windMs; // m/s (backend multiplies by 3.6)
+          isDay = accu.isDay ? 1 : 0;
+          maxArr = accu.maxArr;
+          minArr = accu.minArr;
+          rainArr = accu.rainArr;
+          probArr = accu.probArr;
+          windMaxArr = accu.windMaxArr;
+          codeArr = accu.codeArr;
+          hourlyArr = accu.hourlyArr;
+          weatherCode = accu.weatherCode;
+          // Debug fields (frontend ignores extras)
+          var providerName = "accuweather";
+          var providerText = accu.weatherText;
+        } else {
+          var providerName = "openweather";
+          var providerText = null;
+          // Try OpenWeather One Call 3.0 first (must INCLUDE hourly).
+          try {
           const onecallUrl = `https://api.openweathermap.org/data/3.0/onecall?lat=${d.lat}&lon=${d.lon}&exclude=minutely,alerts&units=metric&appid=${encodeURIComponent(
             OPENWEATHER_API_KEY
           )}`;
@@ -156,7 +394,7 @@ async function getDistrictWeather() {
               code: typeof c === "number" ? c : null,
             };
           });
-        } catch (_oneCallErr) {
+          } catch (_oneCallErr) {
           // Fallback: OpenWeather free endpoints (2.5 weather + forecast).
           const currentUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${d.lat}&lon=${d.lon}&units=metric&appid=${encodeURIComponent(
             OPENWEATHER_API_KEY
@@ -292,9 +530,13 @@ async function getDistrictWeather() {
               code: typeof c === "number" ? c : null,
             };
           });
+          }
         }
 
-        const code = openWeatherIdToOpenMeteoCode(weatherId);
+        const code =
+          typeof weatherCode === "number"
+            ? weatherCode
+            : openWeatherIdToOpenMeteoCode(weatherId);
 
         // Last 3 days rainfall (2 days ago, yesterday, today) from Open-Meteo for admin.
         let precipitation_sum_last3days = null;
@@ -324,6 +566,8 @@ async function getDistrictWeather() {
             windspeed: typeof windMs === "number" ? windMs * 3.6 : null, // m/s -> km/h
             weathercode: typeof code === "number" ? code : null,
             is_day: isDay ? 1 : 0,
+            provider: providerName,
+            text: providerText,
           },
           daily: {
             temperature_2m_max: maxArr,
