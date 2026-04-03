@@ -14,7 +14,7 @@ function normalizeUserIncident(doc) {
     title: o.title || "",
     description: o.description || "",
     district: o.district || o.userSnapshot?.district || "",
-    area: o.district || o.userSnapshot?.district || "",
+    area: o.area || o.district || o.userSnapshot?.district || "",
     media: Array.isArray(o.media) ? o.media : [],
     reporter: {
       id: o.userId ? String(o.userId) : "",
@@ -81,13 +81,14 @@ async function createUserIncident(req, res) {
     }
 
     const district = String(req.body?.district || "").trim();
+    const area = String(req.body?.area || "").trim();
     const title = String(req.body?.title || "").trim();
     const description = String(req.body?.description || "").trim();
     const reportedAtRaw = String(req.body?.reportedAt || "").trim();
 
-    if (!district || !title || !description) {
+    if (!district || !area || !title || !description) {
       return res.status(400).json({
-        message: "district, title and description are required.",
+        message: "district, area, title and description are required.",
       });
     }
 
@@ -158,6 +159,7 @@ async function createUserIncident(req, res) {
         avatar: user.avatar || "",
       },
       district,
+      area: area.slice(0, 200),
       title: title.slice(0, 120),
       description: description.slice(0, 2000),
       reportedAt,

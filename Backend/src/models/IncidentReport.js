@@ -29,6 +29,9 @@ const IncidentReportSchema = new Schema(
       avatar: { type: String, default: "" },
     },
     district: { type: String, required: true, trim: true, index: true },
+    // Optional free-text location detail provided by the reporter
+    // e.g. "Kandy District, A9 km 42" or "Near bus stand, Negombo"
+    area: { type: String, default: "", trim: true, maxlength: 200 },
     title: { type: String, required: true, trim: true, maxlength: 120 },
     description: { type: String, required: true, trim: true, maxlength: 2000 },
   // Optional user-provided incident date (validated by frontend/backend).

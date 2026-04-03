@@ -84,6 +84,24 @@ function getIsDayInSriLanka(unixSeconds) {
   return Number.isFinite(hour) ? hour >= 6 && hour < 18 : true;
 }
 
+function pickGoogleRain(d) {
+  const w = d?.weather;
+  return {
+    lastHour:
+      typeof w?.google_rain_last_hour_mm === "number"
+        ? w.google_rain_last_hour_mm
+        : null,
+    last24h:
+      typeof w?.google_rain_last_24h_mm === "number"
+        ? w.google_rain_last_24h_mm
+        : null,
+    prob:
+      typeof w?.google_rain_probability_percent === "number"
+        ? w.google_rain_probability_percent
+        : null,
+  };
+}
+
 export function SriLankaWeather() {
   const [districts, setDistricts] = useState([]);
   const [selectedName, setSelectedName] = useState("");
@@ -155,10 +173,25 @@ export function SriLankaWeather() {
       .map((d) => pickDaily(d.daily, 1, "windspeed_10m_max"))
       .filter((v) => typeof v === "number");
 
+    const googleHour = districts
+      .map((d) => pickGoogleRain(d).lastHour)
+      .filter((v) => typeof v === "number");
+    const google24h = districts
+      .map((d) => pickGoogleRain(d).last24h)
+      .filter((v) => typeof v === "number");
+    const googleProb = districts
+      .map((d) => pickGoogleRain(d).prob)
+      .filter((v) => typeof v === "number");
+
     return {
       currentCode: codes.length ? codes[0] : null,
       currentTemp: avg(temps),
       currentWind: avg(winds),
+      googleRain: {
+        lastHour: avg(googleHour),
+        last24h: avg(google24h),
+        prob: avg(googleProb),
+      },
       today: {
         tMax: avg(todayMax),
         tMin: avg(todayMin),
@@ -252,6 +285,8 @@ export function SriLankaWeather() {
       });
   }, [districts, selected]);
 
+  const googleRain = selected ? pickGoogleRain(selected) : nationwide.googleRain;
+
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)]">
       <div className="relative h-[480px] overflow-hidden rounded-xl bg-slate-800">
@@ -314,6 +349,21 @@ export function SriLankaWeather() {
                   {`Tomorrow · ${formatDayLabel(day1)}`}
                 </>
               ) : null}
+            </div>
+          </div>
+
+          <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-slate-600">
+            <div className="rounded-lg border border-sky-100 bg-white/70 px-2 py-1">
+              <span className="font-semibold text-slate-700">Rain (last hr):</span>{" "}
+              {googleRain?.lastHour != null ? `${googleRain.lastHour.toFixed(1)} mm` : "—"}
+            </div>
+            <div className="rounded-lg border border-sky-100 bg-white/70 px-2 py-1">
+              <span className="font-semibold text-slate-700">Rain (24h):</span>{" "}
+              {googleRain?.last24h != null ? `${googleRain.last24h.toFixed(1)} mm` : "—"}
+            </div>
+            <div className="rounded-lg border border-sky-100 bg-white/70 px-2 py-1">
+              <span className="font-semibold text-slate-700">Prob:</span>{" "}
+              {googleRain?.prob != null ? `${googleRain.prob.toFixed(0)}%` : "—"}
             </div>
           </div>
         </div>

@@ -3,6 +3,7 @@
 
 const ACCUWEATHER_API_KEY = process.env.ACCUWEATHER_API_KEY || "";
 const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY || "";
+const GOOGLE_WEATHER_API_KEY = process.env.GOOGLE_WEATHER_API_KEY || "";
 
 const DISTRICTS_WEATHER = [
   { name: "Colombo", lat: 6.9271, lon: 79.8612 },
@@ -111,6 +112,27 @@ async function fetchJsonWithTimeout(url, timeoutMs = 7000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function getGoogleRainForDistrict(d) {
+  if (!GOOGLE_WEATHER_API_KEY) return null;
+  const url = `https://weather.googleapis.com/v1/currentConditions:lookup?key=${encodeURIComponent(
+    GOOGLE_WEATHER_API_KEY
+  )}&location.latitude=${encodeURIComponent(d.lat)}&location.longitude=${encodeURIComponent(
+    d.lon
+  )}&unitsSystem=METRIC&languageCode=en`;
+
+  const data = await fetchJsonWithTimeout(url, 5000);
+  const lastHourMm = data?.precipitation?.qpf?.quantity;
+  const probPct = data?.precipitation?.probability?.percent;
+  const last24hMm = data?.currentConditionsHistory?.qpf?.quantity;
+
+  return {
+    lastHourMm: typeof lastHourMm === "number" ? lastHourMm : null,
+    last24hMm: typeof last24hMm === "number" ? last24hMm : null,
+    probPct: typeof probPct === "number" ? probPct : null,
+    source: "google_weather_currentConditions",
+  };
 }
 
 const locationKeyCache = new Map();
@@ -371,6 +393,7 @@ async function getDistrictWeather() {
         let windMaxArr = [null, null];
         let codeArr = [null, null];
         let hourlyArr = [];
+        let googleRain = null;
 
         let providerName = "openweather";
         let providerText = null;
@@ -601,6 +624,13 @@ async function getDistrictWeather() {
           }
         }
 
+        // Google Weather rainfall (current conditions): last hour + last 24h
+        try {
+          googleRain = await getGoogleRainForDistrict(d);
+        } catch {
+          googleRain = null;
+        }
+
         // Always prefer AccuWeather for rainfall fields when key is available,
         // even if the district used OpenWeather for other weather values.
         if (ACCUWEATHER_API_KEY && providerName === "openweather") {
@@ -655,6 +685,10 @@ async function getDistrictWeather() {
             is_day: isDay ? 1 : 0,
             provider: providerName,
             text: providerText,
+            google_rain_last_hour_mm: googleRain?.lastHourMm ?? null,
+            google_rain_last_24h_mm: googleRain?.last24hMm ?? null,
+            google_rain_probability_percent: googleRain?.probPct ?? null,
+            google_rain_source: googleRain?.source ?? null,
           },
           daily: {
             temperature_2m_max: maxArr,

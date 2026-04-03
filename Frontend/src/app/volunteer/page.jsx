@@ -1,14 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import {
   Heart,
-  Shield,
   Loader2,
-  CheckCircle,
-  AlertCircle,
   ArrowRight,
   Ambulance,
   Radio,
@@ -23,18 +20,6 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 /** Rescue / flood response atmosphere (Unsplash). */
 const HERO_BG =
   "https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?auto=format&fit=crop&w=1920&q=75";
-
-const SKILL_OPTIONS = [
-  "First Aid / Medical",
-  "Search & Rescue",
-  "Disaster Relief Distribution",
-  "Technical Support / IT",
-  "Drone Operation",
-  "Communication / Coordination",
-  "Logistics",
-  "Counseling / Psychological Support",
-  "General Volunteer",
-];
 
 function inferDistrict(incident) {
   if (incident?.district) return incident.district;
@@ -101,12 +86,9 @@ function incidentToMission(inc, t) {
 
 export default function VolunteerPage() {
   const { t } = useTranslation();
+  const router = useRouter();
   const [token, setToken] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [missionJoinError, setMissionJoinError] = useState("");
   const [missionJoinSuccess, setMissionJoinSuccess] = useState("");
   const [volunteer, setVolunteer] = useState(null);
@@ -114,24 +96,6 @@ export default function VolunteerPage() {
   const [missionsLoading, setMissionsLoading] = useState(true);
   const [myMissionIds, setMyMissionIds] = useState(new Set());
   const [joinBusyMissionId, setJoinBusyMissionId] = useState(null);
-
-  const [form, setForm] = useState({
-    fullName: "",
-    dateOfBirth: "",
-    gender: "",
-    nicIdNumber: "",
-    phoneNumber: "",
-    emailAddress: "",
-    districtCity: "",
-    currentLocation: "",
-    canTravelOtherDistricts: false,
-    skills: [],
-    medicalConditions: "",
-    emergencyContactPerson: "",
-    emergencyContactNumber: "",
-    agreeSafetyGuidelines: false,
-    agreeEmergencyContact: false,
-  });
 
   const activeMissions = missions;
 
@@ -218,52 +182,14 @@ export default function VolunteerPage() {
         const data = await res.json().catch(() => ({}));
         if (res.ok && data?.volunteer) {
           setVolunteer(data.volunteer);
-          setForm((prev) => ({
-            ...prev,
-            fullName: data.volunteer.fullName || prev.fullName || "",
-            dateOfBirth: data.volunteer.dateOfBirth
-              ? String(data.volunteer.dateOfBirth).slice(0, 10)
-              : prev.dateOfBirth || "",
-            gender: data.volunteer.gender || prev.gender || "",
-            nicIdNumber: data.volunteer.nicIdNumber || "",
-            phoneNumber: data.volunteer.phoneNumber || prev.phoneNumber || "",
-            emailAddress: data.volunteer.emailAddress || prev.emailAddress || "",
-            districtCity: data.volunteer.districtCity || prev.districtCity || "",
-            currentLocation: data.volunteer.currentLocation || "",
-            canTravelOtherDistricts: Boolean(data.volunteer.canTravelOtherDistricts),
-            skills: Array.isArray(data.volunteer.skills) ? data.volunteer.skills : [],
-            medicalConditions: data.volunteer.medicalConditions || "",
-            emergencyContactPerson: data.volunteer.emergencyContactPerson || "",
-            emergencyContactNumber: data.volunteer.emergencyContactNumber || "",
-            agreeSafetyGuidelines: Boolean(data.volunteer.agreeSafetyGuidelines),
-            agreeEmergencyContact: Boolean(data.volunteer.agreeEmergencyContact),
-          }));
         }
       } catch {
         // ignore
-      } finally {
-        setLoading(false);
       }
     }
 
     if (tok) loadVolunteer(tok);
-    else setLoading(false);
 
-    try {
-      const rawUser = typeof window !== "undefined" ? window.localStorage.getItem("dmews_user") : null;
-      const user = rawUser ? JSON.parse(rawUser) : null;
-      if (user) {
-        setForm((prev) => ({
-          ...prev,
-          fullName: prev.fullName || user.name || "",
-          phoneNumber: prev.phoneNumber || user.mobile || "",
-          emailAddress: prev.emailAddress || user.email || "",
-          districtCity: prev.districtCity || user.district || "",
-        }));
-      }
-    } catch {
-      // ignore
-    }
     loadMissions();
     loadMyMissions(tok);
 
@@ -271,10 +197,7 @@ export default function VolunteerPage() {
       const next = window.localStorage.getItem("dmews_token");
       setToken(next || null);
       if (next) loadVolunteer(next);
-      else {
-        setVolunteer(null);
-        setLoading(false);
-      }
+      else setVolunteer(null);
     };
     window.addEventListener("storage", onStorage);
     window.addEventListener("dmews-auth-changed", onStorage);
@@ -287,19 +210,12 @@ export default function VolunteerPage() {
   useEffect(() => {
     if (typeof window === "undefined" || !authChecked) return;
     if (window.location.hash !== "#volunteer-apply") return;
-    const el = document.getElementById("volunteer-apply");
-    if (!el) return;
-    window.requestAnimationFrame(() => {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }, [authChecked]);
+    router.replace("/volunteer/join");
+  }, [authChecked, router]);
 
-  const scrollToApply = useCallback(() => {
-    document.getElementById("volunteer-apply")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  }, []);
+  const goToApply = useCallback(() => {
+    router.push("/volunteer/join");
+  }, [router]);
 
   const scrollToMissions = useCallback(() => {
     document.getElementById("active-missions")?.scrollIntoView({
@@ -341,8 +257,8 @@ export default function VolunteerPage() {
   async function handleJoinMission(missionId) {
     if (!token) return;
     if (!canJoinMissions) {
-      // Guide user to the application form if they haven't registered as a volunteer yet.
-      scrollToApply();
+      // Guide user to the application page if they haven't registered as a volunteer yet.
+      goToApply();
       return;
     }
 
@@ -383,57 +299,6 @@ export default function VolunteerPage() {
     }
   }
 
-  function setField(name, value) {
-    setForm((prev) => ({ ...prev, [name]: value }));
-  }
-
-  function toggleSkill(skill) {
-    setForm((prev) => {
-      const has = prev.skills.includes(skill);
-      return {
-        ...prev,
-        skills: has ? prev.skills.filter((s) => s !== skill) : [...prev.skills, skill],
-      };
-    });
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (!token) return;
-    setError("");
-    setSuccess("");
-    setSubmitting(true);
-    try {
-      const res = await fetch(`${API_BASE}/volunteers/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data?.message || "Could not submit your request.");
-      } else {
-        setSuccess(
-          data?.volunteer?.status === "pending"
-            ? "Your request was submitted. An admin will review it soon."
-            : "Saved."
-        );
-        if (data?.volunteer) setVolunteer(data.volunteer);
-        if (data?.user && typeof window !== "undefined") {
-          window.localStorage.setItem("dmews_user", JSON.stringify(data.user));
-          window.dispatchEvent(new Event("dmews-auth-changed"));
-        }
-      }
-    } catch {
-      setError("Network error. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   if (!authChecked) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
@@ -444,8 +309,6 @@ export default function VolunteerPage() {
 
   const status = volunteer?.status;
   const approved = status === "approved";
-  const pending = status === "pending";
-  const rejected = status === "rejected";
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
@@ -477,7 +340,7 @@ export default function VolunteerPage() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <button
                 type="button"
-                onClick={scrollToApply}
+                onClick={goToApply}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3.5 text-sm font-bold text-sky-950 shadow-lg shadow-black/20 transition hover:bg-amber-300"
               >
                 {t("volunteerHub.becomeVolunteer")}
@@ -654,7 +517,7 @@ export default function VolunteerPage() {
                     </p>
                     <button
                       type="button"
-                      onClick={scrollToApply}
+                      onClick={goToApply}
                       className="mt-auto inline-flex w-full items-center justify-center gap-2 rounded-lg border border-sky-300 bg-sky-50 py-2.5 text-sm font-semibold text-sky-900 transition hover:bg-sky-100"
                     >
                       {t("volunteerHub.joinRole")}
@@ -696,231 +559,26 @@ export default function VolunteerPage() {
           </div>
         </section>
 
-        {/* Application */}
-        <section id="volunteer-apply" className="pb-8">
-          <div className="mb-6">
-            <h2 className="font-oswald text-2xl font-bold text-slate-900">
-              {t("volunteerHub.applyTitle")}
-            </h2>
-            <p className="mt-2 text-sm text-slate-600 sm:text-base">
-              {t("volunteerHub.applyIntro")}
-            </p>
-          </div>
-
-          {!token ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-md">
-              <p className="text-slate-700">{t("volunteerHub.needLoginApply")}</p>
-              <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-                <Link
-                  href="/login?redirect=/volunteer#volunteer-apply"
-                  className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-5 py-3 text-sm font-semibold text-white hover:bg-rose-500"
-                >
-                  {t("volunteerHub.loginToApply")}
-                </Link>
-                <Link
-                  href="/signup?redirect=/volunteer#volunteer-apply"
-                  className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                >
-                  {t("volunteerHub.signupToApply")}
-                </Link>
-              </div>
-            </div>
-          ) : (
-      <div className="overflow-hidden rounded-2xl border border-sky-200/80 bg-white shadow-lg">
-              <div className="bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 px-6 py-6 text-white">
-          <div className="flex items-center gap-3">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20">
-              <Heart className="h-7 w-7" />
-            </span>
+        {/* Apply CTA */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                    <p className="font-oswald text-lg font-semibold tracking-wide">
-                      {t("volunteerHub.applyTitle")}
-                    </p>
-                    <p className="mt-0.5 text-sm text-rose-50/95">
-                      {t("volunteerHub.applyIntro")}
+              <h2 className="font-oswald text-xl font-semibold text-slate-900">
+                {t("volunteerHub.applyTitle")}
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                {t("volunteerHub.applyIntro")}
               </p>
             </div>
+            <button
+              type="button"
+              onClick={goToApply}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-sm font-semibold text-white hover:bg-rose-500"
+            >
+              {t("volunteerHub.joinRole")}
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
-        </div>
-
-        <div className="space-y-6 p-6 sm:p-8">
-          {loading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-sky-600" />
-            </div>
-          ) : approved ? (
-            <div className="flex gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-emerald-900">
-                    <CheckCircle className="h-5 w-5 shrink-0" />
-              <div>
-                      <p className="font-semibold">
-                        You are a verified volunteer
-                      </p>
-                <p className="mt-1 text-sm text-emerald-800/90">
-                  Thank you. A blue check appears next to your name in the
-                        header. Report help requests and updates via Incidents.
-                </p>
-              </div>
-            </div>
-          ) : pending ? (
-            <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-amber-950">
-                    <Shield className="h-5 w-5 shrink-0" />
-              <div>
-                <p className="font-semibold">Application pending</p>
-                <p className="mt-1 text-sm text-amber-900/90">
-                        An administrator will approve or reject your request. You
-                        can update your details below while waiting.
-                </p>
-              </div>
-            </div>
-          ) : rejected ? (
-            <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50/80 px-4 py-3 text-rose-950">
-                    <AlertCircle className="h-5 w-5 shrink-0" />
-              <div>
-                      <p className="font-semibold">
-                        Previous request was not approved
-                      </p>
-                <p className="mt-1 text-sm text-rose-900/90">
-                  You can submit a new application below.
-                </p>
-              </div>
-            </div>
-          ) : null}
-
-          {!approved && (
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
-                <h3 className="text-sm font-bold text-slate-900">1. Basic Information</h3>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Full Name</label>
-                    <input required value={form.fullName} onChange={(e) => setField("fullName", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Date of Birth</label>
-                    <input required type="date" value={form.dateOfBirth} onChange={(e) => setField("dateOfBirth", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gender</label>
-                    <select required value={form.gender} onChange={(e) => setField("gender", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
-                      <option value="">Select gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                      <option value="Prefer not to say">Prefer not to say</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">NIC / ID Number (optional)</label>
-                    <input value={form.nicIdNumber} onChange={(e) => setField("nicIdNumber", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Phone Number</label>
-                    <input required value={form.phoneNumber} onChange={(e) => setField("phoneNumber", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Email Address</label>
-                    <input required type="email" value={form.emailAddress} onChange={(e) => setField("emailAddress", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">District / City</label>
-                    <input required value={form.districtCity} onChange={(e) => setField("districtCity", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Current Location</label>
-                    <input required value={form.currentLocation} onChange={(e) => setField("currentLocation", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Can you travel to other districts?</label>
-                  <select value={String(form.canTravelOtherDistricts)} onChange={(e) => setField("canTravelOtherDistricts", e.target.value === "true")} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm sm:w-60">
-                    <option value="false">No</option>
-                    <option value="true">Yes</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
-                <h3 className="text-sm font-bold text-slate-900">2. Skills & Expertise</h3>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {SKILL_OPTIONS.map((skill) => (
-                    <label key={skill} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={form.skills.includes(skill)}
-                        onChange={() => toggleSkill(skill)}
-                      />
-                      <span>{skill}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
-                <h3 className="text-sm font-bold text-slate-900">3. Health & Safety</h3>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Do you have any medical conditions? (optional)</label>
-                    <textarea rows={3} value={form.medicalConditions} onChange={(e) => setField("medicalConditions", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Emergency Contact Person</label>
-                    <input required value={form.emergencyContactPerson} onChange={(e) => setField("emergencyContactPerson", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Emergency Contact Number</label>
-                    <input required value={form.emergencyContactNumber} onChange={(e) => setField("emergencyContactNumber", e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
-                <h3 className="text-sm font-bold text-slate-900">4. Agreement</h3>
-                <div className="mt-3 space-y-2 text-sm">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={form.agreeSafetyGuidelines} onChange={(e) => setField("agreeSafetyGuidelines", e.target.checked)} />
-                    <span>I agree to follow DisasterWatch safety guidelines.</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={form.agreeEmergencyContact} onChange={(e) => setField("agreeEmergencyContact", e.target.checked)} />
-                    <span>I agree to be contacted during emergencies.</span>
-                  </label>
-                </div>
-              </div>
-
-              {error && (
-                <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-                        <AlertCircle className="h-4 w-4 shrink-0" />
-                  {error}
-                </div>
-              )}
-              {success && (
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-                        <CheckCircle className="h-4 w-4 shrink-0" />
-                  {success}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={submitting || approved}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Submitting…
-                  </>
-                ) : pending ? (
-                  "Update application"
-                ) : (
-                  "Submit volunteer application"
-                )}
-              </button>
-            </form>
-          )}
-        </div>
-            </div>
-          )}
         </section>
       </div>
     </div>

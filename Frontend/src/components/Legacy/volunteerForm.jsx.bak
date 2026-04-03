@@ -1,0 +1,259 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useTranslation } from "react-i18next";
+import { AlertCircle, CheckCircle, Heart, Loader2, Shield } from "lucide-react";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+const SKILL_OPTIONS = [
+  "First Aid / Medical",
+  "Search & Rescue",
+  "Disaster Relief Distribution",
+  "Technical Support / IT",
+  "Drone Operation",
+  "Communication / Coordination",
+  "Logistics",
+  "Counseling / Psychological Support",
+  "General Volunteer",
+];
+
+export default function VolunteerJoinPage() {
+  const { t } = useTranslation();
+
+  const [token, setToken] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [volunteer, setVolunteer] = useState(null);
+
+  const [form, setForm] = useState({
+    fullName: "",
+    dateOfBirth: "",
+    gender: "",
+    nicIdNumber: "",
+    phoneNumber: "",
+    emailAddress: "",
+    districtCity: "",
+    currentLocation: "",
+    canTravelOtherDistricts: false,
+    skills: [],
+    medicalConditions: "",
+    emergencyContactPerson: "",
+    emergencyContactNumber: "",
+    agreeSafetyGuidelines: false,
+    agreeEmergencyContact: false,
+  });
+
+  const status = String(volunteer?.status || "").toLowerCase();
+  const approved = status === "approved";
+  const pending = status === "pending";
+  const rejected = status === "rejected";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const tok = window.localStorage.getItem("dmews_token");
+    setToken(tok || null);
+    setAuthChecked(true);
+
+    async function loadVolunteer(tkn) {
+      try {
+        const res = await fetch(`${API_BASE}/volunteers/me`, {
+          headers: { Authorization: `Bearer ${tkn}` },
+          cache: "no-store",
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok && data?.volunteer) {
+          setVolunteer(data.volunteer);
+
+          setForm((prev) => ({
+            ...prev,
+            fullName: data.volunteer.fullName || "",
+            dateOfBirth: data.volunteer.dateOfBirth
+              ? String(data.volunteer.dateOfBirth).slice(0, 10)
+              : "",
+            gender: data.volunteer.gender || "",
+            nicIdNumber: data.volunteer.nicIdNumber || "",
+            phoneNumber: data.volunteer.phoneNumber || "",
+            emailAddress: data.volunteer.emailAddress || "",
+            districtCity: data.volunteer.districtCity || "",
+            currentLocation: data.volunteer.currentLocation || "",
+            canTravelOtherDistricts: Boolean(
+              data.volunteer.canTravelOtherDistricts
+            ),
+            skills: Array.isArray(data.volunteer.skills)
+              ? data.volunteer.skills
+              : [],
+            medicalConditions: data.volunteer.medicalConditions || "",
+            emergencyContactPerson:
+              data.volunteer.emergencyContactPerson || "",
+            emergencyContactNumber:
+              data.volunteer.emergencyContactNumber || "",
+            agreeSafetyGuidelines: Boolean(
+              data.volunteer.agreeSafetyGuidelines
+            ),
+            agreeEmergencyContact: Boolean(
+              data.volunteer.agreeEmergencyContact
+            ),
+          }));
+        }
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (tok) loadVolunteer(tok);
+    else setLoading(false);
+
+    try {
+      const rawUser = window.localStorage.getItem("dmews_user");
+      const user = rawUser ? JSON.parse(rawUser) : null;
+
+      if (user) {
+        setForm((prev) => ({
+          ...prev,
+          fullName: prev.fullName || user.name || "",
+          phoneNumber: prev.phoneNumber || user.mobile || "",
+          emailAddress: prev.emailAddress || user.email || "",
+          districtCity: prev.districtCity || user.district || "",
+        }));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  function setField(name, value) {
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function toggleSkill(skill) {
+    setForm((prev) => {
+      const has = prev.skills.includes(skill);
+      return {
+        ...prev,
+        skills: has
+          ? prev.skills.filter((s) => s !== skill)
+          : [...prev.skills, skill],
+      };
+    });
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!token) return;
+
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/volunteers/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(form),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(data?.message || "Could not submit your request.");
+      } else {
+        setSuccess(
+          data?.volunteer?.status === "pending"
+            ? "Your request was submitted. An admin will review it soon."
+            : "Saved."
+        );
+
+        if (data?.volunteer) setVolunteer(data.volunteer);
+
+        if (data?.user && typeof window !== "undefined") {
+          window.localStorage.setItem(
+            "dmews_user",
+            JSON.stringify(data.user)
+          );
+          window.dispatchEvent(new Event("dmews-auth-changed"));
+        }
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!authChecked) {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-sky-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8">
+      <h1 className="text-2xl font-bold mb-4">
+        {t("volunteerHub.applyTitle")}
+      </h1>
+
+      {!token ? (
+        <div className="text-center">
+          <p>{t("volunteerHub.needLoginApply")}</p>
+          <Link href="/login">Login</Link>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4">
+
+          <input
+            placeholder="Full Name"
+            value={form.fullName}
+            onChange={(e) => setField("fullName", e.target.value)}
+          />
+
+          <input
+            type="date"
+            value={form.dateOfBirth}
+            onChange={(e) => setField("dateOfBirth", e.target.value)}
+          />
+
+          <input
+            placeholder="Phone"
+            value={form.phoneNumber}
+            onChange={(e) => setField("phoneNumber", e.target.value)}
+          />
+
+          <div>
+            {SKILL_OPTIONS.map((skill) => (
+              <label key={skill}>
+                <input
+                  type="checkbox"
+                  checked={form.skills.includes(skill)}
+                  onChange={() => toggleSkill(skill)}
+                />
+                {skill}
+              </label>
+            ))}
+          </div>
+
+          {error && <p className="text-red-500">{error}</p>}
+          {success && <p className="text-green-500">{success}</p>}
+
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Submitting..." : "Submit"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}

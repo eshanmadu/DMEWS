@@ -99,6 +99,7 @@ export default function IncidentsPage() {
   // Report form state
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [district, setDistrict] = useState("");
+  const [area, setArea] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [reportedAt, setReportedAt] = useState("");
@@ -231,8 +232,8 @@ export default function IncidentsPage() {
       setNotice("Please log in to report an incident.");
       return;
     }
-    if (!district || !title.trim() || !description.trim()) {
-      setNotice("District, title and description are required.");
+    if (!district || !area.trim() || !title.trim() || !description.trim()) {
+      setNotice("District, area, title and description are required.");
       return;
     }
     if (!reportedAt) {
@@ -251,6 +252,7 @@ export default function IncidentsPage() {
     try {
       const fd = new FormData();
       fd.set("district", district);
+      fd.set("area", area.trim());
       fd.set("title", title.trim());
       fd.set("description", description.trim());
       fd.set("reportedAt", reportedAt);
@@ -270,6 +272,7 @@ export default function IncidentsPage() {
         setDescription("");
         setFile(null);
         setDistrict(""); // Reset district to empty, but could also keep if desired
+        setArea("");
         setNotice("");
         setIsReportModalOpen(false);
         await load();
@@ -439,7 +442,7 @@ export default function IncidentsPage() {
                   </span>
                 </div>
 
-                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-2">
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   {group.list.map((incident) => {
                     const media0 = Array.isArray(incident.media) ? incident.media[0] : null;
                     const isVideo =
@@ -456,7 +459,7 @@ export default function IncidentsPage() {
                     return (
                       <div
                         key={incident.id}
-                        className="group rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-slate-300 hover:shadow-md"
+                        className="group flex h-full flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-slate-300 hover:shadow-md"
                       >
                         {media0?.url && (
                           <div className="overflow-hidden rounded-t-xl border-b border-slate-100">
@@ -477,7 +480,7 @@ export default function IncidentsPage() {
                           </div>
                         )}
 
-                        <div className="p-5">
+                        <div className="flex flex-1 flex-col p-5">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex flex-wrap items-center gap-2">
                               <StatusBadge status={incident.status} />
@@ -511,7 +514,7 @@ export default function IncidentsPage() {
                           </p>
 
                           {canDelete && (
-                            <div className="mt-4 flex justify-end gap-2">
+                            <div className="mt-auto pt-4 flex justify-end gap-2">
                               <button
                                 type="button"
                                 onClick={() => startEdit(incident)}
@@ -618,18 +621,33 @@ export default function IncidentsPage() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Title
-                </label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  maxLength={120}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
-                  placeholder="Short headline"
-                  required
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Area
+                  </label>
+                  <input
+                    value={area}
+                    onChange={(e) => setArea(e.target.value)}
+                    maxLength={200}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+                    placeholder="Landmark / street / town"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Title
+                  </label>
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    maxLength={120}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+                    placeholder="Short headline"
+                    required
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
