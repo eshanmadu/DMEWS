@@ -4,6 +4,8 @@ import Lottie from "lottie-react";
 import { PhoneCall, Ambulance, Flame, ShieldAlert, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+
+
 const pulseDot = {
   v: "5.7.4",
   fr: 30,
