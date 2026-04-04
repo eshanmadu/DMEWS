@@ -8,6 +8,11 @@ const nextConfig = {
         hostname: "meteo.gov.lk",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "cdn.weatherapi.com",
+        pathname: "/**",
+      },
     ],
   },
 };

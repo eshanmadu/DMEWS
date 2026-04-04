@@ -45,10 +45,7 @@ function pickDaily(daily, idx, key) {
 
 function getUserDistrictFromStorage() {
   if (typeof window === "undefined") return "";
-
-  const saved =
-    (window.localStorage.getItem("dmews_user_district") || "").trim();
-
+  const saved = (window.localStorage.getItem("dmews_user_district") || "").trim();
   let fromUser = "";
   try {
     const raw = window.localStorage.getItem("dmews_user");
@@ -57,7 +54,6 @@ function getUserDistrictFromStorage() {
   } catch {
     fromUser = "";
   }
-
   return saved || fromUser || "";
 }
 
@@ -87,18 +83,26 @@ function getIsDayInSriLanka(unixSeconds) {
 function pickGoogleRain(d) {
   const w = d?.weather;
   return {
-    lastHour:
-      typeof w?.google_rain_last_hour_mm === "number"
-        ? w.google_rain_last_hour_mm
-        : null,
-    last24h:
-      typeof w?.google_rain_last_24h_mm === "number"
-        ? w.google_rain_last_24h_mm
-        : null,
-    prob:
-      typeof w?.google_rain_probability_percent === "number"
-        ? w.google_rain_probability_percent
-        : null,
+    lastHour: typeof w?.google_rain_last_hour_mm === "number" ? w.google_rain_last_hour_mm : null,
+    last24h: typeof w?.google_rain_last_24h_mm === "number" ? w.google_rain_last_24h_mm : null,
+    prob: typeof w?.google_rain_probability_percent === "number" ? w.google_rain_probability_percent : null,
+  };
+}
+
+function pickWeatherMetrics(d) {
+  const w = d?.weather;
+  if (!w) return null;
+  return {
+    feelslike: typeof w.feelslike_c === "number" ? w.feelslike_c : null,
+    humidity: typeof w.humidity === "number" ? w.humidity : null,
+    pressure: typeof w.pressure_mb === "number" ? w.pressure_mb : null,
+    uv: typeof w.uv === "number" ? w.uv : null,
+    vis: typeof w.vis_km === "number" ? w.vis_km : null,
+    cloud: typeof w.cloud === "number" ? w.cloud : null,
+    gust: typeof w.gust_kph === "number" ? w.gust_kph : null,
+    precip: typeof w.precip_mm === "number" ? w.precip_mm : null,
+    windDir: w.wind_dir ? String(w.wind_dir) : null,
+    icon: w.condition_icon ? String(w.condition_icon) : null,
   };
 }
 
@@ -111,19 +115,17 @@ export function SriLankaWeather() {
   const [showAllDistricts, setShowAllDistricts] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Read user district once on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
     const resolved = getUserDistrictFromStorage();
     if (resolved) {
       setUserDistrict(resolved);
-      setShowAllDistricts(false); // logged-in: default to own district only
+      setShowAllDistricts(false);
     }
     const token = window.localStorage.getItem("dmews_token");
     setIsLoggedIn(Boolean(token));
   }, []);
 
-  // Keep selection synced to user district (unless user unlocks)
   useEffect(() => {
     if (!lockToUserDistrict) return;
     if (!userDistrict) return;
@@ -132,56 +134,33 @@ export function SriLankaWeather() {
   }, [lockToUserDistrict, userDistrict, selectedName]);
 
   const nationwide = useMemo(() => {
-    const temps = districts
-      .map((d) => d.weather?.temperature)
-      .filter((v) => typeof v === "number");
-    const winds = districts
-      .map((d) => d.weather?.windspeed)
-      .filter((v) => typeof v === "number");
-    const codes = districts
-      .map((d) => d.weather?.weathercode)
-      .filter((v) => typeof v === "number");
-    const todayMax = districts
-      .map((d) => pickDaily(d.daily, 0, "temperature_2m_max"))
-      .filter((v) => typeof v === "number");
-    const todayMin = districts
-      .map((d) => pickDaily(d.daily, 0, "temperature_2m_min"))
-      .filter((v) => typeof v === "number");
-    const todayRain = districts
-      .map((d) => pickDaily(d.daily, 0, "precipitation_sum"))
-      .filter((v) => typeof v === "number");
-    const todayProb = districts
-      .map((d) => pickDaily(d.daily, 0, "precipitation_probability_max"))
-      .filter((v) => typeof v === "number");
-    const todayWindMax = districts
-      .map((d) => pickDaily(d.daily, 0, "windspeed_10m_max"))
-      .filter((v) => typeof v === "number");
+    const temps = districts.map((d) => d.weather?.temperature).filter((v) => typeof v === "number");
+    const winds = districts.map((d) => d.weather?.windspeed).filter((v) => typeof v === "number");
+    const codes = districts.map((d) => d.weather?.weathercode).filter((v) => typeof v === "number");
+    const todayMax = districts.map((d) => pickDaily(d.daily, 0, "temperature_2m_max")).filter((v) => typeof v === "number");
+    const todayMin = districts.map((d) => pickDaily(d.daily, 0, "temperature_2m_min")).filter((v) => typeof v === "number");
+    const todayRain = districts.map((d) => pickDaily(d.daily, 0, "precipitation_sum")).filter((v) => typeof v === "number");
+    const todayProb = districts.map((d) => pickDaily(d.daily, 0, "precipitation_probability_max")).filter((v) => typeof v === "number");
+    const todayWindMax = districts.map((d) => pickDaily(d.daily, 0, "windspeed_10m_max")).filter((v) => typeof v === "number");
 
-    const tomorrowMax = districts
-      .map((d) => pickDaily(d.daily, 1, "temperature_2m_max"))
-      .filter((v) => typeof v === "number");
-    const tomorrowMin = districts
-      .map((d) => pickDaily(d.daily, 1, "temperature_2m_min"))
-      .filter((v) => typeof v === "number");
-    const tomorrowRain = districts
-      .map((d) => pickDaily(d.daily, 1, "precipitation_sum"))
-      .filter((v) => typeof v === "number");
-    const tomorrowProb = districts
-      .map((d) => pickDaily(d.daily, 1, "precipitation_probability_max"))
-      .filter((v) => typeof v === "number");
-    const tomorrowWindMax = districts
-      .map((d) => pickDaily(d.daily, 1, "windspeed_10m_max"))
-      .filter((v) => typeof v === "number");
+    const tomorrowMax = districts.map((d) => pickDaily(d.daily, 1, "temperature_2m_max")).filter((v) => typeof v === "number");
+    const tomorrowMin = districts.map((d) => pickDaily(d.daily, 1, "temperature_2m_min")).filter((v) => typeof v === "number");
+    const tomorrowRain = districts.map((d) => pickDaily(d.daily, 1, "precipitation_sum")).filter((v) => typeof v === "number");
+    const tomorrowProb = districts.map((d) => pickDaily(d.daily, 1, "precipitation_probability_max")).filter((v) => typeof v === "number");
+    const tomorrowWindMax = districts.map((d) => pickDaily(d.daily, 1, "windspeed_10m_max")).filter((v) => typeof v === "number");
 
-    const googleHour = districts
-      .map((d) => pickGoogleRain(d).lastHour)
-      .filter((v) => typeof v === "number");
-    const google24h = districts
-      .map((d) => pickGoogleRain(d).last24h)
-      .filter((v) => typeof v === "number");
-    const googleProb = districts
-      .map((d) => pickGoogleRain(d).prob)
-      .filter((v) => typeof v === "number");
+    const googleHour = districts.map((d) => pickGoogleRain(d).lastHour).filter((v) => typeof v === "number");
+    const google24h = districts.map((d) => pickGoogleRain(d).last24h).filter((v) => typeof v === "number");
+    const googleProb = districts.map((d) => pickGoogleRain(d).prob).filter((v) => typeof v === "number");
+
+    const feels = districts.map((d) => d.weather?.feelslike_c).filter((v) => typeof v === "number");
+    const hums = districts.map((d) => d.weather?.humidity).filter((v) => typeof v === "number");
+    const pres = districts.map((d) => d.weather?.pressure_mb).filter((v) => typeof v === "number");
+    const uvs = districts.map((d) => d.weather?.uv).filter((v) => typeof v === "number");
+    const viss = districts.map((d) => d.weather?.vis_km).filter((v) => typeof v === "number");
+    const clouds = districts.map((d) => d.weather?.cloud).filter((v) => typeof v === "number");
+    const gusts = districts.map((d) => d.weather?.gust_kph).filter((v) => typeof v === "number");
+    const precs = districts.map((d) => d.weather?.precip_mm).filter((v) => typeof v === "number");
 
     return {
       currentCode: codes.length ? codes[0] : null,
@@ -191,6 +170,16 @@ export function SriLankaWeather() {
         lastHour: avg(googleHour),
         last24h: avg(google24h),
         prob: avg(googleProb),
+      },
+      wa: {
+        feelslike: feels.length ? avg(feels) : null,
+        humidity: hums.length ? avg(hums) : null,
+        pressure: pres.length ? avg(pres) : null,
+        uv: uvs.length ? avg(uvs) : null,
+        vis: viss.length ? avg(viss) : null,
+        cloud: clouds.length ? avg(clouds) : null,
+        gust: gusts.length ? avg(gusts) : null,
+        precip: precs.length ? avg(precs) : null,
       },
       today: {
         tMax: avg(todayMax),
@@ -212,27 +201,21 @@ export function SriLankaWeather() {
   const selected = useMemo(() => {
     if (!selectedName) return null;
     const target = selectedName.trim().toLowerCase();
-    return (
-      districts.find((d) => d.name?.trim().toLowerCase() === target) || null
-    );
+    return districts.find((d) => d.name?.trim().toLowerCase() === target) || null;
   }, [districts, selectedName]);
 
-  const primaryName =
-    (isLoggedIn ? userDistrict : "") || "";
-
+  const primaryName = (isLoggedIn ? userDistrict : "") || "";
   const day0 = selected?.daily?.time?.[0] || districts?.[0]?.daily?.time?.[0];
   const day1 = selected?.daily?.time?.[1] || districts?.[0]?.daily?.time?.[1];
 
-  const title = selected
-    ? `${selected.name} District`
-    : "Sri Lanka (Nationwide average)";
+  const liveCode = typeof selected?.weather?.weathercode === "number"
+    ? selected.weather.weathercode
+    : typeof nationwide.currentCode === "number"
+    ? nationwide.currentCode
+    : null;
 
-  const liveCode =
-    typeof selected?.weather?.weathercode === "number"
-      ? selected.weather.weathercode
-      : typeof nationwide.currentCode === "number"
-      ? nationwide.currentCode
-      : null;
+  const todayCode = typeof selected?.daily?.weathercode?.[0] === "number" ? selected.daily.weathercode[0] : liveCode;
+  const tomorrowCode = typeof selected?.daily?.weathercode?.[1] === "number" ? selected.daily.weathercode[1] : liveCode;
 
   const today = selected
     ? {
@@ -241,7 +224,7 @@ export function SriLankaWeather() {
         rain: pickDaily(selected.daily, 0, "precipitation_sum"),
         rainProb: pickDaily(selected.daily, 0, "precipitation_probability_max"),
         windMax: pickDaily(selected.daily, 0, "windspeed_10m_max"),
-        condition: describeWeatherCode(liveCode),
+        condition: describeWeatherCode(todayCode),
       }
     : {
         ...nationwide.today,
@@ -255,12 +238,33 @@ export function SriLankaWeather() {
         rain: pickDaily(selected.daily, 1, "precipitation_sum"),
         rainProb: pickDaily(selected.daily, 1, "precipitation_probability_max"),
         windMax: pickDaily(selected.daily, 1, "windspeed_10m_max"),
-        condition: describeWeatherCode(liveCode),
+        condition: describeWeatherCode(tomorrowCode),
       }
     : {
         ...nationwide.tomorrow,
         condition: describeWeatherCode(nationwide.currentCode),
       };
+
+  const metrics = useMemo(() => {
+    if (selected) return pickWeatherMetrics(selected);
+    const wa = nationwide.wa;
+    if (!wa) return null;
+    return {
+      feelslike: wa.feelslike,
+      humidity: wa.humidity,
+      pressure: wa.pressure,
+      uv: wa.uv,
+      vis: wa.vis,
+      cloud: wa.cloud,
+      gust: wa.gust,
+      precip: wa.precip,
+      windDir: null,
+      icon: null,
+    };
+  }, [selected, nationwide]);
+
+  const isWeatherApi = selected?.weather?.provider === "weatherapi" ||
+    (!selected && districts.length > 0 && districts.every((d) => d?.weather?.provider === "weatherapi"));
 
   const hourly = useMemo(() => {
     const src = selected || districts[0];
@@ -286,11 +290,22 @@ export function SriLankaWeather() {
   }, [districts, selected]);
 
   const googleRain = selected ? pickGoogleRain(selected) : nationwide.googleRain;
+  const currentTempVal = typeof selected?.weather?.temperature === "number"
+    ? selected.weather.temperature
+    : typeof nationwide.currentTemp === "number"
+    ? nationwide.currentTemp
+    : null;
+  const currentWindVal = typeof selected?.weather?.windspeed === "number"
+    ? selected.weather.windspeed
+    : typeof nationwide.currentWind === "number"
+    ? nationwide.currentWind
+    : null;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)]">
-      <div className="relative h-[480px] overflow-hidden rounded-xl bg-slate-800">
-        <MapLockFrame className="h-full w-full min-h-0">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* Left Column - Map */}
+      <div className="relative h-[500px] lg:h-[600px] overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 shadow-xl ring-1 ring-white/10">
+        <MapLockFrame className="h-full w-full">
           <SriLankaMap
             onData={(list) => {
               setDistricts(list);
@@ -310,267 +325,281 @@ export function SriLankaWeather() {
         </MapLockFrame>
       </div>
 
-      <div className="card flex flex-col gap-4 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-950">
-              Weather details
-            </h3>
-            <p className="mt-1 text-xs text-slate-500">
-              {isLoggedIn && userDistrict
-                ? "Overview for your district and nationwide summary."
-                : "Nationwide conditions for Sri Lanka."}
-            </p>
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50 via-sky-50 to-sky-100 p-3 shadow-inner">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm">
-                <span className="text-lg">
-                  {isLoggedIn && userDistrict ? "📍" : "🌍"}
-                </span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
-                  {isLoggedIn && userDistrict ? "Your district" : "Nationwide"}
-                </span>
-                <span className="text-sm font-semibold text-slate-950">
-                  {isLoggedIn && userDistrict ? userDistrict : "Sri Lanka"}
-                </span>
-              </div>
-            </div>
-            <div className="text-right text-[11px] text-slate-600">
-              {day0 ? `Today · ${formatDayLabel(day0)}` : ""}
-              {day1 ? (
-                <>
-                  <br />
-                  {`Tomorrow · ${formatDayLabel(day1)}`}
-                </>
-              ) : null}
+      {/* Right Column - Weather Details */}
+      <div className="flex flex-col gap-5 overflow-y-auto max-h-[600px] pr-1">
+        {/* Main weather card */}
+        <div className="rounded-2xl bg-white/80 backdrop-blur-sm shadow-lg border border-white/30 p-5 transition-all">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold tracking-wide text-slate-800">Weather Details</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                {isWeatherApi
+                  ? "Current conditions and forecast from WeatherAPI."
+                  : isLoggedIn && userDistrict
+                  ? "Overview for your district and nationwide summary."
+                  : "Nationwide conditions for Sri Lanka."}
+              </p>
             </div>
           </div>
 
-          <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-slate-600">
-            <div className="rounded-lg border border-sky-100 bg-white/70 px-2 py-1">
-              <span className="font-semibold text-slate-700">Rain (last hr):</span>{" "}
-              {googleRain?.lastHour != null ? `${googleRain.lastHour.toFixed(1)} mm` : "—"}
+          {/* Current weather block */}
+          <div className="mt-4 overflow-hidden rounded-xl bg-gradient-to-br from-sky-50 via-white to-sky-50/80 p-4 shadow-inner">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                {metrics?.icon ? (
+                  <img src={metrics.icon} alt="" width={56} height={56} className="h-14 w-14 shrink-0 object-contain" />
+                ) : (
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/60 text-3xl shadow-sm">
+                    {codeToEmoji(liveCode, true)}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-700">
+                    {selected
+                      ? `${selected.name} · district`
+                      : isLoggedIn && userDistrict
+                      ? `${userDistrict} · your district`
+                      : "Sri Lanka · nationwide average"}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                    <span className="text-4xl font-bold tabular-nums text-slate-950">
+                      {currentTempVal != null ? `${currentTempVal.toFixed(1)}°C` : "—"}
+                    </span>
+                    {metrics?.feelslike != null && (
+                      <span className="text-sm text-slate-600">Feels {metrics.feelslike.toFixed(1)}°C</span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm leading-snug text-slate-800">
+                    {selected?.weather?.text || (liveCode != null ? describeWeatherCode(liveCode) : "—")}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-600">
+                    Wind {currentWindVal != null ? `${currentWindVal.toFixed(1)} km/h` : "—"}
+                    {metrics?.windDir ? ` · ${metrics.windDir}` : ""}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right text-[11px] leading-relaxed text-slate-600">
+                {day0 && <div>Today · {formatDayLabel(day0)}</div>}
+                {day1 && <div className="mt-0.5">Tomorrow · {formatDayLabel(day1)}</div>}
+              </div>
             </div>
-            <div className="rounded-lg border border-sky-100 bg-white/70 px-2 py-1">
-              <span className="font-semibold text-slate-700">Rain (24h):</span>{" "}
-              {googleRain?.last24h != null ? `${googleRain.last24h.toFixed(1)} mm` : "—"}
-            </div>
-            <div className="rounded-lg border border-sky-100 bg-white/70 px-2 py-1">
-              <span className="font-semibold text-slate-700">Prob:</span>{" "}
-              {googleRain?.prob != null ? `${googleRain.prob.toFixed(0)}%` : "—"}
-            </div>
-          </div>
-        </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-sky-200 bg-white p-3">
-            <div className="text-xs font-semibold text-slate-950">
-              Today
-              <span className="ml-2 text-[11px] font-normal text-slate-500">
-                {day0 ? formatDayLabel(day0) : ""}
-              </span>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <div className="text-[10px] uppercase text-slate-600">
-                  Temp (min/max)
-                </div>
-                <div className="text-sm font-semibold text-slate-950">
-                  {today.tMin != null && today.tMax != null
-                    ? `${today.tMin.toFixed(1)}° / ${today.tMax.toFixed(1)}°C`
-                    : "—"}
-                </div>
+            {/* Metrics grid */}
+            {metrics && (metrics.humidity != null || metrics.pressure != null || metrics.uv != null || metrics.vis != null || metrics.cloud != null || metrics.gust != null) && (
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {metrics.humidity != null && (
+                  <div className="rounded-xl border border-sky-100 bg-white/80 px-3 py-2 text-[11px] shadow-sm">
+                    <div className="font-semibold text-slate-600">Humidity</div>
+                    <div className="mt-0.5 text-base tabular-nums text-slate-950">{metrics.humidity.toFixed(0)}%</div>
+                  </div>
+                )}
+                {metrics.pressure != null && (
+                  <div className="rounded-xl border border-sky-100 bg-white/80 px-3 py-2 text-[11px] shadow-sm">
+                    <div className="font-semibold text-slate-600">Pressure</div>
+                    <div className="mt-0.5 text-base tabular-nums text-slate-950">{metrics.pressure.toFixed(0)} mb</div>
+                  </div>
+                )}
+                {metrics.uv != null && (
+                  <div className="rounded-xl border border-sky-100 bg-white/80 px-3 py-2 text-[11px] shadow-sm">
+                    <div className="font-semibold text-slate-600">UV index</div>
+                    <div className="mt-0.5 text-base tabular-nums text-slate-950">{metrics.uv.toFixed(1)}</div>
+                  </div>
+                )}
+                {metrics.vis != null && (
+                  <div className="rounded-xl border border-sky-100 bg-white/80 px-3 py-2 text-[11px] shadow-sm">
+                    <div className="font-semibold text-slate-600">Visibility</div>
+                    <div className="mt-0.5 text-base tabular-nums text-slate-950">{metrics.vis.toFixed(1)} km</div>
+                  </div>
+                )}
+                {metrics.cloud != null && (
+                  <div className="rounded-xl border border-sky-100 bg-white/80 px-3 py-2 text-[11px] shadow-sm">
+                    <div className="font-semibold text-slate-600">Cloud cover</div>
+                    <div className="mt-0.5 text-base tabular-nums text-slate-950">{metrics.cloud.toFixed(0)}%</div>
+                  </div>
+                )}
+                {metrics.gust != null && (
+                  <div className="rounded-xl border border-sky-100 bg-white/80 px-3 py-2 text-[11px] shadow-sm">
+                    <div className="font-semibold text-slate-600">Wind gust</div>
+                    <div className="mt-0.5 text-base tabular-nums text-slate-950">{metrics.gust.toFixed(0)} km/h</div>
+                  </div>
+                )}
               </div>
-              <div>
-                <div className="text-[10px] uppercase text-slate-600">
-                  Wind max
-                </div>
-                <div className="text-sm font-semibold text-slate-950">
-                  {today.windMax != null ? `${today.windMax.toFixed(1)} km/h` : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase text-slate-600">
-                  Rainfall
-                </div>
-                <div className="text-sm font-semibold text-slate-950">
-                  {today.rain != null ? `${today.rain.toFixed(1)} mm` : "—"}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Prob: {today.rainProb != null ? `${today.rainProb.toFixed(0)}%` : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase text-slate-600">
-                  Condition
-                </div>
-                <div className="text-sm font-semibold text-slate-950">
-                  {today.condition || "—"}
-                </div>
-              </div>
-            </div>
-          </div>
+            )}
 
-          <div className="rounded-xl border border-sky-200 bg-white p-3">
-            <div className="text-xs font-semibold text-slate-950">
-              Tomorrow
-              <span className="ml-2 text-[11px] font-normal text-slate-500">
-                {day1 ? formatDayLabel(day1) : ""}
-              </span>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <div className="text-[10px] uppercase text-slate-600">
-                  Temp (min/max)
+            {/* Rain info */}
+            {isWeatherApi ? (
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+                  <div className="font-semibold text-emerald-900">Precip (recent)</div>
+                  <div className="mt-0.5 text-base tabular-nums">{metrics?.precip != null ? `${metrics.precip.toFixed(1)} mm` : "—"}</div>
                 </div>
-                <div className="text-sm font-semibold text-slate-950">
-                  {tomorrow.tMin != null && tomorrow.tMax != null
-                    ? `${tomorrow.tMin.toFixed(1)}° / ${tomorrow.tMax.toFixed(1)}°C`
-                    : "—"}
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+                  <div className="font-semibold text-emerald-900">Today total (forecast)</div>
+                  <div className="mt-0.5 text-base tabular-nums">{today.rain != null ? `${today.rain.toFixed(1)} mm` : "—"}</div>
                 </div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase text-slate-600">
-                  Wind max
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+                  <div className="font-semibold text-emerald-900">Rain chance (today)</div>
+                  <div className="mt-0.5 text-base tabular-nums">{today.rainProb != null ? `${today.rainProb.toFixed(0)}%` : "—"}</div>
                 </div>
-                <div className="text-sm font-semibold text-slate-950">
-                  {tomorrow.windMax != null ? `${tomorrow.windMax.toFixed(1)} km/h` : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase text-slate-600">
-                  Rainfall
-                </div>
-                <div className="text-sm font-semibold text-slate-950">
-                  {tomorrow.rain != null ? `${tomorrow.rain.toFixed(1)} mm` : "—"}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Prob: {tomorrow.rainProb != null ? `${tomorrow.rainProb.toFixed(0)}%` : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase text-slate-600">
-                  Condition
-                </div>
-                <div className="text-sm font-semibold text-slate-950">
-                  {tomorrow.condition || "—"}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Hour-by-hour strip */}
-        <div className="mt-1">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-950">
-              Next hours
-            </span>
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {hourly.length === 0 ? (
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Loader size="sm" />
-                <span>Loading hourly forecast…</span>
               </div>
             ) : (
-              hourly.map((h, idx) => (
-                <div
-                  key={`${h.label}-${idx}`}
-                  className="flex min-w-[72px] flex-col items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-center text-[11px] text-slate-700 shadow-sm"
-                >
-                  <div className="text-xs font-semibold text-slate-900">
-                    {h.label}
-                  </div>
-                  <div className="text-lg">{codeToEmoji(h.code, h.isDay)}</div>
-                  <div className="text-[11px] text-slate-600">
-                    {h.temp != null ? `${h.temp.toFixed(0)}°C` : "—"}
-                  </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-sky-100 bg-white/70 px-3 py-2">
+                  <div className="font-semibold text-slate-700">Rain (last hr)</div>
+                  <div className="mt-0.5 text-base tabular-nums">{googleRain?.lastHour != null ? `${googleRain.lastHour.toFixed(1)} mm` : "—"}</div>
                 </div>
-              ))
+                <div className="rounded-xl border border-sky-100 bg-white/70 px-3 py-2">
+                  <div className="font-semibold text-slate-700">Rain (24h)</div>
+                  <div className="mt-0.5 text-base tabular-nums">{googleRain?.last24h != null ? `${googleRain.last24h.toFixed(1)} mm` : "—"}</div>
+                </div>
+                <div className="rounded-xl border border-sky-100 bg-white/70 px-3 py-2">
+                  <div className="font-semibold text-slate-700">Rain probability</div>
+                  <div className="mt-0.5 text-base tabular-nums">{googleRain?.prob != null ? `${googleRain.prob.toFixed(0)}%` : "—"}</div>
+                </div>
+              </div>
             )}
           </div>
-        </div>
 
-        <div className="flex-1 overflow-hidden">
-          <div className="mb-2 text-xs font-semibold text-slate-950">
-            District list
+          {/* Today & Tomorrow cards */}
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-sky-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-950">Today</div>
+                <div className="text-2xl">{codeToEmoji(todayCode, true)}</div>
+              </div>
+              <div className="mt-2 text-[11px] text-slate-500">{day0 ? formatDayLabel(day0) : ""}</div>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <div className="text-[10px] uppercase text-slate-600">Temp (min/max)</div>
+                  <div className="text-sm font-semibold text-slate-950">
+                    {today.tMin != null && today.tMax != null ? `${today.tMin.toFixed(1)}° / ${today.tMax.toFixed(1)}°C` : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-600">Wind max</div>
+                  <div className="text-sm font-semibold text-slate-950">{today.windMax != null ? `${today.windMax.toFixed(1)} km/h` : "—"}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-600">Rainfall</div>
+                  <div className="text-sm font-semibold text-slate-950">{today.rain != null ? `${today.rain.toFixed(1)} mm` : "—"}</div>
+                  <div className="text-[11px] text-slate-500">Prob: {today.rainProb != null ? `${today.rainProb.toFixed(0)}%` : "—"}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-600">Condition</div>
+                  <div className="text-sm font-semibold text-slate-950">{today.condition || "—"}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-sky-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-950">Tomorrow</div>
+                <div className="text-2xl">{codeToEmoji(tomorrowCode, true)}</div>
+              </div>
+              <div className="mt-2 text-[11px] text-slate-500">{day1 ? formatDayLabel(day1) : ""}</div>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <div className="text-[10px] uppercase text-slate-600">Temp (min/max)</div>
+                  <div className="text-sm font-semibold text-slate-950">
+                    {tomorrow.tMin != null && tomorrow.tMax != null ? `${tomorrow.tMin.toFixed(1)}° / ${tomorrow.tMax.toFixed(1)}°C` : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-600">Wind max</div>
+                  <div className="text-sm font-semibold text-slate-950">{tomorrow.windMax != null ? `${tomorrow.windMax.toFixed(1)} km/h` : "—"}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-600">Rainfall</div>
+                  <div className="text-sm font-semibold text-slate-950">{tomorrow.rain != null ? `${tomorrow.rain.toFixed(1)} mm` : "—"}</div>
+                  <div className="text-[11px] text-slate-500">Prob: {tomorrow.rainProb != null ? `${tomorrow.rainProb.toFixed(0)}%` : "—"}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-slate-600">Condition</div>
+                  <div className="text-sm font-semibold text-slate-950">{tomorrow.condition || "—"}</div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="max-h-[240px] overflow-auto rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 bg-sky-50 text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 font-medium">District</th>
-                  <th className="px-3 py-2 font-medium">Today</th>
-                  <th className="px-3 py-2 font-medium">Tomorrow</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700/50">
-                {districts.length === 0 ? (
+
+          {/* Hourly forecast */}
+          <div className="mt-5">
+            <div className="mb-2 text-xs font-semibold text-slate-950">Next Hours</div>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {hourly.length === 0 ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Loader size="sm" />
+                  <span>Loading hourly forecast…</span>
+                </div>
+              ) : (
+                hourly.map((h, idx) => (
+                  <div key={idx} className="flex min-w-[80px] flex-col items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-[11px] shadow-sm">
+                    <div className="text-xs font-semibold text-slate-900">{h.label}</div>
+                    <div className="text-xl">{codeToEmoji(h.code, h.isDay)}</div>
+                    <div className="text-[11px] font-medium text-slate-600">{h.temp != null ? `${h.temp.toFixed(0)}°C` : "—"}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* District table */}
+          <div className="mt-5 overflow-hidden">
+            <div className="mb-2 text-xs font-semibold text-slate-950">District Forecasts</div>
+            <div className="max-h-[280px] overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 bg-sky-50 text-slate-600">
                   <tr>
-                    <td className="px-3 py-4 text-slate-500" colSpan={3}>
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader size="sm" />
-                        <span>Loading…</span>
-                      </div>
-                    </td>
+                    <th className="px-4 py-2 font-semibold">District</th>
+                    <th className="px-4 py-2 font-semibold">Today</th>
+                    <th className="px-4 py-2 font-semibold">Tomorrow</th>
                   </tr>
-                ) : (
-                  (showAllDistricts
-                    ? districts
-                    : districts.filter((d) => {
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {districts.length === 0 ? (
+                    <tr>
+                      <td className="px-4 py-6 text-center text-slate-500" colSpan={3}>
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader size="sm" />
+                          <span>Loading districts…</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    (showAllDistricts ? districts : districts.filter((d) => {
                         if (!primaryName) return false;
+                        return d.name?.trim().toLowerCase() === primaryName.trim().toLowerCase();
+                      })).map((d) => {
+                        const t0Min = pickDaily(d.daily, 0, "temperature_2m_min");
+                        const t0Max = pickDaily(d.daily, 0, "temperature_2m_max");
+                        const r0 = pickDaily(d.daily, 0, "precipitation_sum");
+                        const t1Min = pickDaily(d.daily, 1, "temperature_2m_min");
+                        const t1Max = pickDaily(d.daily, 1, "temperature_2m_max");
+                        const r1 = pickDaily(d.daily, 1, "precipitation_sum");
                         return (
-                          d.name?.trim().toLowerCase() ===
-                          primaryName.trim().toLowerCase()
+                          <tr key={d.name} className="cursor-pointer transition-colors hover:bg-sky-50/50" onClick={() => setSelectedName(d.name)}>
+                            <td className="px-4 py-2 font-medium text-slate-800">{d.name}</td>
+                            <td className="px-4 py-2">
+                              <div className="text-slate-950 text-xs sm:text-sm">
+                                {t0Min != null && t0Max != null ? `${t0Min.toFixed(0)}°/${t0Max.toFixed(0)}°C` : "—"}
+                              </div>
+                              <div className="text-[11px] text-slate-500">Rain: {r0 != null ? `${r0.toFixed(1)}mm` : "—"}</div>
+                            </td>
+                            <td className="px-4 py-2">
+                              <div className="text-slate-950 text-xs sm:text-sm">
+                                {t1Min != null && t1Max != null ? `${t1Min.toFixed(0)}°/${t1Max.toFixed(0)}°C` : "—"}
+                              </div>
+                              <div className="text-[11px] text-slate-500">Rain: {r1 != null ? `${r1.toFixed(1)}mm` : "—"}</div>
+                            </td>
+                          </tr>
                         );
                       })
-                  ).map((d) => {
-                    const t0Min = pickDaily(d.daily, 0, "temperature_2m_min");
-                    const t0Max = pickDaily(d.daily, 0, "temperature_2m_max");
-                    const r0 = pickDaily(d.daily, 0, "precipitation_sum");
-                    const t1Min = pickDaily(d.daily, 1, "temperature_2m_min");
-                    const t1Max = pickDaily(d.daily, 1, "temperature_2m_max");
-                    const r1 = pickDaily(d.daily, 1, "precipitation_sum");
-                    return (
-                      <tr key={d.name}>
-                        <td className="px-3 py-2">{d.name}</td>
-                        <td className="px-3 py-2">
-                          <div className="text-slate-950 text-xs sm:text-sm">
-                            {t0Min != null && t0Max != null
-                              ? `${t0Min.toFixed(0)}°/${t0Max.toFixed(0)}°C`
-                              : "—"}
-                          </div>
-                          <div className="text-[11px] text-slate-600">
-                            Rain: {r0 != null ? `${r0.toFixed(1)}mm` : "—"}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="text-slate-950 text-xs sm:text-sm">
-                            {t1Min != null && t1Max != null
-                              ? `${t1Min.toFixed(0)}°/${t1Max.toFixed(0)}°C`
-                              : "—"}
-                          </div>
-                          <div className="text-[11px] text-slate-600">
-                            Rain: {r1 != null ? `${r1.toFixed(1)}mm` : "—"}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
-

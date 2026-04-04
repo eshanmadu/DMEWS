@@ -1,6 +1,7 @@
 // Weather data for all Sri Lanka districts.
 // This module keeps a short in-memory cache to avoid hammering the external APIs.
 
+const WEATHERAPI_KEY = process.env.WEATHERAPI_KEY || "";
 const ACCUWEATHER_API_KEY = process.env.ACCUWEATHER_API_KEY || "";
 const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY || "";
 const GOOGLE_WEATHER_API_KEY = process.env.GOOGLE_WEATHER_API_KEY || "";
@@ -45,6 +46,27 @@ function googleConditionToOpenMeteoCode(type) {
   if (t.includes("THUNDER")) return 95;
   if (t.includes("SNOW")) return 73;
   if (t.includes("RAIN")) return 63;
+  return 2;
+}
+
+/** Map WeatherAPI condition codes to WMO-style codes used by the map UI. */
+function weatherApiConditionCodeToOpenMeteo(code) {
+  const c = Number(code);
+  if (!Number.isFinite(c)) return null;
+  if (c === 1000) return 0;
+  if (c === 1003) return 2;
+  if (c === 1006 || c === 1009) return 3;
+  if (c === 1030 || c === 1135 || c === 1147) return 45;
+  if (c >= 1114 && c <= 1117) return 75;
+  if (c >= 1063 && c <= 1087) return c === 1087 ? 95 : 61;
+  if (c >= 1150 && c <= 1153) return 53;
+  if (c >= 1168 && c <= 1171) return 67;
+  if (c >= 1180 && c <= 1192) return c >= 1192 ? 65 : 63;
+  if (c >= 1195 && c <= 1201) return 66;
+  if (c >= 1204 && c <= 1207) return 63;
+  if (c >= 1210 && c <= 1237) return 73;
+  if (c >= 1240 && c <= 1282) return 95;
+  if (c >= 1273 && c <= 1282) return 95;
   return 2;
 }
 
@@ -132,6 +154,132 @@ async function getGoogleRainForDistrict(d) {
     last24hMm: typeof last24hMm === "number" ? last24hMm : null,
     probPct: typeof probPct === "number" ? probPct : null,
     source: "google_weather_currentConditions",
+  };
+}
+
+function weatherApiIconUrl(icon) {
+  if (!icon) return null;
+  const s = String(icon);
+  if (s.startsWith("//")) return `https:${s}`;
+  if (s.startsWith("http")) return s;
+  return null;
+}
+
+/**
+ * Single-call current + 3-day forecast from WeatherAPI (lat/lon query).
+ * https://www.weatherapi.com/docs/
+ */
+async function getWeatherApiForecastForDistrict(d) {
+  if (!WEATHERAPI_KEY) throw new Error("WeatherAPI key missing");
+  const q = `${d.lat},${d.lon}`;
+  const url = `https://api.weatherapi.com/v1/forecast.json?key=${encodeURIComponent(
+    WEATHERAPI_KEY
+  )}&q=${encodeURIComponent(q)}&days=3&aqi=no&alerts=no`;
+
+  const data = await fetchJsonWithTimeout(url, 9000);
+  if (data?.error) {
+    throw new Error(data.error.message || "WeatherAPI error");
+  }
+
+  const current = data?.current || {};
+  const curCond = current?.condition || {};
+  const forecastDays = Array.isArray(data?.forecast?.forecastday)
+    ? data.forecast.forecastday
+    : [];
+
+  const fd0 = forecastDays[0]?.day || {};
+  const fd1 = forecastDays[1]?.day || {};
+  const date0 = forecastDays[0]?.date || null;
+  const date1 = forecastDays[1]?.date || null;
+
+  const temp = typeof current.temp_c === "number" ? current.temp_c : null;
+  const windKph = typeof current.wind_kph === "number" ? current.wind_kph : null;
+  const windMs = typeof windKph === "number" ? windKph / 3.6 : null;
+  const weatherCode = weatherApiConditionCodeToOpenMeteo(curCond.code);
+  const isDay = Boolean(current.is_day);
+
+  const maxArr = [
+    typeof fd0.maxtemp_c === "number" ? fd0.maxtemp_c : null,
+    typeof fd1.maxtemp_c === "number" ? fd1.maxtemp_c : null,
+  ];
+  const minArr = [
+    typeof fd0.mintemp_c === "number" ? fd0.mintemp_c : null,
+    typeof fd1.mintemp_c === "number" ? fd1.mintemp_c : null,
+  ];
+  const rainArr = [
+    typeof fd0.totalprecip_mm === "number" ? fd0.totalprecip_mm : null,
+    typeof fd1.totalprecip_mm === "number" ? fd1.totalprecip_mm : null,
+  ];
+  const probArr = [
+    typeof fd0.daily_chance_of_rain === "number"
+      ? fd0.daily_chance_of_rain
+      : null,
+    typeof fd1.daily_chance_of_rain === "number"
+      ? fd1.daily_chance_of_rain
+      : null,
+  ];
+  const windMaxArr = [
+    typeof fd0.maxwind_kph === "number" ? fd0.maxwind_kph : null,
+    typeof fd1.maxwind_kph === "number" ? fd1.maxwind_kph : null,
+  ];
+  const codeArr = [
+    weatherApiConditionCodeToOpenMeteo(fd0.condition?.code),
+    weatherApiConditionCodeToOpenMeteo(fd1.condition?.code),
+  ];
+
+  const now = Math.floor(Date.now() / 1000);
+  const allHours = [];
+  for (const fd of forecastDays) {
+    const hrs = Array.isArray(fd?.hour) ? fd.hour : [];
+    for (const h of hrs) {
+      const te = Number(h?.time_epoch);
+      if (!te) continue;
+      if (te >= now - 3600) allHours.push(h);
+    }
+  }
+  allHours.sort((a, b) => (a.time_epoch || 0) - (b.time_epoch || 0));
+  const hourlyArr = allHours.slice(0, 12).map((h) => {
+    const t = h?.temp_c;
+    const c = weatherApiConditionCodeToOpenMeteo(h?.condition?.code);
+    return {
+      time: Number(h.time_epoch) || 0,
+      temp: typeof t === "number" ? t : null,
+      code: typeof c === "number" ? c : null,
+    };
+  });
+
+  const extra = {
+    feelslike_c:
+      typeof current.feelslike_c === "number" ? current.feelslike_c : null,
+    humidity: typeof current.humidity === "number" ? current.humidity : null,
+    pressure_mb:
+      typeof current.pressure_mb === "number" ? current.pressure_mb : null,
+    uv: typeof current.uv === "number" ? current.uv : null,
+    vis_km: typeof current.vis_km === "number" ? current.vis_km : null,
+    cloud: typeof current.cloud === "number" ? current.cloud : null,
+    precip_mm: typeof current.precip_mm === "number" ? current.precip_mm : null,
+    gust_kph: typeof current.gust_kph === "number" ? current.gust_kph : null,
+    wind_degree:
+      typeof current.wind_degree === "number" ? current.wind_degree : null,
+    wind_dir: current.wind_dir != null ? String(current.wind_dir) : null,
+    condition_icon: weatherApiIconUrl(curCond.icon),
+  };
+
+  return {
+    temp,
+    windMs,
+    weatherCode,
+    isDay,
+    maxArr,
+    minArr,
+    rainArr,
+    probArr,
+    windMaxArr,
+    codeArr,
+    hourlyArr,
+    conditionText: curCond.text ? String(curCond.text) : null,
+    extra,
+    dailyDates: [date0, date1],
   };
 }
 
@@ -359,9 +507,9 @@ async function getAccuRainForecastForDistrict(d) {
 let weatherCache = { ts: 0, data: null };
 
 async function getDistrictWeather() {
-  if (!ACCUWEATHER_API_KEY && !OPENWEATHER_API_KEY) {
+  if (!WEATHERAPI_KEY && !ACCUWEATHER_API_KEY && !OPENWEATHER_API_KEY) {
     const err = new Error(
-      "Weather API key is not configured. Set ACCUWEATHER_API_KEY (preferred) or OPENWEATHER_API_KEY."
+      "Weather API key is not configured. Set WEATHERAPI_KEY (preferred), ACCUWEATHER_API_KEY, or OPENWEATHER_API_KEY."
     );
     err.status = 500;
     throw err;
@@ -372,7 +520,7 @@ async function getDistrictWeather() {
     return weatherCache.data;
   }
 
-  const concurrency = ACCUWEATHER_API_KEY ? 2 : 4;
+  const concurrency = WEATHERAPI_KEY || ACCUWEATHER_API_KEY ? 2 : 4;
   let cursor = 0;
   const out = new Array(DISTRICTS_WEATHER.length);
 
@@ -394,13 +542,42 @@ async function getDistrictWeather() {
         let codeArr = [null, null];
         let hourlyArr = [];
         let googleRain = null;
+        let waExtra = null;
+        let dailyTimeArr = [null, null];
 
         let providerName = "openweather";
         let providerText = null;
         let rainProvider = providerName;
         let needOpenWeather = true;
 
-        if (ACCUWEATHER_API_KEY) {
+        if (WEATHERAPI_KEY) {
+          try {
+            const wa = await getWeatherApiForecastForDistrict(d);
+            temp = wa.temp;
+            windMs = wa.windMs;
+            isDay = wa.isDay ? 1 : 0;
+            maxArr = wa.maxArr;
+            minArr = wa.minArr;
+            rainArr = wa.rainArr;
+            probArr = wa.probArr;
+            windMaxArr = wa.windMaxArr;
+            codeArr = wa.codeArr;
+            hourlyArr = wa.hourlyArr;
+            weatherCode = wa.weatherCode;
+            providerName = "weatherapi";
+            providerText = wa.conditionText;
+            rainProvider = "weatherapi";
+            waExtra = wa.extra;
+            if (Array.isArray(wa.dailyDates) && wa.dailyDates.length >= 2) {
+              dailyTimeArr = wa.dailyDates;
+            }
+            needOpenWeather = false;
+          } catch (_waErr) {
+            needOpenWeather = true;
+          }
+        }
+
+        if (needOpenWeather && ACCUWEATHER_API_KEY) {
           try {
             const accu = await getAccuWeatherForDistrict(d);
             temp = accu.temp;
@@ -417,6 +594,7 @@ async function getDistrictWeather() {
             providerName = "accuweather";
             providerText = accu.weatherText;
             rainProvider = "accuweather";
+            waExtra = null;
             needOpenWeather = false;
           } catch (_accuErr) {
             // Fallback to OpenWeather per district when AccuWeather fails or rate-limits.
@@ -624,9 +802,11 @@ async function getDistrictWeather() {
           }
         }
 
-        // Google Weather rainfall (current conditions): last hour + last 24h
+        // Google Weather rainfall (optional); skip when using WeatherAPI to avoid mixed sources
         try {
-          googleRain = await getGoogleRainForDistrict(d);
+          if (GOOGLE_WEATHER_API_KEY && providerName !== "weatherapi") {
+            googleRain = await getGoogleRainForDistrict(d);
+          }
         } catch {
           googleRain = null;
         }
@@ -685,6 +865,7 @@ async function getDistrictWeather() {
             is_day: isDay ? 1 : 0,
             provider: providerName,
             text: providerText,
+            ...(waExtra && typeof waExtra === "object" ? waExtra : {}),
             google_rain_last_hour_mm: googleRain?.lastHourMm ?? null,
             google_rain_last_24h_mm: googleRain?.last24hMm ?? null,
             google_rain_probability_percent: googleRain?.probPct ?? null,
@@ -700,6 +881,7 @@ async function getDistrictWeather() {
             precipitation_probability_max: probArr,
             windspeed_10m_max: windMaxArr,
             weathercode: codeArr,
+            time: dailyTimeArr,
           },
           hourly: hourlyArr,
         };
