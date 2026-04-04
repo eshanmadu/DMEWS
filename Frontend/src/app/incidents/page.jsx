@@ -579,7 +579,7 @@ export default function IncidentsPage() {
               <div>
                 <h3 className="text-lg font-bold">Report an incident</h3>
                 <p className="mt-1 text-xs text-sky-100">
-                  Logged-in users can submit incidents. Media uploads use Cloudinary.
+                  Provide accurate details to help responders. For emergencies, call <strong>117</strong>.
                 </p>
               </div>
               <button

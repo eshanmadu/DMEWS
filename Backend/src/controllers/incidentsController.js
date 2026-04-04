@@ -76,7 +76,7 @@ async function createUserIncident(req, res) {
   try {
     if (req.isDevAdmin || req.userId === "dev-admin-session") {
       return res.status(403).json({
-        message: "Dev admin shortcut cannot create incidents. Use a normal account.",
+        message: "Admins cannot create incidents.",
       });
     }
 
@@ -181,7 +181,7 @@ async function updateUserIncident(req, res) {
     // Dev admin shortcut check
     if (req.isDevAdmin || req.userId === "dev-admin-session") {
       return res.status(403).json({
-        message: "Dev admin shortcut cannot update incidents.",
+        message: "Admins cannot update incidents.",
       });
     }
 

@@ -25,10 +25,16 @@ async function signup(req, res) {
   try {
     const { name, district, email, mobile, password, avatar } = req.body || {};
 
-    if (!district || !email || !password) {
+    if (!district || !email || !password || !mobile) {
       return res
         .status(400)
-        .json({ message: "District, email and password are required." });
+        .json({ message: "District, email, password and mobile are required." });
+    }
+
+    if (!/^\d{10}$/.test(String(mobile).trim())) {
+      return res
+        .status(400)
+        .json({ message: "Mobile number must be exactly 10 digits." });
     }
 
     await connectDb();
@@ -213,9 +219,17 @@ async function updateProfile(req, res) {
       user.email = trimmed;
     }
 
+    if (mobile !== undefined) {
+      const trimmedMobile = String(mobile).trim();
+      if (trimmedMobile && !/^\d{10}$/.test(trimmedMobile)) {
+        return res
+          .status(400)
+          .json({ message: "Mobile number must be exactly 10 digits." });
+      }
+      user.mobile = trimmedMobile;
+    }
+
     if (name !== undefined) user.name = String(name).trim();
-    if (mobile !== undefined) user.mobile = String(mobile).trim();
-    if (district !== undefined) user.district = String(district).trim();
     if (avatar !== undefined) user.avatar = String(avatar).trim();
 
     await user.save();
