@@ -25,17 +25,19 @@ function ensureConfigured() {
  * Upload a buffer to Cloudinary.
  * @param {Buffer} buffer
  * @param {string} mimetype
+ * @param {{ folder?: string }} [options]
  * @returns {Promise<{url:string, publicId:string, resourceType:string, format:string, bytes:number}>}
  */
-function uploadBuffer(buffer, mimetype) {
+function uploadBuffer(buffer, mimetype, options = {}) {
   ensureConfigured();
   const isVideo = String(mimetype || "").toLowerCase().startsWith("video/");
   const resourceType = isVideo ? "video" : "image";
+  const folder = options.folder || "dmews/incidents";
 
   return new Promise((resolve, reject) => {
     const upload = cloudinary.uploader.upload_stream(
       {
-        folder: "dmews/incidents",
+        folder,
         resource_type: resourceType,
       },
       (err, result) => {
@@ -53,8 +55,23 @@ function uploadBuffer(buffer, mimetype) {
   });
 }
 
+/**
+ * Best-effort delete by Cloudinary public_id (image).
+ * @param {string} publicId
+ */
+async function destroyPublicId(publicId) {
+  if (!publicId || !isCloudinaryConfigured()) return;
+  ensureConfigured();
+  try {
+    await cloudinary.uploader.destroy(String(publicId), { resource_type: "image" });
+  } catch (e) {
+    console.warn("Cloudinary destroy failed", publicId, e?.message || e);
+  }
+}
+
 module.exports = {
   isCloudinaryConfigured,
   uploadBuffer,
+  destroyPublicId,
 };
 

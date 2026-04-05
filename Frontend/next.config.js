@@ -13,6 +13,11 @@ const nextConfig = {
         hostname: "cdn.weatherapi.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+        pathname: "/**",
+      },
     ],
   },
 };

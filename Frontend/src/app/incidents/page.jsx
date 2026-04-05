@@ -9,6 +9,7 @@ import {
   ImageIcon,
   Video,
   MapPin,
+  RefreshCw,
   Trash2,
   X,
   Pencil,
@@ -18,39 +19,6 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import Loader from "@/components/Loader";
-import Background from "@/img/Background.png";
-
-// Helper: format date only (for incident date)
-function formatDateOnly(isoString) {
-  if (!isoString) return "Unknown date";
-  try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return "Invalid date";
-    return d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return "Invalid date";
-  }
-}
-
-// Helper: format time only (for submission time)
-function formatTimeOnly(isoString) {
-  if (!isoString) return "Unknown time";
-  try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return "Invalid time";
-    return d.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return "Invalid time";
-  }
-}
 
 function StatusBadge({ status }) {
   const c =
@@ -67,12 +35,42 @@ function StatusBadge({ status }) {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 const DISTRICTS = [
-  "Colombo", "Gampaha", "Kalutara", "Kandy", "Matale", "Nuwara Eliya",
-  "Galle", "Matara", "Hambantota", "Jaffna", "Kilinochchi", "Mannar",
-  "Vavuniya", "Mullaitivu", "Batticaloa", "Ampara", "Trincomalee",
-  "Kurunegala", "Puttalam", "Anuradhapura", "Polonnaruwa", "Badulla",
-  "Monaragala", "Ratnapura", "Kegalle",
+  "Colombo",
+  "Gampaha",
+  "Kalutara",
+  "Kandy",
+  "Matale",
+  "Nuwara Eliya",
+  "Galle",
+  "Matara",
+  "Hambantota",
+  "Jaffna",
+  "Kilinochchi",
+  "Mannar",
+  "Vavuniya",
+  "Mullaitivu",
+  "Batticaloa",
+  "Ampara",
+  "Trincomalee",
+  "Kurunegala",
+  "Puttalam",
+  "Anuradhapura",
+  "Polonnaruwa",
+  "Badulla",
+  "Monaragala",
+  "Ratnapura",
+  "Kegalle",
 ];
+
+function rel(iso) {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return formatDistanceToNow(d, { addSuffix: true });
+  } catch {
+    return "—";
+  }
+}
 
 function inferDistrict(incident) {
   if (incident?.district) return incident.district;
@@ -118,7 +116,11 @@ export default function IncidentsPage() {
   const [editFilePreview, setEditFilePreview] = useState(null);
   const [updating, setUpdating] = useState(false);
 
-  const token = typeof window !== "undefined" ? window.localStorage.getItem("dmews_token") : null;
+  const token =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem("dmews_token")
+      : null;
+
   const { minDate, maxDate } = useMemo(() => getIncidentDateBounds(), []);
 
   useEffect(() => {
@@ -146,7 +148,9 @@ export default function IncidentsPage() {
     setLoading(true);
     setError("");
     try {
-      const qs = districtFilter ? `?district=${encodeURIComponent(districtFilter)}` : "";
+      const qs = districtFilter
+        ? `?district=${encodeURIComponent(districtFilter)}`
+        : "";
       const res = await fetch(`${API_BASE}/incidents${qs}`, { cache: "no-store" });
       const data = await res.json().catch(() => []);
       if (!res.ok) {
@@ -168,10 +172,12 @@ export default function IncidentsPage() {
   }, [load]);
 
   const sortedIncidents = useMemo(() => {
-    return rows.slice().sort((a, b) =>
-      new Date(b?.createdAt || b?.reportedAt || 0).getTime() -
-      new Date(a?.createdAt || a?.reportedAt || 0).getTime()
+    const all = rows.slice().sort(
+      (a, b) =>
+        new Date(b?.reportedAt || b?.updatedAt || 0).getTime() -
+        new Date(a?.reportedAt || a?.updatedAt || 0).getTime()
     );
+    return all;
   }, [rows]);
 
   const filePreviewUrl = useMemo(() => {
@@ -350,7 +356,7 @@ export default function IncidentsPage() {
                 Incident Reports
               </h1>
               <p className="mt-2 max-w-2xl text-sky-100">
-                Capture incidents. Share updates. Track what’s happening near you.
+              Capture incidents. Share updates. Track what’s happening near you.
               </p>
             </div>
           </div>
@@ -400,6 +406,7 @@ export default function IncidentsPage() {
         </div>
       ) : (
         <div className="space-y-12">
+          {/* Incidents Feed */}
           {rows.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
               <AlertTriangle className="mb-4 h-12 w-12 text-slate-300" />
@@ -412,24 +419,24 @@ export default function IncidentsPage() {
                 const isVideo =
                   media0?.resourceType === "video" ||
                   String(media0?.url || "").match(/\.(mp4|webm|mov)(\?|$)/i);
-                const reporterName = incident?.reporter?.name || incident?.reporter?.email || "Anonymous";
+                const reporterName =
+                  incident?.reporter?.name ||
+                  incident?.reporter?.email ||
+                  "Anonymous";
                 const canDelete =
                   incident?.source === "user" &&
                   Boolean(currentUser?.id) &&
                   String(incident?.reporter?.id || "") === String(currentUser?.id);
+                
                 const districtName = incident.district || inferDistrict(incident);
-
-                // Incident date (when event happened)
-                const incidentDateOnly = formatDateOnly(incident.reportedAt);
-                // Submission time (when report was created)
-                const submissionTimeOnly = formatTimeOnly(incident.createdAt || incident.updatedAt);
 
                 return (
                   <div
                     key={incident.id}
                     className="group flex h-full flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-slate-300 hover:shadow-md overflow-hidden"
                   >
-                    {/* Media + district pill */}
+                    {/* ===== DISTRICT HEADER (TOP OF CARD) ===== */}
+                    {/* If media exists, we overlay a glass pill on the media */}
                     {media0?.url ? (
                       <div className="relative overflow-hidden">
                         {isVideo ? (
@@ -446,6 +453,7 @@ export default function IncidentsPage() {
                             />
                           </div>
                         )}
+                        {/* Creative glassmorphic pill overlaying the top of media */}
                         <div className="absolute left-3 top-3 z-10 rounded-full bg-white/80 backdrop-blur-sm px-3 py-1 shadow-md border border-white/30">
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
                             <MapPin className="h-3 w-3 text-rose-500" />
@@ -454,26 +462,20 @@ export default function IncidentsPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="relative overflow-hidden">
-                        <div className="relative aspect-[16/9] w-full bg-slate-100">
-                          <Image
-                            src={Background}
-                            alt="Default incident thumbnail"
-                            fill
-                            className="object-cover transition-transform group-hover:scale-105"
-                            sizes="(max-width: 768px) 100vw, 50vw"
-                            unoptimized
-                          />
-                        </div>
-                        <div className="absolute left-3 top-3 z-10 rounded-full bg-white/80 backdrop-blur-sm px-3 py-1 shadow-md border border-white/30">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
-                            <MapPin className="h-3 w-3 text-rose-500" />
-                            <span>{districtName}</span>
+                      /* No media: clean header bar at the top */
+                      <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="rounded-full bg-sky-100 p-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-sky-600" />
                           </div>
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {districtName} District
+                          </span>
                         </div>
                       </div>
                     )}
 
+                    {/* Rest of card content (status, title, description, actions) */}
                     <div className="flex flex-1 flex-col p-5">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2">
@@ -482,6 +484,9 @@ export default function IncidentsPage() {
                             {incident.source === "user" ? "Community" : incident.type}
                           </span>
                         </div>
+                        <span className="text-xs text-slate-400">
+                          {rel(incident.reportedAt || incident.updatedAt)}
+                        </span>
                       </div>
 
                       <h3 className="mt-3 text-lg font-semibold text-slate-800">
@@ -489,48 +494,47 @@ export default function IncidentsPage() {
                       </h3>
                       {incident.source === "user" && (
                         <p className="mt-1 text-xs text-slate-500">
-                          Reported by <span className="font-semibold text-slate-700">{reporterName}</span>
+                          Reported by{" "}
+                          <span className="font-semibold text-slate-700">
+                            {reporterName}
+                          </span>
                         </p>
                       )}
                       <p className="mt-1 text-sm text-slate-600 line-clamp-3">
                         {incident.description}
                       </p>
-
-                      {/* Details row: Area, Affected, and INCIDENT DATE */}
-                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                        <span><strong>Area:</strong> {incident.area}</span>
+                      <p className="mt-3 text-xs text-slate-500">
+                        <strong>Area:</strong> {incident.area}
                         {incident.affectedPeople != null && (
-                          <span><strong>Affected:</strong> {incident.affectedPeople}</span>
+                          <> · Affected: {incident.affectedPeople}</>
                         )}
-                        <span><strong>Incident date:</strong> {incidentDateOnly}</span>
-                      </div>
+                      </p>
 
-                      {/* Bottom row: Edit/Delete buttons + SUBMISSION TIME */}
-                      <div className="mt-4 flex items-center justify-end gap-2">
-                        {canDelete && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => startEdit(incident)}
-                              className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-100"
-                            >
-                              <Pencil className="h-4 w-4" />
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDelete({ id: incident.id, title: incident.title })}
-                              className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Delete
-                            </button>
-                          </>
-                        )}
-                        <span className="ml-auto text-[10px] font-medium text-slate-400">
-                          Submitted {submissionTimeOnly}
-                        </span>
-                      </div>
+                      {canDelete && (
+                        <div className="mt-auto pt-4 flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(incident)}
+                            className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-100"
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmDelete({
+                                id: incident.id,
+                                title: incident.title,
+                              })
+                            }
+                            className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -579,7 +583,7 @@ export default function IncidentsPage() {
               <div>
                 <h3 className="text-lg font-bold">Report an incident</h3>
                 <p className="mt-1 text-xs text-sky-100">
-                  Provide accurate details to help responders. For emergencies, call <strong>117</strong>.
+                  Logged-in users can submit incidents. Media uploads use Cloudinary.
                 </p>
               </div>
               <button
@@ -682,7 +686,7 @@ export default function IncidentsPage() {
                   className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-sky-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-sky-700 hover:file:bg-sky-200"
                 />
                 <p className="mt-1 text-xs text-slate-400">
-                  Max 25MB. Supported formats: JPG, PNG, MP4, MOV, WEBM.
+                  Max 25MB. If media upload isn&apos;t configured on the backend, you can still submit without a file.
                 </p>
               </div>
 
@@ -796,7 +800,11 @@ export default function IncidentsPage() {
                   disabled={deleting}
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60"
                 >
-                  {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  {deleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
                   {deleting ? "Deleting…" : "Yes, delete"}
                 </button>
               </div>

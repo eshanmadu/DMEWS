@@ -106,7 +106,7 @@ async function fetchPublicForecastFromFirecrawl() {
   const idx = lower.indexOf(marker);
   if (idx !== -1) {
     let section = markdown.slice(idx);
-    
+    // Do not cut at the first "##" — meteo.gov.lk markdown often inserts "##"
     // between language blocks, which would leave only one line of Tamil.
 
     const onlineIdx = section.toLowerCase().indexOf("online users");
@@ -124,7 +124,7 @@ async function fetchPublicForecastFromFirecrawl() {
       .map((p) => p.trim())
       .filter((p) => p.length);
     if (paragraphs.length > 0) {
-    
+      // Keep full trilingual block (Sinhala, English, Tamil), not just the first few paragraphs.
       text = paragraphs.join("\n\n").trim();
     } else {
       text = section.trim();

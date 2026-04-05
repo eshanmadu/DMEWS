@@ -25,5 +25,26 @@ function authMiddleware(req, res, next) {
   }
 }
 
-module.exports = { authMiddleware };
+/** Sets req.userId when a valid Bearer token is present; otherwise continues without auth. */
+function optionalAuthMiddleware(req, _res, next) {
+  const authHeader = req.headers.authorization;
+  const token =
+    authHeader && authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : null;
+
+  if (!token) return next();
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.userId = payload.sub;
+    req.authEmail = payload.email;
+    req.isDevAdmin = Boolean(payload.devAdmin);
+  } catch {
+    // ignore invalid token for optional auth
+  }
+  next();
+}
+
+module.exports = { authMiddleware, optionalAuthMiddleware };
 

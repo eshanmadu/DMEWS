@@ -12,6 +12,7 @@ const authRoutes = require("./routes/auth.routes");
 const volunteersRoutes = require("./routes/volunteers.routes");
 const sosRoutes = require("./routes/sos.routes");
 const missionsRoutes = require("./routes/missions.routes");
+const missingPersonsRoutes = require("./routes/missingPersons.routes");
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use("/auth", authRoutes);
 app.use("/volunteers", volunteersRoutes);
 app.use("/sos", sosRoutes);
 app.use("/missions", missionsRoutes);
+app.use("/missing-persons", missingPersonsRoutes);
 
 module.exports = app;
 
