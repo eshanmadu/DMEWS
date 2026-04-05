@@ -41,7 +41,7 @@ export function Nav() {
 
   // Dropdown items
   const dropdownItems = [
-    { href: "/incidents/missing-person", label: t("nav.findPeople", "Find People") },
+    { href: "/incidents/missing-persons", label: t("nav.findPeople", "Find People") },
     { href: "/incidents", label: t("nav.reports", "Reports") }, // keep current path
   ];
 
