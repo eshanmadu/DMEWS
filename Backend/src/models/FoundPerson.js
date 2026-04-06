@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const foundPersonSchema = new mongoose.Schema(
   {
     name: { type: String, default: "Unknown", trim: true, maxlength: 200 },
+    gender: { type: String, default: "", trim: true, maxlength: 40 },
     age: { type: Number, default: null, min: 0, max: 120 },
     locationFound: { type: String, required: true, trim: true, maxlength: 500 },
     location: {

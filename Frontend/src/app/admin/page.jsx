@@ -1,11 +1,11 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { fetchAlerts, fetchIncidents, fetchResources, fetchRiskLevels } from "@/lib/api";
+import { fetchAlerts, fetchIncidents, fetchPersonReports, fetchRiskLevels } from "@/lib/api";
 import {
   AlertTriangle,
   Activity,
   Building2,
-  Boxes,
+  UserSearch,
   ShieldAlert,
   TrendingUp,
   MapPin,
@@ -29,6 +29,33 @@ export const metadata = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const ALL_DISTRICTS = [
+  "Colombo",
+  "Gampaha",
+  "Kalutara",
+  "Kandy",
+  "Matale",
+  "Nuwara Eliya",
+  "Galle",
+  "Matara",
+  "Hambantota",
+  "Jaffna",
+  "Kilinochchi",
+  "Mannar",
+  "Vavuniya",
+  "Mullaitivu",
+  "Batticaloa",
+  "Ampara",
+  "Trincomalee",
+  "Kurunegala",
+  "Puttalam",
+  "Anuradhapura",
+  "Polonnaruwa",
+  "Badulla",
+  "Monaragala",
+  "Ratnapura",
+  "Kegalle",
+];
 
 async function fetchShelters() {
   try {
@@ -96,10 +123,10 @@ function RiskBar({ label, value, total, color, gradient }) {
 }
 
 export default async function AdminDashboardPage() {
-  const [alerts, incidents, resources, riskLevels, shelters] = await Promise.all([
+  const [alerts, incidents, personReports, riskLevels, shelters] = await Promise.all([
     fetchAlerts(),
     fetchIncidents(),
-    fetchResources(),
+    fetchPersonReports(),
     fetchRiskLevels(),
     fetchShelters(),
   ]);
@@ -111,36 +138,39 @@ export default async function AdminDashboardPage() {
   const openIncidents = incidents.filter((i) => i.status !== "resolved");
   const openIncidentsCount = openIncidents.length;
 
-  const resourcesAvailable = resources.filter((r) => r.status === "available").length;
-  const resourcesDeployed = resources.filter((r) => r.status === "deployed").length;
-
   const riskByLevel = {
     safe: 0,
     low: 0,
     medium: 0,
     high: 0,
   };
+  const districtLevelMap = new Map();
   (riskLevels || []).forEach((r) => {
-    const lvl = r?.level;
+    if (r?.district && r?.level) districtLevelMap.set(r.district, r.level);
+  });
+  ALL_DISTRICTS.forEach((district) => {
+    const lvl = districtLevelMap.get(district) || "safe";
     if (lvl in riskByLevel) riskByLevel[lvl] += 1;
   });
-  const riskTotal = Object.values(riskByLevel).reduce((a, b) => a + b, 0);
+  const riskTotal = ALL_DISTRICTS.length;
 
-  const highRiskDistricts = (riskLevels || [])
-    .filter((r) => r?.level === "high" && r?.district)
-    .slice(0, 6)
-    .map((r) => r.district);
+  const highRiskDistricts = ALL_DISTRICTS
+    .filter((district) => (districtLevelMap.get(district) || "safe") === "high")
+    .slice(0, 6);
+
+  const missingCasesCount = Array.isArray(personReports?.missing) ? personReports.missing.length : 0;
+  const foundCasesCount = Array.isArray(personReports?.found) ? personReports.found.length : 0;
 
   const recentAlerts = [...(alerts || [])]
     .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime())
-    .slice(0, 5);
+    .slice(0, 1);
 
   const recentIncidents = [...(incidents || [])]
     .sort(
       (a, b) =>
         new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     )
-    .slice(0, 5);
+    .slice(0, 1);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100/40">
@@ -152,7 +182,7 @@ export default async function AdminDashboardPage() {
               Admin Dashboard
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Real-time overview of alerts, incidents, resources & risk metrics
+              Real-time overview of alerts, incidents, missing cases, and risk metrics
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -242,20 +272,20 @@ export default async function AdminDashboardPage() {
             </div>
           </div>
 
-          <div className="group relative overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-white to-slate-100/80 p-5 shadow-md transition-all duration-300 hover:shadow-xl">
-            <div className="absolute -right-12 -top-12 h-24 w-24 rounded-full bg-slate-200/60 blur-2xl transition-all group-hover:bg-slate-300/70" />
+          <div className="group relative overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-white to-violet-50/80 p-5 shadow-md transition-all duration-300 hover:shadow-xl">
+            <div className="absolute -right-12 -top-12 h-24 w-24 rounded-full bg-violet-200/60 blur-2xl transition-all group-hover:bg-violet-300/70" />
             <div className="flex items-start justify-between">
-              <div className="rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 p-2.5 shadow-md">
-                <Boxes className="h-5 w-5 text-white" />
+              <div className="rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 p-2.5 shadow-md">
+                <UserSearch className="h-5 w-5 text-white" />
               </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 backdrop-blur-sm">Resources</span>
+              <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700 backdrop-blur-sm">Cases</span>
             </div>
             <div className="mt-4">
               <div className="text-4xl font-extrabold tracking-tight text-slate-800">
-                {resources.length}
+                {missingCasesCount}
               </div>
               <div className="mt-1 text-sm font-medium text-slate-500">
-                {resourcesAvailable} available · {resourcesDeployed} deployed
+                Missing cases · {foundCasesCount} found reports
               </div>
             </div>
           </div>
@@ -401,6 +431,16 @@ export default async function AdminDashboardPage() {
                   ))
                 )}
               </div>
+              {alerts.length > 1 ? (
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <Link
+                    href="/alerts"
+                    className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    See more ({alerts.length - 1} more)
+                  </Link>
+                </div>
+              ) : null}
             </div>
           </section>
 
@@ -456,6 +496,16 @@ export default async function AdminDashboardPage() {
                   ))
                 )}
               </div>
+              {incidents.length > 1 ? (
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <Link
+                    href="/incidents"
+                    className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    See more ({incidents.length - 1} more)
+                  </Link>
+                </div>
+              ) : null}
             </div>
           </section>
         </div>

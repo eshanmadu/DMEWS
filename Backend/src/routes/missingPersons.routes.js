@@ -1,8 +1,10 @@
 const router = require("express").Router();
 const multer = require("multer");
 const { authMiddleware, optionalAuthMiddleware } = require("../middleware/authMiddleware");
+const { adminMiddleware } = require("../middleware/adminMiddleware");
 const {
   listPersonReports,
+  adminPersonOverview,
   createMissingReport,
   createFoundReport,
   deleteMissingReport,
@@ -21,6 +23,7 @@ const upload = multer({
 });
 
 router.get("/", listPersonReports);
+router.get("/admin/overview", adminMiddleware, adminPersonOverview);
 router.post("/missing", optionalAuthMiddleware, upload.single("photo"), createMissingReport);
 router.post("/found", optionalAuthMiddleware, upload.single("photo"), createFoundReport);
 router.delete("/missing/:id", authMiddleware, deleteMissingReport);

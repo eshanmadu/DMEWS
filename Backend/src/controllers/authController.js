@@ -8,6 +8,16 @@ const { getVolunteerStatusForUser } = require("../services/volunteerStatus");
 
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-production";
 
+function emailIsAdmin(email) {
+  const raw = process.env.ADMIN_EMAILS || "";
+  const emails = raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const e = String(email || "").toLowerCase().trim();
+  return Boolean(e && emails.includes(e));
+}
+
 async function attachVolunteerStatus(userDoc) {
   const status = await getVolunteerStatusForUser(userDoc._id.toString());
   return {
@@ -140,6 +150,7 @@ async function login(req, res) {
         email: user.email,
         mobile: user.mobile || "",
         avatar: user.avatar || "",
+        isAdmin: emailIsAdmin(user.email),
       },
     });
   } catch (error) {
@@ -159,6 +170,7 @@ async function me(req, res) {
         mobile: "",
         avatar: "",
         volunteerStatus: null,
+        isAdmin: true,
       });
     }
 
@@ -172,16 +184,18 @@ async function me(req, res) {
       return res.status(404).json({ message: "User not found." });
     }
 
-    return res.json(
-      await attachVolunteerStatus({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        district: user.district,
-        mobile: user.mobile,
-        avatar: user.avatar,
-      })
-    );
+    const profile = await attachVolunteerStatus({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      district: user.district,
+      mobile: user.mobile,
+      avatar: user.avatar,
+    });
+    return res.json({
+      ...profile,
+      isAdmin: emailIsAdmin(user.email),
+    });
   } catch (error) {
     console.error("Me error", error);
     return res.status(500).json({ message: "Failed to load profile." });

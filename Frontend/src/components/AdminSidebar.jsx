@@ -13,6 +13,7 @@ import {
   TriangleAlert,
   FileText,
   Boxes,
+  UserSearch,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/volunteers", label: "Volunteers", icon: Heart },
   { href: "/admin/missions", label: "Missions", icon: Boxes },
+  { href: "/admin/missing-persons", label: "Missing Persons", icon: UserSearch },
 ];
 
 export function AdminSidebar() {

@@ -136,17 +136,65 @@ async function geocodeToPointSriLanka(query) {
   }
 }
 
-/** Score a missing vs found pair (higher = better match). */
-function calculateScore(missing, found) {
-  let score = 0;
+function normalizeGenderKey(g) {
+  const s = String(g || "")
+    .trim()
+    .toLowerCase();
+  if (!s) return "";
+  if (s === "m" || s.startsWith("male")) return "male";
+  if (s === "f" || s.startsWith("female")) return "female";
+  if (s.includes("non") && (s.includes("binary") || s.includes("bin"))) return "non-binary";
+  return s;
+}
+
+/** Name similarity 0–maxPts when both sides have usable names */
+function scoreNameMatch(fullName, foundName, maxPts) {
+  const fn = String(fullName || "").trim().toLowerCase();
+  const rn = String(foundName || "").trim().toLowerCase();
+  if (!fn || !rn || rn === "unknown") {
+    return { earned: 0, skipped: true, note: "Name not available on one or both reports" };
+  }
+  const a = fn.replace(/\s+/g, " ");
+  const b = rn.replace(/\s+/g, " ");
+  if (a === b) {
+    return { earned: maxPts, skipped: false, note: "Exact name match" };
+  }
+  if (a.includes(b) || b.includes(a)) {
+    return { earned: maxPts, skipped: false, note: "One name contains the other" };
+  }
+  const tokensA = a.split(" ").filter((t) => t.length >= 2);
+  const tokensB = b.split(" ").filter((t) => t.length >= 2);
+  const setB = new Set(tokensB);
+  const overlap = tokensA.some((t) => setB.has(t));
+  if (overlap) {
+    return { earned: Math.round(maxPts * 0.67), skipped: false, note: "Shared name word(s)" };
+  }
+  if (tokensA[0] && tokensB[0] && tokensA[0] === tokensB[0]) {
+    return { earned: Math.round(maxPts * 0.33), skipped: false, note: "Same first token" };
+  }
+  return { earned: 0, skipped: false, note: "No strong name overlap" };
+}
+
+/**
+ * Score breakdown for missing vs found (higher = better).
+ * Categories: location (40), age (30), date (20), gender (15 if both set), name (15 if usable).
+ */
+function calculateScoreBreakdown(missing, found) {
+  const MAX = { location: 40, age: 30, date: 20, gender: 15, name: 15 };
+
   const locFound = String(found.locationFound || "").toLowerCase();
   const locMissing = String(missing.lastSeenLocation || "").toLowerCase();
+  let locEarned = 0;
+  let locNote = "No text overlap";
   if (locMissing && locFound.includes(locMissing)) {
-    score += 40;
+    locEarned = MAX.location;
+    locNote = "Found location text includes last-seen text";
   }
 
   const missedAge = missing.age;
   const foundAge = found.age;
+  let ageEarned = 0;
+  let ageNote = "Age missing on one or both reports";
   if (
     foundAge != null &&
     Number.isFinite(foundAge) &&
@@ -154,8 +202,15 @@ function calculateScore(missing, found) {
     Number.isFinite(missedAge)
   ) {
     const diff = Math.abs(foundAge - missedAge);
-    if (diff <= 2) score += 30;
-    else if (diff <= 5) score += 15;
+    if (diff <= 2) {
+      ageEarned = 30;
+      ageNote = "Within 2 years";
+    } else if (diff <= 5) {
+      ageEarned = 15;
+      ageNote = "Within 5 years";
+    } else {
+      ageNote = `Age gap ${diff} years`;
+    }
   }
 
   const dm =
@@ -165,11 +220,88 @@ function calculateScore(missing, found) {
   const df =
     found.dateFound instanceof Date ? found.dateFound : new Date(found.dateFound);
   const daysDiff = Math.abs(df.getTime() - dm.getTime()) / (1000 * 60 * 60 * 24);
+  let dateEarned = 0;
+  let dateNote = "";
+  if (daysDiff <= 1) {
+    dateEarned = 20;
+    dateNote = "Within 1 day";
+  } else if (daysDiff <= 3) {
+    dateEarned = 10;
+    dateNote = "Within 3 days";
+  } else {
+    dateNote = `${daysDiff.toFixed(1)} days apart`;
+  }
 
-  if (daysDiff <= 1) score += 20;
-  else if (daysDiff <= 3) score += 10;
+  const mg = String(missing.gender || "").trim();
+  const fg = String(found.gender || "").trim();
+  let genderEarned = 0;
+  let genderSkipped = true;
+  let genderNote = "Not compared (gender missing on one or both)";
+  if (mg && fg) {
+    genderSkipped = false;
+    const a = normalizeGenderKey(mg);
+    const b = normalizeGenderKey(fg);
+    if (a && b && a === b) {
+      genderEarned = MAX.gender;
+      genderNote = "Gender matches";
+    } else {
+      genderNote = "Gender differs or could not be aligned";
+    }
+  }
 
-  return score;
+  const nameResult = scoreNameMatch(missing.fullName, found.name, MAX.name);
+  const nameEarned = nameResult.skipped ? 0 : nameResult.earned;
+  const nameSkipped = nameResult.skipped;
+  const nameNote = nameResult.note;
+
+  const categories = [
+    {
+      id: "location",
+      label: "Location (text)",
+      earned: locEarned,
+      max: MAX.location,
+      note: locNote,
+    },
+    {
+      id: "age",
+      label: "Age",
+      earned: ageEarned,
+      max: MAX.age,
+      note: ageNote,
+    },
+    {
+      id: "date",
+      label: "Date proximity",
+      earned: dateEarned,
+      max: MAX.date,
+      note: dateNote,
+    },
+    {
+      id: "gender",
+      label: "Gender",
+      earned: genderEarned,
+      max: MAX.gender,
+      skipped: genderSkipped,
+      note: genderNote,
+    },
+    {
+      id: "name",
+      label: "Name",
+      earned: nameEarned,
+      max: MAX.name,
+      skipped: nameSkipped,
+      note: nameNote,
+    },
+  ];
+
+  const total = categories.reduce((sum, c) => sum + (c.earned || 0), 0);
+  const maxTotal = 120; // 40+30+20+15+15 — used for overall %; optional rows may be skipped in UI
+
+  return { total, maxTotal, categories };
+}
+
+function calculateScore(missing, found) {
+  return calculateScoreBreakdown(missing, found).total;
 }
 
 async function findMissingMatchesForFound(foundDoc) {
@@ -225,10 +357,75 @@ async function findMissingMatchesForFound(foundDoc) {
   }
   const merged = Array.from(byId.values());
 
-  const withScores = merged.map((m) => ({
-    ...m,
-    matchScore: calculateScore(m, found),
-  }));
+  const withScores = merged.map((m) => {
+    const bd = calculateScoreBreakdown(m, found);
+    return {
+      ...m,
+      matchScore: bd.total,
+      scoreBreakdown: bd,
+    };
+  });
+  withScores.sort((a, b) => b.matchScore - a.matchScore);
+  return withScores;
+}
+
+async function findFoundMatchesForMissing(missingDoc) {
+  const missing = missingDoc.toObject ? missingDoc.toObject() : missingDoc;
+  const missingPoint = missing.location;
+  const useGeo = isValidPoint(missingPoint);
+  const locPattern = escapeRegex(missing.lastSeenLocation || "");
+  if (!useGeo && !locPattern) return [];
+
+  const dateMissing =
+    missing.dateMissing instanceof Date ? missing.dateMissing : new Date(missing.dateMissing);
+  const from = new Date(dateMissing.getTime() - 3 * 24 * 60 * 60 * 1000);
+  const to = new Date(dateMissing.getTime() + 3 * 24 * 60 * 60 * 1000);
+
+  const baseFilters = {
+    dateFound: { $gte: from, $lte: to },
+  };
+  if (missing.age != null && Number.isFinite(missing.age)) {
+    baseFilters.age = { $gte: missing.age - 5, $lte: missing.age + 5 };
+  }
+
+  const [geoMatches, textMatches] = await Promise.all([
+    useGeo
+      ? FoundPerson.find({
+          ...baseFilters,
+          location: {
+            $near: {
+              $geometry: missingPoint,
+              $maxDistance: 20000, // 20km
+            },
+          },
+        })
+          .lean()
+          .exec()
+      : Promise.resolve([]),
+    locPattern
+      ? FoundPerson.find({
+          ...baseFilters,
+          locationFound: { $regex: locPattern, $options: "i" },
+        })
+          .lean()
+          .exec()
+      : Promise.resolve([]),
+  ]);
+
+  const byId = new Map();
+  for (const f of [...geoMatches, ...textMatches]) {
+    if (f && f._id) byId.set(String(f._id), f);
+  }
+  const merged = Array.from(byId.values());
+
+  const withScores = merged.map((f) => {
+    const bd = calculateScoreBreakdown(missing, f);
+    return {
+      ...f,
+      matchScore: bd.total,
+      scoreBreakdown: bd,
+    };
+  });
   withScores.sort((a, b) => b.matchScore - a.matchScore);
   return withScores;
 }
@@ -278,6 +475,7 @@ function normalizeFound(o) {
   return {
     id: o._id ? String(o._id) : "",
     name: o.name || "Unknown",
+    gender: o.gender || "",
     age: o.age != null ? o.age : null,
     locationFound: o.locationFound || "",
     location: o.location || null,
@@ -306,6 +504,53 @@ async function listPersonReports(_req, res) {
   } catch (error) {
     console.error("Missing persons list error", error);
     return res.status(500).json({ message: "Failed to load reports." });
+  }
+}
+
+async function adminPersonOverview(_req, res) {
+  try {
+    await connectDb();
+    const [missing, found] = await Promise.all([
+      MissingPerson.find().sort({ createdAt: -1 }).limit(500).lean().exec(),
+      FoundPerson.find().sort({ createdAt: -1 }).limit(500).lean().exec(),
+    ]);
+
+    const [missingWithMatches, foundWithMatches] = await Promise.all([
+      Promise.all(
+        missing.map(async (m) => {
+          const matches = await findFoundMatchesForMissing(m);
+          return {
+            ...normalizeMissing(m),
+            possibleMatches: matches.slice(0, 5).map((f) => ({
+              ...normalizeFound(f),
+              matchScore: f.matchScore ?? 0,
+              scoreBreakdown: f.scoreBreakdown || null,
+            })),
+          };
+        })
+      ),
+      Promise.all(
+        found.map(async (f) => {
+          const matches = await findMissingMatchesForFound(f);
+          return {
+            ...normalizeFound(f),
+            possibleMatches: matches.slice(0, 5).map((m) => ({
+              ...normalizeMissing(m),
+              matchScore: m.matchScore ?? 0,
+              scoreBreakdown: m.scoreBreakdown || null,
+            })),
+          };
+        })
+      ),
+    ]);
+
+    return res.json({
+      missing: missingWithMatches,
+      found: foundWithMatches,
+    });
+  } catch (error) {
+    console.error("Admin person overview error", error);
+    return res.status(500).json({ message: "Failed to load admin person overview." });
   }
 }
 
@@ -415,6 +660,7 @@ async function createFoundReport(req, res) {
   try {
     const nameRaw = String(req.body?.name || "").trim();
     const name = nameRaw || "Unknown";
+    const gender = String(req.body?.gender || "").trim();
     const ageRaw = String(req.body?.age ?? "").trim();
     const locationFound = String(req.body?.locationFound || "").trim();
     const dateFoundRaw = String(req.body?.dateFound || "").trim();
@@ -473,6 +719,7 @@ async function createFoundReport(req, res) {
     const reporter = await reporterFieldsFromLoggedInUser(req);
     const doc = await FoundPerson.create({
       name: name.slice(0, 200),
+      gender: gender.slice(0, 40),
       age,
       locationFound: locationFound.slice(0, 500),
       location: location || undefined,
@@ -498,6 +745,7 @@ async function createFoundReport(req, res) {
       missingMatches: missingMatches.map((m) => ({
         ...normalizeMissing(m),
         matchScore: m.matchScore ?? 0,
+        scoreBreakdown: m.scoreBreakdown || null,
       })),
     });
   } catch (error) {
@@ -578,6 +826,7 @@ async function deleteFoundReport(req, res) {
 
 module.exports = {
   listPersonReports,
+  adminPersonOverview,
   createMissingReport,
   createFoundReport,
   deleteMissingReport,

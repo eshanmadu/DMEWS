@@ -24,6 +24,17 @@ export async function fetchIncidents() {
   return safeFetch("/incidents");
 }
 
+export async function fetchPersonReports() {
+  const data = await safeFetch("/missing-persons");
+  if (!data || typeof data !== "object") {
+    return { missing: [], found: [] };
+  }
+  return {
+    missing: Array.isArray(data.missing) ? data.missing : [],
+    found: Array.isArray(data.found) ? data.found : [],
+  };
+}
+
 export async function fetchRiskLevels() {
   const data = await safeFetch("/risk-levels");
   return Array.isArray(data) ? data : [];

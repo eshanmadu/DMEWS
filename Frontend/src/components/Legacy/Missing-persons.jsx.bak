@@ -380,7 +380,7 @@ export default function MissingPersonsPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Hero Section - Modernized */}
-      <div className="relative mb-12 overflow-hidden rounded-2xl bg-gradient-to-r from-violet-500 via-indigo-500 to-violet-500 shadow-lg">
+      <div className="relative mb-12 overflow-hidden rounded-2xl bg-gradient-to-r from-rose-700 via-rose-600 to-rose-700 shadow-lg">
         <div className="relative z-10 px-6 py-8 sm:px-8 sm:py-10">
           <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:gap-6 sm:text-left">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 shadow-sm">
@@ -446,7 +446,7 @@ export default function MissingPersonsPage() {
         </div>
       )}
 
-      {/* Missing Person Form (unchanged) */}
+      {/* Missing Person Form (unchanged styling except maybe small tweaks, but keep original look) */}
       {showMissingForm && (
         <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2 border-b border-slate-200 pb-3">
@@ -454,6 +454,7 @@ export default function MissingPersonsPage() {
             <h2 className="text-xl font-semibold text-slate-800">Report missing person</h2>
           </div>
           <form onSubmit={handleAddMissing} className="space-y-4">
+            {/* ... form fields exactly as original ... */}
             <div>
               <label className="block text-sm font-medium text-slate-700">Full name *</label>
               <input
@@ -503,6 +504,8 @@ export default function MissingPersonsPage() {
                 <p className="mt-1 text-xs text-rose-600">{missingErrors.lastSeenLocation}</p>
               )}
             </div>
+
+          
 
             <div>
               <label className="block text-sm font-medium text-slate-700">Date missing *</label>
@@ -597,7 +600,7 @@ export default function MissingPersonsPage() {
         </div>
       )}
 
-      {/* Found Person Form (unchanged) */}
+      {/* Found Person Form (unchanged styling) */}
       {showFoundForm && (
         <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2 border-b border-slate-200 pb-3">
@@ -749,7 +752,7 @@ export default function MissingPersonsPage() {
         </div>
       )}
 
-      {/* Lists of Missing and Found People - unchanged */}
+      {/* Lists of Missing and Found People - KEPT EXACTLY AS ORIGINAL (no card redesign) */}
       <div className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-2">
         {/* Missing people list */}
         <div>
@@ -924,7 +927,7 @@ export default function MissingPersonsPage() {
         </div>
       </div>
 
-      {/* ========== IMPROVED FOUND MATCH MODAL - BEAUTIFUL UI ========== */}
+      {/* Modals (foundMatchModal and photoLightbox) remain unchanged from original */}
       {foundMatchModal ? (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4"
@@ -932,26 +935,23 @@ export default function MissingPersonsPage() {
           aria-modal="true"
           aria-labelledby="found-match-modal-title"
         >
-          {/* Backdrop with blur and fade */}
           <button
             type="button"
-            className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm transition-all duration-200"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
             onClick={() => setFoundMatchModal(null)}
             aria-label="Close"
           />
-          {/* Modal card - elegant, larger, with smooth shadow */}
-          <div className="relative z-10 w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 animate-in zoom-in-95 fade-in duration-200">
-            {/* Header with gradient and icon */}
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 text-white">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+          <div className="relative z-10 max-h-[min(92vh,800px)] w-full max-w-2xl overflow-hidden rounded-2xl border border-emerald-200/80 bg-white shadow-2xl ring-1 ring-black/5">
+            <div className="bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-5 py-5 text-white">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
                   <Sparkles className="h-6 w-6 text-amber-200" aria-hidden />
                 </div>
-                <div className="flex-1">
-                  <h2 id="found-match-modal-title" className="font-oswald text-2xl font-bold tracking-tight">
-                    Possible Matches Found
+                <div>
+                  <h2 id="found-match-modal-title" className="font-oswald text-xl font-bold tracking-tight">
+                    Possible matches
                   </h2>
-                  <p className="mt-1 text-sm text-emerald-50/90">
+                  <p className="mt-1 text-sm text-emerald-50/95">
                     We found missing person reports that may line up with this found report. The score combines
                     location, age, dates, and optionally gender and name—not proof of identity.
                   </p>
@@ -959,118 +959,94 @@ export default function MissingPersonsPage() {
                 <button
                   type="button"
                   onClick={() => setFoundMatchModal(null)}
-                  className="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+                  className="ml-auto shrink-0 rounded-lg p-1.5 text-white/90 hover:bg-white/15"
                   aria-label="Close"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
             </div>
-
-            {/* Scrollable matches list */}
-            <div className="max-h-[calc(85vh-12rem)] overflow-y-auto px-4 py-5 sm:px-6">
-              <div className="space-y-5">
+            <div className="max-h-[min(62vh,560px)] overflow-y-auto px-3 py-4 sm:px-4">
+              <ul className="space-y-4">
                 {foundMatchModal.matches.map((person) => (
-                  <div
+                  <li
                     key={person.id}
-                    className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:border-emerald-200"
+                    className="rounded-xl border border-slate-200/90 bg-gradient-to-b from-slate-50 to-white p-3 shadow-sm"
                   >
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      {/* Photo column */}
-                      <div className="flex justify-center sm:block">
-                        {person.photoUrl ? (
-                          <PersonPhotoThumb
-                            photoUrl={person.photoUrl}
-                            className="h-28 w-28 rounded-xl ring-2 ring-white shadow-md"
-                            sizes="112px"
-                          />
-                        ) : (
-                          <div className="flex h-28 w-28 items-center justify-center rounded-xl bg-slate-100 text-slate-400 shadow-inner">
-                            <UserSearch className="h-10 w-10" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Details column */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-bold text-slate-900">{person.fullName}</h3>
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 shadow-sm"
-                              title="Total match score"
-                            >
-                              <Sparkles className="h-3 w-3" />
-                              Score {person.matchScore ?? 0}
-                            </span>
-                          </div>
+                    <div className="flex gap-3">
+                      {person.photoUrl ? (
+                        <PersonPhotoThumb photoUrl={person.photoUrl} className="h-20 w-20 rounded-lg ring-2 ring-white shadow" sizes="80px" />
+                      ) : (
+                        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                          <UserSearch className="h-8 w-8" />
                         </div>
-
-                        <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
-                          <div className="flex items-center gap-1.5 text-slate-600">
-                            <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
-                            <span className="truncate">Last seen: {person.lastSeenLocation}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-slate-600">
-                            <Calendar className="h-4 w-4 shrink-0 text-slate-400" />
-                            <span>Missing since: {formatDate(person.dateMissing)}</span>
-                          </div>
-                          {person.age != null && (
-                            <div className="flex items-center gap-1.5 text-slate-500 text-xs">
-                              <span className="font-medium">Age on report:</span> {person.age}
-                            </div>
-                          )}
-                          {person.gender && (
-                            <div className="flex items-center gap-1.5 text-slate-500 text-xs">
-                              <span className="font-medium">Gender:</span> {person.gender}
-                            </div>
-                          )}
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-slate-900">{person.fullName}</span>
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900"
+                            title="Total match score"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            Score {person.matchScore ?? 0}
+                          </span>
                         </div>
-
-                        {/* Reporter contact section */}
-                        {(person.reporterName || person.ifYouSeePhone) && (
-                          <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50/50 px-3 py-2 text-sm">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-sky-800">If you see</p>
-                            {person.reporterName && (
-                              <p className="mt-1 flex items-center gap-1.5 text-slate-700">
-                                <UserCircle className="h-3.5 w-3.5 text-sky-600" />
-                                {person.reporterName}
-                              </p>
-                            )}
-                            {person.ifYouSeePhone && (
-                              <p className="mt-0.5 flex items-center gap-1.5 font-medium text-slate-900">
-                                <Phone className="h-3.5 w-3.5 text-sky-600" />
-                                {person.ifYouSeePhone}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {person.contactInfo && (
-                          <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-                            <Phone className="h-3 w-3" />
-                            Also: {person.contactInfo}
+                        <div className="mt-2 space-y-0.5 text-sm text-slate-600">
+                          <p className="flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            Last seen: {person.lastSeenLocation}
                           </p>
-                        )}
+                          <p className="flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            Missing since: {formatDate(person.dateMissing)}
+                          </p>
+                          {person.age != null ? (
+                            <p className="text-xs text-slate-500">Age on report: {person.age}</p>
+                          ) : null}
+                          {person.gender ? (
+                            <p className="text-xs text-slate-500">Gender: {person.gender}</p>
+                          ) : null}
+                          {person.reporterName || person.ifYouSeePhone ? (
+                            <div className="mt-2 rounded-md border border-sky-100 bg-white/80 px-2 py-1.5 text-xs">
+                              <p className="font-semibold text-sky-900">If you see</p>
+                              {person.reporterName ? (
+                                <p className="text-slate-700">
+                                  <UserCircle className="mr-1 inline h-3 w-3 text-sky-600" />
+                                  {person.reporterName}
+                                </p>
+                              ) : null}
+                              {person.ifYouSeePhone ? (
+                                <p className="font-medium text-slate-900">
+                                  <Phone className="mr-1 inline h-3 w-3 text-sky-600" />
+                                  {person.ifYouSeePhone}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {person.contactInfo ? (
+                            <p className="flex items-center gap-1 text-xs text-slate-500">
+                              <Phone className="h-3 w-3 shrink-0" />
+                              Also: {person.contactInfo}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
-
-                    {/* Match breakdown (if available) */}
-                    {person.scoreBreakdown && (
-                      <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/30 p-3">
+                    {person.scoreBreakdown ? (
+                      <div className="mt-3 rounded-lg border border-emerald-100 bg-white/90 p-3">
                         <MatchScoreBreakdown breakdown={person.scoreBreakdown} />
                       </div>
-                    )}
-                  </div>
+                    ) : null}
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
-
-            {/* Footer with action button */}
-            <div className="border-t border-slate-100 bg-slate-50/90 px-6 py-4">
+            <div className="border-t border-slate-100 bg-slate-50/80 px-4 py-3">
               <button
                 type="button"
                 onClick={() => setFoundMatchModal(null)}
-                className="w-full rounded-lg bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:from-slate-700 hover:to-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow hover:bg-slate-800"
               >
                 Got it
               </button>
@@ -1079,7 +1055,6 @@ export default function MissingPersonsPage() {
         </div>
       ) : null}
 
-      {/* Photo lightbox (unchanged) */}
       {photoLightboxUrl ? (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center p-4"

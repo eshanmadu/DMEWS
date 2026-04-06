@@ -30,7 +30,7 @@ const linkKeys = [
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [session, setSession] = useState({ token: null, user: null });
+  const [session, setSession] = useState({ token: null, user: null, role: null });
   const { t } = useTranslation();
   const isAdminRoute = pathname?.startsWith("/admin");
 
@@ -91,6 +91,7 @@ export function Nav() {
   const readSession = useCallback(() => {
     if (typeof window === "undefined") return;
     const token = window.localStorage.getItem("dmews_token");
+    const role = window.localStorage.getItem("dmews_role");
     let user = null;
     try {
       const raw = window.localStorage.getItem("dmews_user");
@@ -98,7 +99,7 @@ export function Nav() {
     } catch {
       user = null;
     }
-    setSession({ token, user });
+    setSession({ token, user, role });
   }, []);
 
   useEffect(() => {
@@ -156,7 +157,7 @@ export function Nav() {
     window.localStorage.removeItem("dmews_user");
     window.localStorage.removeItem("dmews_user_district");
     window.localStorage.removeItem("dmews_role");
-    setSession({ token: null, user: null });
+    setSession({ token: null, user: null, role: null });
     window.dispatchEvent(new Event("dmews-auth-changed"));
     router.push("/login");
   }
@@ -166,6 +167,16 @@ export function Nav() {
   const avatarId = session?.user?.avatar;
   const avatarSrc = avatarSrcById(avatarId);
   const volunteerApproved = session?.user?.volunteerStatus === "approved";
+
+  /** Admin users: main account chip goes to dashboard, not profile */
+  const isAdminUser =
+    Boolean(session?.user?.isAdmin) ||
+    session?.role === "admin" ||
+    String(session?.user?.id || session?.user?._id || "") === "dev-admin-session";
+  const accountHref = isAdminUser ? "/admin" : "/profile";
+  const accountLinkActive = isAdminUser
+    ? pathname?.startsWith("/admin")
+    : pathname === "/profile";
 
   return (
     <header className="sticky top-0 z-[1000] border-b border-sky-200 bg-gradient-to-r from-sky-700 via-sky-600 to-sky-700 text-sky-50 shadow-md">
@@ -306,10 +317,10 @@ export function Nav() {
             ) : (
               <>
                 <Link
-                  href="/profile"
+                  href={accountHref}
                   className={clsx(
                     "flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 transition hover:bg-white/15",
-                    pathname === "/profile" ? "ring-1 ring-amber-300/60" : ""
+                    accountLinkActive ? "ring-1 ring-amber-300/60" : ""
                   )}
                 >
                   <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-amber-200/30">
