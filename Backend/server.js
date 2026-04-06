@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 4000;
 connectDb()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`DMEWS Backend JS running at http://localhost:${PORT}`);
+      console.log(`🚀 DMEWS Backend JS running at http://localhost:${PORT}`);
     });
   })
   .catch((error) => {

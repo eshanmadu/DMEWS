@@ -13,6 +13,10 @@ import {
   Building2,
   Globe,
   ChevronDown,
+  Facebook,
+  Twitter,
+  Instagram,
+  Linkedin,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "@/lib/i18n";
@@ -33,6 +37,29 @@ const quickLinks = [
     href: "/shelters",
     labelKey: "nav.shelters",
     icon: Building2,
+  },
+];
+
+const socialLinks = [
+  {
+    href: "https://facebook.com/disasterwatch",
+    label: "Facebook",
+    icon: Facebook,
+  },
+  {
+    href: "https://twitter.com/disasterwatch",
+    label: "Twitter",
+    icon: Twitter,
+  },
+  {
+    href: "https://instagram.com/disasterwatch",
+    label: "Instagram",
+    icon: Instagram,
+  },
+  {
+    href: "https://linkedin.com/company/disasterwatch",
+    label: "LinkedIn",
+    icon: Linkedin,
   },
 ];
 
@@ -116,6 +143,7 @@ export function Footer() {
   const builtForCommunities = t("footer.builtForCommunities");
   const quickLinksTitle = t("footer.quickLinksTitle");
   const getHelpTitle = t("footer.getHelpTitle");
+  const socialsTitle = t("footer.socialsTitle") || "Follow us";
   const emergencyText = t("footer.emergency");
   const helpText = t("footer.helpText");
   const adminLoginLabel = t("footer.adminLogin");
@@ -148,7 +176,7 @@ export function Footer() {
       <div className="relative mx-auto max-w-7xl px-4 pt-16 pb-8 sm:px-6 lg:px-8">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
-          <div className="sm:col-span-2 lg:col-span-1">
+          <div>
             <Link
               href="/"
               className="inline-flex items-center gap-2 font-oswald text-xl font-semibold tracking-wide text-white"
@@ -203,6 +231,28 @@ export function Footer() {
                 <Mail className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400/80" />
                 <span>{helpText}</span>
               </li>
+            </ul>
+          </div>
+
+          {/* Socials */}
+          <div>
+            <h3 className="font-oswald text-sm font-semibold uppercase tracking-wider text-white">
+              {socialsTitle}
+            </h3>
+            <ul className="mt-4 space-y-2">
+              {socialLinks.map(({ href, label, icon: Icon }) => (
+                <li key={label}>
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-sky-200/90 transition hover:text-amber-300"
+                  >
+                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    {label}
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
         </div>

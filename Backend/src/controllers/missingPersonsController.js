@@ -2,6 +2,7 @@ const { connectDb } = require("../db");
 const mongoose = require("mongoose");
 const { MissingPerson } = require("../models/MissingPerson");
 const { FoundPerson } = require("../models/FoundPerson");
+const { User } = require("../models/User");
 const {
   uploadBuffer,
   isCloudinaryConfigured,
@@ -18,12 +19,240 @@ function parseYMD(ymd) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function coerceNumber(v) {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === "number" ? v : Number(String(v).trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+function parsePointFromBody(body) {
+  // Accept any of these (multipart/form-data sends strings):
+  // - { locationLat, locationLng }
+  // - { lat, lng }
+  // - { location: '{"type":"Point","coordinates":[lng,lat]}' } (stringified JSON)
+  // - { location: { type:"Point", coordinates:[lng,lat] } } (JSON)
+
+  const b = body || {};
+
+  const lat =
+    coerceNumber(b.locationLat) ??
+    coerceNumber(b.lat) ??
+    (Array.isArray(b.location?.coordinates) ? coerceNumber(b.location.coordinates[1]) : null);
+
+  const lng =
+    coerceNumber(b.locationLng) ??
+    coerceNumber(b.lng) ??
+    (Array.isArray(b.location?.coordinates) ? coerceNumber(b.location.coordinates[0]) : null);
+
+  if (lat != null && lng != null) {
+    return { type: "Point", coordinates: [lng, lat] };
+  }
+
+  const rawLoc = b.location;
+  if (typeof rawLoc === "string" && rawLoc.trim()) {
+    try {
+      const parsed = JSON.parse(rawLoc);
+      if (
+        parsed &&
+        parsed.type === "Point" &&
+        Array.isArray(parsed.coordinates) &&
+        parsed.coordinates.length === 2
+      ) {
+        const plng = coerceNumber(parsed.coordinates[0]);
+        const plat = coerceNumber(parsed.coordinates[1]);
+        if (plng != null && plat != null) {
+          return { type: "Point", coordinates: [plng, plat] };
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
+
+const _geoCache = new Map(); // key -> { at:number, value: Point|null }
+const GEO_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
+
+function isValidPoint(p) {
+  if (!p || p.type !== "Point" || !Array.isArray(p.coordinates) || p.coordinates.length !== 2) return false;
+  const [lng, lat] = p.coordinates;
+  return (
+    typeof lng === "number" &&
+    typeof lat === "number" &&
+    Number.isFinite(lng) &&
+    Number.isFinite(lat) &&
+    lng >= -180 &&
+    lng <= 180 &&
+    lat >= -90 &&
+    lat <= 90
+  );
+}
+
+async function geocodeToPointSriLanka(query) {
+  const q = String(query || "").trim();
+  if (!q) return null;
+
+  const key = q.toLowerCase();
+  const cached = _geoCache.get(key);
+  if (cached && Date.now() - cached.at < GEO_CACHE_TTL_MS) {
+    return cached.value;
+  }
+
+  // Bias to Sri Lanka; Nominatim requires a valid User-Agent.
+  const url =
+    "https://nominatim.openstreetmap.org/search?" +
+    new URLSearchParams({
+      q: `${q}, Sri Lanka`,
+      format: "jsonv2",
+      limit: "1",
+    }).toString();
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "DMEWS/1.0 (missing-persons matching)",
+        "Accept-Language": "en",
+      },
+    });
+    if (!res.ok) throw new Error(`geocode_http_${res.status}`);
+    const data = await res.json();
+    const first = Array.isArray(data) ? data[0] : null;
+    const lat = coerceNumber(first?.lat);
+    const lon = coerceNumber(first?.lon);
+    const point = lat != null && lon != null ? { type: "Point", coordinates: [lon, lat] } : null;
+    const value = point && isValidPoint(point) ? point : null;
+    _geoCache.set(key, { at: Date.now(), value });
+    return value;
+  } catch (e) {
+    console.error("Geocode failed", { q, err: e?.message || e });
+    _geoCache.set(key, { at: Date.now(), value: null });
+    return null;
+  }
+}
+
+/** Score a missing vs found pair (higher = better match). */
+function calculateScore(missing, found) {
+  let score = 0;
+  const locFound = String(found.locationFound || "").toLowerCase();
+  const locMissing = String(missing.lastSeenLocation || "").toLowerCase();
+  if (locMissing && locFound.includes(locMissing)) {
+    score += 40;
+  }
+
+  const missedAge = missing.age;
+  const foundAge = found.age;
+  if (
+    foundAge != null &&
+    Number.isFinite(foundAge) &&
+    missedAge != null &&
+    Number.isFinite(missedAge)
+  ) {
+    const diff = Math.abs(foundAge - missedAge);
+    if (diff <= 2) score += 30;
+    else if (diff <= 5) score += 15;
+  }
+
+  const dm =
+    missing.dateMissing instanceof Date
+      ? missing.dateMissing
+      : new Date(missing.dateMissing);
+  const df =
+    found.dateFound instanceof Date ? found.dateFound : new Date(found.dateFound);
+  const daysDiff = Math.abs(df.getTime() - dm.getTime()) / (1000 * 60 * 60 * 24);
+
+  if (daysDiff <= 1) score += 20;
+  else if (daysDiff <= 3) score += 10;
+
+  return score;
+}
+
+async function findMissingMatchesForFound(foundDoc) {
+  const found = foundDoc.toObject ? foundDoc.toObject() : foundDoc;
+  const foundPoint = found.location;
+  const useGeo = isValidPoint(foundPoint);
+  const locPattern = escapeRegex(found.locationFound || "");
+  if (!useGeo && !locPattern) return [];
+
+  const dateFound =
+    found.dateFound instanceof Date ? found.dateFound : new Date(found.dateFound);
+  const from = new Date(dateFound.getTime() - 3 * 24 * 60 * 60 * 1000);
+  const to = new Date(dateFound.getTime() + 3 * 24 * 60 * 60 * 1000);
+
+  const baseFilters = {
+    dateMissing: { $gte: from, $lte: to },
+  };
+  if (found.age != null && Number.isFinite(found.age)) {
+    baseFilters.age = { $gte: found.age - 5, $lte: found.age + 5 };
+  }
+
+  // Important: many existing reports may not have `location` yet.
+  // If we only run $near, those docs will never match. So we do:
+  // 1) geo query (when possible) for fast/accurate proximity matches
+  // 2) text fallback query, then merge + score + sort.
+  const [geoMatches, textMatches] = await Promise.all([
+    useGeo
+      ? MissingPerson.find({
+          ...baseFilters,
+          location: {
+            $near: {
+              $geometry: foundPoint,
+              $maxDistance: 20000, // 20km
+            },
+          },
+        })
+          .lean()
+          .exec()
+      : Promise.resolve([]),
+    locPattern
+      ? MissingPerson.find({
+          ...baseFilters,
+          lastSeenLocation: { $regex: locPattern, $options: "i" },
+        })
+          .lean()
+          .exec()
+      : Promise.resolve([]),
+  ]);
+
+  const byId = new Map();
+  for (const m of [...geoMatches, ...textMatches]) {
+    if (m && m._id) byId.set(String(m._id), m);
+  }
+  const merged = Array.from(byId.values());
+
+  const withScores = merged.map((m) => ({
+    ...m,
+    matchScore: calculateScore(m, found),
+  }));
+  withScores.sort((a, b) => b.matchScore - a.matchScore);
+  return withScores;
+}
+
 function optionalSubmitterObjectId(req) {
   if (!req.userId || req.isDevAdmin || req.userId === "dev-admin-session") {
     return null;
   }
   if (!mongoose.Types.ObjectId.isValid(req.userId)) return null;
   return new mongoose.Types.ObjectId(req.userId);
+}
+
+async function reporterFieldsFromLoggedInUser(req) {
+  const empty = { reporterName: "", ifYouSeePhone: "" };
+  if (!req.userId || req.isDevAdmin || req.userId === "dev-admin-session") {
+    return empty;
+  }
+  if (!mongoose.Types.ObjectId.isValid(req.userId)) return empty;
+  const u = await User.findById(req.userId).select("name mobile").lean().exec();
+  if (!u) return empty;
+  return {
+    reporterName: String(u.name || "").trim().slice(0, 200),
+    ifYouSeePhone: String(u.mobile || "").trim().slice(0, 50),
+  };
 }
 
 function normalizeMissing(o) {
@@ -33,11 +262,14 @@ function normalizeMissing(o) {
     age: o.age,
     gender: o.gender || "",
     lastSeenLocation: o.lastSeenLocation || "",
+    location: o.location || null,
     dateMissing: o.dateMissing,
     description: o.description || "",
     contactInfo: o.contactInfo || "",
     photoUrl: o.photoUrl || "",
     submittedByUserId: o.submittedByUserId ? String(o.submittedByUserId) : null,
+    reporterName: o.reporterName || "",
+    ifYouSeePhone: o.ifYouSeePhone || "",
     createdAt: o.createdAt,
   };
 }
@@ -48,11 +280,14 @@ function normalizeFound(o) {
     name: o.name || "Unknown",
     age: o.age != null ? o.age : null,
     locationFound: o.locationFound || "",
+    location: o.location || null,
     dateFound: o.dateFound,
     description: o.description || "",
     contactInfo: o.contactInfo || "",
     photoUrl: o.photoUrl || "",
     submittedByUserId: o.submittedByUserId ? String(o.submittedByUserId) : null,
+    reporterName: o.reporterName || "",
+    ifYouSeePhone: o.ifYouSeePhone || "",
     createdAt: o.createdAt,
   };
 }
@@ -147,18 +382,26 @@ async function createMissingReport(req, res) {
       throw e;
     }
 
+    // Prefer stored GeoJSON point from request (back-compat), otherwise geocode the typed location.
+    const location =
+      parsePointFromBody(req.body) || (await geocodeToPointSriLanka(lastSeenLocation));
+
     await connectDb();
+    const reporter = await reporterFieldsFromLoggedInUser(req);
     const doc = await MissingPerson.create({
       fullName: fullName.slice(0, 200),
       age,
       gender: gender.slice(0, 40),
       lastSeenLocation: lastSeenLocation.slice(0, 500),
+      location: location || undefined,
       dateMissing,
       description: description.slice(0, 4000),
       contactInfo: contactInfo.slice(0, 500),
       photoUrl,
       photoPublicId,
       submittedByUserId: optionalSubmitterObjectId(req),
+      reporterName: reporter.reporterName,
+      ifYouSeePhone: reporter.ifYouSeePhone,
     });
 
     return res.status(201).json({ person: normalizeMissing(doc.toObject()) });
@@ -223,20 +466,40 @@ async function createFoundReport(req, res) {
       throw e;
     }
 
+    const location =
+      parsePointFromBody(req.body) || (await geocodeToPointSriLanka(locationFound));
+
     await connectDb();
+    const reporter = await reporterFieldsFromLoggedInUser(req);
     const doc = await FoundPerson.create({
       name: name.slice(0, 200),
       age,
       locationFound: locationFound.slice(0, 500),
+      location: location || undefined,
       dateFound,
       description: description.slice(0, 4000),
       contactInfo: contactInfo.slice(0, 500),
       photoUrl,
       photoPublicId,
       submittedByUserId: optionalSubmitterObjectId(req),
+      reporterName: reporter.reporterName,
+      ifYouSeePhone: reporter.ifYouSeePhone,
     });
 
-    return res.status(201).json({ person: normalizeFound(doc.toObject()) });
+    let missingMatches = [];
+    try {
+      missingMatches = await findMissingMatchesForFound(doc);
+    } catch (matchErr) {
+      console.error("Found-person match lookup error", matchErr);
+    }
+
+    return res.status(201).json({
+      person: normalizeFound(doc.toObject()),
+      missingMatches: missingMatches.map((m) => ({
+        ...normalizeMissing(m),
+        matchScore: m.matchScore ?? 0,
+      })),
+    });
   } catch (error) {
     console.error("Create found person error", error);
     return res.status(500).json({ message: "Failed to submit report." });
