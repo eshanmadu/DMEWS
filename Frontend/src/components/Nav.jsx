@@ -22,7 +22,7 @@ import i18n from "@/lib/i18n";
 
 const linkKeys = [
   { href: "/", key: "dashboard", icon: LayoutDashboard },
-  { href: "/alerts", key: "alerts", icon: AlertTriangle },
+  { href: "/alerts", key: "alerts", icon: AlertTriangle }, // replaced by dropdown
   { href: "/incidents", key: "incidents", icon: FileWarning }, // replaced by dropdown
   { href: "/shelters", key: "shelters", icon: Building2 },
 ];
@@ -35,11 +35,18 @@ export function Nav() {
   const isAdminRoute = pathname?.startsWith("/admin");
 
   // Dropdown state
+  const [alertsDropdownOpen, setAlertsDropdownOpen] = useState(false);
+  const alertsDropdownRef = useRef(null);
+  const alertsCloseTimeoutRef = useRef(null);
   const [incidentsDropdownOpen, setIncidentsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
   const closeTimeoutRef = useRef(null);
 
   // Dropdown items
+  const alertsDropdownItems = [
+    { href: "/alerts", label: t("nav.alerts", "Alerts") },
+    { href: "/risk-prediction", label: t("nav.riskPrediction", "Risk prediction") },
+  ];
   const dropdownItems = [
     { href: "/incidents/missing-persons", label: t("nav.findPeople", "Find People") },
     { href: "/incidents", label: t("nav.reports", "Reports") }, // keep current path
@@ -47,12 +54,16 @@ export function Nav() {
 
   // Close dropdown on route change
   useEffect(() => {
+    setAlertsDropdownOpen(false);
     setIncidentsDropdownOpen(false);
   }, [pathname]);
 
   // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event) => {
+      if (alertsDropdownRef.current && !alertsDropdownRef.current.contains(event.target)) {
+        setAlertsDropdownOpen(false);
+      }
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIncidentsDropdownOpen(false);
       }
@@ -64,6 +75,21 @@ export function Nav() {
   }, []);
 
   // Hover helpers
+  const openAlertsDropdown = () => {
+    if (alertsCloseTimeoutRef.current) clearTimeout(alertsCloseTimeoutRef.current);
+    setAlertsDropdownOpen(true);
+  };
+
+  const closeAlertsDropdownWithDelay = () => {
+    alertsCloseTimeoutRef.current = setTimeout(() => {
+      setAlertsDropdownOpen(false);
+    }, 150);
+  };
+
+  const cancelAlertsClose = () => {
+    if (alertsCloseTimeoutRef.current) clearTimeout(alertsCloseTimeoutRef.current);
+  };
+
   const openDropdown = () => {
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
     setIncidentsDropdownOpen(true);
@@ -80,6 +106,7 @@ export function Nav() {
   };
 
   // Check if any dropdown item is active
+  const isAlertsActive = alertsDropdownItems.some((item) => pathname === item.href);
   const isIncidentsActive = dropdownItems.some((item) => pathname === item.href);
 
   // Language enforcement for admin routes
@@ -193,6 +220,65 @@ export function Nav() {
         <nav className="flex items-center gap-3">
           <div className="flex gap-1">
             {linkKeys.map(({ href, key: linkKey, icon: Icon }) => {
+              // Replace the Alerts link with dropdown
+              if (linkKey === "alerts") {
+                return (
+                  <div
+                    key="alerts-dropdown"
+                    ref={alertsDropdownRef}
+                    className="relative"
+                    onMouseEnter={openAlertsDropdown}
+                    onMouseLeave={closeAlertsDropdownWithDelay}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setAlertsDropdownOpen((prev) => !prev)}
+                      className={clsx(
+                        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
+                        isAlertsActive || alertsDropdownOpen
+                          ? "bg-white/15 text-white shadow-sm"
+                          : "text-sky-100/80 hover:bg-sky-500/40 hover:text-white"
+                      )}
+                      aria-expanded={alertsDropdownOpen}
+                      aria-haspopup="true"
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="hidden sm:inline">{t("nav.alerts", "Alerts")}</span>
+                      <ChevronDown
+                        className={clsx(
+                          "h-3 w-3 transition-transform duration-200",
+                          alertsDropdownOpen && "rotate-180"
+                        )}
+                      />
+                    </button>
+                    {alertsDropdownOpen && (
+                      <div
+                        className="absolute left-0 mt-2 min-w-[180px] rounded-md bg-white py-1 shadow-lg ring-1 ring-black/5"
+                        onMouseEnter={cancelAlertsClose}
+                        onMouseLeave={closeAlertsDropdownWithDelay}
+                        role="menu"
+                        aria-orientation="vertical"
+                      >
+                        {alertsDropdownItems.map((item) => (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={clsx(
+                              "block px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100",
+                              pathname === item.href && "bg-gray-100 font-medium"
+                            )}
+                            role="menuitem"
+                            onClick={() => setAlertsDropdownOpen(false)}
+                          >
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               // Replace the Incidents link with dropdown
               if (linkKey === "incidents") {
                 return (
