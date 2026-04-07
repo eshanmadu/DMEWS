@@ -1,5 +1,5 @@
-// Seed dummy risk predictions for next N days.
-// Usage: node scripts/seedRiskPredictions.js [days=30]
+// Seed dummy risk predictions for next 7 days (hourly).
+// Usage: node scripts/seedRiskPredictions.js
 
 const dotenv = require("dotenv");
 dotenv.config();
@@ -36,9 +36,16 @@ const DISTRICTS = [
   "Kegalle",
 ];
 
-function startOfUtcDay(d) {
+function startOfUtcHour(d) {
   const x = new Date(d);
-  return new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()));
+  return new Date(
+    Date.UTC(
+      x.getUTCFullYear(),
+      x.getUTCMonth(),
+      x.getUTCDate(),
+      x.getUTCHours()
+    )
+  );
 }
 
 function clamp(n, min, max) {
@@ -53,28 +60,26 @@ function levelToIndex(level) {
   return level === "high" ? 3 : level === "medium" ? 2 : level === "low" ? 1 : 0;
 }
 
-function jitterLevel(baseIdx, dayOffset) {
+function jitterLevel(baseIdx, hourOffset) {
   // deterministic-ish trend + randomness
-  const wave = Math.sin((dayOffset / 6) * Math.PI) * 0.9;
+  const wave = Math.sin((hourOffset / 24 / 2.5) * Math.PI) * 0.9;
   const rand = (Math.random() - 0.5) * 1.2;
   const n = Math.round(baseIdx + wave + rand);
   return clamp(n, 0, 3);
 }
 
 async function main() {
-  const daysArg = parseInt(process.argv[2] || "30", 10);
-  const days = Number.isFinite(daysArg) ? clamp(daysArg, 1, 60) : 30;
-
   await connectDb();
 
-  // Use existing admin-set levels as a base signal (optional).
+  // Use existing admin-set levels as a base signal
   const current = await RiskLevel.find({}).lean().exec();
   const baseMap = new Map();
   for (const r of current) {
     if (r?.district) baseMap.set(String(r.district).trim(), String(r.level || "safe"));
   }
 
-  const today = startOfUtcDay(new Date());
+  const nowHour = startOfUtcHour(new Date());
+  const hours = 7 * 24; // one week
 
   const ops = [];
   const preview = [];
@@ -82,8 +87,8 @@ async function main() {
     const baseLevel = baseMap.get(district) || "safe";
     const baseIdx = levelToIndex(baseLevel);
 
-    for (let i = 0; i < days; i += 1) {
-      const date = new Date(today.getTime() + i * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < hours; i += 1) {
+      const date = new Date(nowHour.getTime() + i * 60 * 60 * 1000);
       const idx = jitterLevel(baseIdx, i);
       const level = pickLevelFromIndex(idx);
 
@@ -96,7 +101,7 @@ async function main() {
         date,
         level,
         confidence,
-        source: "Novelty seed (dummy 30-day forecast)",
+        source: "Novelty seed (hourly 7-day forecast)",
       };
       ops.push({
         updateOne: {
@@ -105,10 +110,10 @@ async function main() {
           upsert: true,
         },
       });
-      if (district === DISTRICTS[0] && i < 5) {
+      if (district === DISTRICTS[0] && i < 8) {
         preview.push({
           district: doc.district,
-          date: doc.date.toISOString().slice(0, 10),
+          date: doc.date.toISOString().slice(0, 16).replace("T", " "),
           level: doc.level,
           confidence: Number(doc.confidence.toFixed(2)),
         });
@@ -120,9 +125,9 @@ async function main() {
     await RiskPrediction.bulkWrite(ops, { ordered: false });
   }
 
-  console.log("Seed preview (first 5 rows for Colombo):");
+  console.log("Seed preview (first 8 hours for Colombo):");
   console.table(preview);
-  console.log(`Seeded/updated ${ops.length} risk predictions (${DISTRICTS.length} districts × ${days} days).`);
+  console.log(`Seeded/updated ${ops.length} risk predictions (${DISTRICTS.length} districts × ${hours} hours).`);
   process.exit(0);
 }
 

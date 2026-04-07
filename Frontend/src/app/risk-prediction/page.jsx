@@ -35,10 +35,23 @@ function fmtYMD(d) {
   return x.toISOString().slice(0, 10);
 }
 
+function fmtYMDHM(d) {
+  const x = new Date(d);
+  if (Number.isNaN(x.getTime())) return "—";
+  // YYYY-MM-DD HH:mm (UTC)
+  return x.toISOString().slice(0, 16).replace("T", " ");
+}
+
 function getWeekday(dateStr) {
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-US", { weekday: "short" });
+}
+
+function getHour(dateStr) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(11, 16);
 }
 
 function levelTone(level) {
@@ -95,7 +108,7 @@ function StatCard({ title, value, icon: Icon, color, subtitle }) {
 
 export default function RiskPredictionPage() {
   const [district, setDistrict] = useState("Colombo");
-  const [days, setDays] = useState(30);
+  const [windowKey, setWindowKey] = useState("7d");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -105,7 +118,7 @@ export default function RiskPredictionPage() {
     setError("");
     try {
       const res = await fetch(
-        `${API_BASE}/risk-predictions?district=${encodeURIComponent(district)}&days=${days}`,
+        `${API_BASE}/risk-predictions?district=${encodeURIComponent(district)}&window=${windowKey}`,
         { cache: "no-store" }
       );
       const data = await res.json().catch(() => ({}));
@@ -117,7 +130,7 @@ export default function RiskPredictionPage() {
     } finally {
       setLoading(false);
     }
-  }, [district, days]);
+  }, [district, windowKey]);
 
   useEffect(() => {
     load();
@@ -178,6 +191,35 @@ export default function RiskPredictionPage() {
     points += ` ${width},${height} 0,${height}`;
     return points;
   }, [riskTrendData]);
+
+  const weeklyDailySummary = useMemo(() => {
+    if (windowKey !== "7d" || sortedRows.length === 0) return [];
+    const byDay = new Map();
+    for (const r of sortedRows) {
+      const key = fmtYMD(r.date);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key).push(r);
+    }
+    return Array.from(byDay.entries()).map(([day, items]) => {
+      const counts = { safe: 0, low: 0, medium: 0, high: 0 };
+      let conf = 0;
+      let peak = "safe";
+      for (const it of items) {
+        if (it.level in counts) counts[it.level] += 1;
+        conf += Number(it.confidence ?? 0);
+        if (riskToNumber(it.level) > riskToNumber(peak)) peak = it.level;
+      }
+      const avgConfidence = items.length ? Math.round((conf / items.length) * 100) : 0;
+      return {
+        day,
+        weekday: getWeekday(day),
+        peak,
+        avgConfidence,
+        counts,
+        samples: items.length,
+      };
+    });
+  }, [sortedRows, windowKey]);
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
@@ -261,13 +303,13 @@ export default function RiskPredictionPage() {
                   </label>
                   <div className="relative mt-1">
                     <select
-                      value={days}
-                      onChange={(e) => setDays(parseInt(e.target.value, 10))}
+                      value={windowKey}
+                      onChange={(e) => setWindowKey(e.target.value)}
                       className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-4 pr-10 text-sm text-slate-900 shadow-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-100"
                     >
-                      <option value={7}>Next 7 days</option>
-                      <option value={14}>Next 14 days</option>
-                      <option value={30}>Next 30 days</option>
+                      <option value="6h">Upcoming 6 hours</option>
+                      <option value="1d">Upcoming day</option>
+                      <option value="7d">Upcoming week</option>
                     </select>
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   </div>
@@ -337,7 +379,7 @@ export default function RiskPredictionPage() {
                 </div>
                 <div className="mt-1 flex justify-between text-[10px] text-slate-400">
                   <span>Now</span>
-                  <span>{days} days ahead</span>
+                  <span>{windowKey === "6h" ? "6h ahead" : windowKey === "1d" ? "1 day ahead" : "1 week ahead"}</span>
                 </div>
               </div>
             )}
@@ -363,7 +405,9 @@ export default function RiskPredictionPage() {
                     <BarChart3 className="h-4 w-4 text-sky-500" />
                     Detailed Forecast Timeline
                   </h2>
-                  <span className="text-xs text-slate-500">{summary.totalDays} days ahead</span>
+                  <span className="text-xs text-slate-500">
+                    {windowKey === "6h" ? "Upcoming 6 hours" : windowKey === "1d" ? "Upcoming day" : "Upcoming week"}
+                  </span>
                 </div>
               </div>
 
@@ -381,6 +425,51 @@ export default function RiskPredictionPage() {
               ) : sortedRows.length === 0 ? (
                 <div className="m-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950/30">
                   No predictions available. Run the seed script on the backend.
+                </div>
+              ) : windowKey === "7d" ? (
+                <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {weeklyDailySummary.map((d) => (
+                    <article
+                      key={d.day}
+                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-100">{d.day}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">{d.weekday}</p>
+                        </div>
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${levelTone(d.peak)}`}>
+                          Peak {String(d.peak).toUpperCase()}
+                        </span>
+                      </div>
+
+                      <div className="mt-3">
+                        <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                          <span>Avg confidence</span>
+                          <span>{d.avgConfidence}%</span>
+                        </div>
+                        <ConfidenceBar level={d.peak} confidence={d.avgConfidence / 100} />
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-4 gap-1.5 text-[10px]">
+                        <span className="rounded bg-emerald-100 px-1.5 py-1 text-center font-semibold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200">
+                          S {d.counts.safe}
+                        </span>
+                        <span className="rounded bg-amber-100 px-1.5 py-1 text-center font-semibold text-amber-900 dark:bg-amber-500/20 dark:text-amber-200">
+                          L {d.counts.low}
+                        </span>
+                        <span className="rounded bg-orange-100 px-1.5 py-1 text-center font-semibold text-orange-800 dark:bg-orange-500/20 dark:text-orange-200">
+                          M {d.counts.medium}
+                        </span>
+                        <span className="rounded bg-rose-100 px-1.5 py-1 text-center font-semibold text-rose-800 dark:bg-rose-500/20 dark:text-rose-200">
+                          H {d.counts.high}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-[10px] text-slate-400 dark:text-slate-500">
+                        {d.samples} hourly samples
+                      </p>
+                    </article>
+                  ))}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -402,9 +491,11 @@ export default function RiskPredictionPage() {
                         >
                           <td className="px-6 py-4">
                             <div className="font-mono text-xs font-medium text-slate-700 dark:text-slate-200">
-                              {fmtYMD(r.date)}
+                              {fmtYMDHM(r.date)}
                             </div>
-                            <div className="text-[11px] text-slate-400">{getWeekday(r.date)}</div>
+                            <div className="text-[11px] text-slate-400">
+                              {getWeekday(r.date)} · {getHour(r.date)}
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold shadow-sm ${levelTone(r.level)}`}>
@@ -414,7 +505,7 @@ export default function RiskPredictionPage() {
                           <td className="px-6 py-4 w-40">
                             <div className="flex items-center justify-between text-xs font-semibold">
                               <span>{Math.round((Number(r.confidence ?? 0) || 0) * 100)}%</span>
-                              <span className="text-[10px] text-slate-400">accuracy</span>
+                              <span className="text-[10px] text-slate-400">confidence</span>
                             </div>
                             <ConfidenceBar level={r.level} confidence={r.confidence} />
                           </td>
