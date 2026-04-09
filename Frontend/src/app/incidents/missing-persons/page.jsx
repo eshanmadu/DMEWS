@@ -64,6 +64,32 @@ function canDeleteEntry(person) {
   );
 }
 
+function hasLetters(value) {
+  return /[A-Za-z]/.test(String(value || ""));
+}
+
+function isValidPersonName(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return false;
+  return /^[A-Za-z][A-Za-z\s.'-]*$/.test(normalized);
+}
+
+function isValidPhone(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return true;
+  return /^\+?[0-9][0-9\s\-()]{6,19}$/.test(normalized);
+}
+
+function sanitizeNameInput(value) {
+  return String(value || "").replace(/[^A-Za-z\s.'-]/g, "");
+}
+
+function sanitizeAgeInput(value) {
+  const digitsOnly = String(value || "").replace(/[^\d]/g, "");
+  if (!digitsOnly) return "";
+  return String(Math.min(120, Number(digitsOnly)));
+}
+
 export default function MissingPersonsPage() {
   const [missingPersons, setMissingPersons] = useState([]);
   const [foundPersons, setFoundPersons] = useState([]);
@@ -175,6 +201,7 @@ export default function MissingPersonsPage() {
   const validateMissing = () => {
     const errors = {};
     if (!missingForm.fullName.trim()) errors.fullName = "Full name is required";
+    else if (!isValidPersonName(missingForm.fullName)) errors.fullName = "Name can only contain letters";
     if (!missingForm.age) errors.age = "Age is required";
     else if (
       isNaN(Number(missingForm.age)) ||
@@ -186,6 +213,7 @@ export default function MissingPersonsPage() {
     if (!missingForm.dateMissing) errors.dateMissing = "Date missing is required";
     else if (new Date(missingForm.dateMissing) > new Date()) errors.dateMissing = "Date cannot be in the future";
     if (!missingForm.description.trim()) errors.description = "Description is required";
+    if (!isValidPhone(missingForm.contactInfo)) errors.contactInfo = "Additional contact must be a valid phone number";
     if (missingPhoto && !String(missingPhoto.type || "").toLowerCase().startsWith("image/")) {
       errors.photo = "Please choose an image file.";
     }
@@ -196,6 +224,10 @@ export default function MissingPersonsPage() {
   const handleAddMissing = async (e) => {
     e.preventDefault();
     setSubmitError(null);
+    if (!clientSignedIn) {
+      setSubmitError("Please log in before submitting a missing person report.");
+      return;
+    }
     if (!validateMissing()) return;
 
     setSubmittingMissing(true);
@@ -264,6 +296,8 @@ export default function MissingPersonsPage() {
 
   const validateFound = () => {
     const errors = {};
+    if (foundForm.name.trim() && !isValidPersonName(foundForm.name))
+      errors.name = "Name can only contain letters";
     if (!foundForm.locationFound.trim()) errors.locationFound = "Location found is required";
     if (!foundForm.dateFound) errors.dateFound = "Date found is required";
     else if (new Date(foundForm.dateFound) > new Date()) errors.dateFound = "Date cannot be in the future";
@@ -273,6 +307,7 @@ export default function MissingPersonsPage() {
       (isNaN(Number(foundForm.age)) || Number(foundForm.age) < 0 || Number(foundForm.age) > 120)
     )
       errors.age = "Age must be 0–120";
+    if (!isValidPhone(foundForm.contactInfo)) errors.contactInfo = "Additional contact must be a valid phone number";
     if (foundPhoto && !String(foundPhoto.type || "").toLowerCase().startsWith("image/")) {
       errors.photo = "Please choose an image file.";
     }
@@ -283,6 +318,10 @@ export default function MissingPersonsPage() {
   const handleAddFound = async (e) => {
     e.preventDefault();
     setSubmitError(null);
+    if (!clientSignedIn) {
+      setSubmitError("Please log in before submitting a found person report.");
+      return;
+    }
     if (!validateFound()) return;
 
     setSubmittingFound(true);
@@ -459,7 +498,9 @@ export default function MissingPersonsPage() {
               <input
                 type="text"
                 value={missingForm.fullName}
-                onChange={(e) => setMissingForm({ ...missingForm, fullName: e.target.value })}
+                onChange={(e) =>
+                  setMissingForm({ ...missingForm, fullName: sanitizeNameInput(e.target.value) })
+                }
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
               />
               {missingErrors.fullName && <p className="mt-1 text-xs text-rose-600">{missingErrors.fullName}</p>}
@@ -471,7 +512,9 @@ export default function MissingPersonsPage() {
                 <input
                   type="number"
                   value={missingForm.age}
-                  onChange={(e) => setMissingForm({ ...missingForm, age: e.target.value })}
+                  onChange={(e) => setMissingForm({ ...missingForm, age: sanitizeAgeInput(e.target.value) })}
+                  min={0}
+                  max={120}
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                 />
                 {missingErrors.age && <p className="mt-1 text-xs text-rose-600">{missingErrors.age}</p>}
@@ -510,6 +553,7 @@ export default function MissingPersonsPage() {
                 type="date"
                 value={missingForm.dateMissing}
                 onChange={(e) => setMissingForm({ ...missingForm, dateMissing: e.target.value })}
+                max={new Date().toISOString().slice(0, 10)}
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
               {missingErrors.dateMissing && <p className="mt-1 text-xs text-rose-600">{missingErrors.dateMissing}</p>}
@@ -549,32 +593,34 @@ export default function MissingPersonsPage() {
                     Add a mobile number in your profile so callers can reach you.
                   </p>
                 )}
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-slate-700">Additional contact (optional)</label>
+                  <input
+                    type="text"
+                    value={missingForm.contactInfo}
+                    onChange={(e) => setMissingForm({ ...missingForm, contactInfo: e.target.value })}
+                    placeholder="Extra phone number"
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  {missingErrors.contactInfo && (
+                    <p className="mt-1 text-xs text-rose-600">{missingErrors.contactInfo}</p>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
-                <p className="font-medium">Sign in to attach reporter name and phone</p>
+                <p className="font-medium">Sign in is required to submit a report</p>
                 <p className="mt-1 text-xs opacity-90">
-                  Reports submitted while signed in store your name and mobile from your account for the &quot;If you
-                  see&quot; section.
+                  Missing person reports require a logged-in account so your reporter details appear in the
+                  &quot;If you see&quot; section.
                 </p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700">Additional contact (optional)</label>
-              <input
-                type="text"
-                value={missingForm.contactInfo}
-                onChange={(e) => setMissingForm({ ...missingForm, contactInfo: e.target.value })}
-                placeholder="Extra phone, email, or notes"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-
-            <div>
               <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                 <ImageIcon className="h-4 w-4 text-slate-500" />
-                Photo (optional)
+                Photo (optional, max 10MB)
               </label>
               <input
                 ref={missingPhotoInputRef}
@@ -588,7 +634,7 @@ export default function MissingPersonsPage() {
 
             <button
               type="submit"
-              disabled={submittingMissing}
+              disabled={submittingMissing || !clientSignedIn}
               className="w-full rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 disabled:opacity-60"
             >
               {submittingMissing ? "Submitting…" : "Submit missing person report"}
@@ -610,10 +656,11 @@ export default function MissingPersonsPage() {
               <input
                 type="text"
                 value={foundForm.name}
-                onChange={(e) => setFoundForm({ ...foundForm, name: e.target.value })}
+                onChange={(e) => setFoundForm({ ...foundForm, name: sanitizeNameInput(e.target.value) })}
                 placeholder="Leave blank for unknown"
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
+              {foundErrors.name && <p className="mt-1 text-xs text-rose-600">{foundErrors.name}</p>}
             </div>
 
             <div>
@@ -638,7 +685,9 @@ export default function MissingPersonsPage() {
               <input
                 type="number"
                 value={foundForm.age}
-                onChange={(e) => setFoundForm({ ...foundForm, age: e.target.value })}
+                onChange={(e) => setFoundForm({ ...foundForm, age: sanitizeAgeInput(e.target.value) })}
+                min={0}
+                max={120}
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
               {foundErrors.age && <p className="mt-1 text-xs text-rose-600">{foundErrors.age}</p>}
@@ -663,6 +712,7 @@ export default function MissingPersonsPage() {
                 type="date"
                 value={foundForm.dateFound}
                 onChange={(e) => setFoundForm({ ...foundForm, dateFound: e.target.value })}
+                max={new Date().toISOString().slice(0, 10)}
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
               {foundErrors.dateFound && <p className="mt-1 text-xs text-rose-600">{foundErrors.dateFound}</p>}
@@ -702,31 +752,34 @@ export default function MissingPersonsPage() {
                     Add a mobile number in your profile so callers can reach you.
                   </p>
                 )}
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-slate-700">Additional contact (optional)</label>
+                  <input
+                    type="text"
+                    value={foundForm.contactInfo}
+                    onChange={(e) => setFoundForm({ ...foundForm, contactInfo: e.target.value })}
+                    placeholder="Extra phone number"
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  {foundErrors.contactInfo && (
+                    <p className="mt-1 text-xs text-rose-600">{foundErrors.contactInfo}</p>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
-                <p className="font-medium">Sign in to attach reporter name and phone</p>
+                <p className="font-medium">Sign in is required to submit a report</p>
                 <p className="mt-1 text-xs opacity-90">
-                  Signed-in reports store your name and mobile from your account for the &quot;If you see&quot; section.
+                  Found person reports require a logged-in account so your reporter details appear in the
+                  &quot;If you see&quot; section.
                 </p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700">Additional contact (optional)</label>
-              <input
-                type="text"
-                value={foundForm.contactInfo}
-                onChange={(e) => setFoundForm({ ...foundForm, contactInfo: e.target.value })}
-                placeholder="Extra phone, email, or notes"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-
-            <div>
               <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                 <ImageIcon className="h-4 w-4 text-slate-500" />
-                Photo (optional)
+                Photo (optional, max 10MB)
               </label>
               <input
                 ref={foundPhotoInputRef}
@@ -740,7 +793,7 @@ export default function MissingPersonsPage() {
 
             <button
               type="submit"
-              disabled={submittingFound}
+              disabled={submittingFound || !clientSignedIn}
               className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
             >
               {submittingFound ? "Submitting…" : "Submit found person report"}
@@ -793,7 +846,7 @@ export default function MissingPersonsPage() {
                             {formatDate(person.dateMissing)}
                           </p>
                           <p className="text-slate-700">{person.description}</p>
-                          {person.reporterName || person.ifYouSeePhone ? (
+                          {person.reporterName || person.ifYouSeePhone || person.contactInfo ? (
                             <div className="mt-2 rounded-md border border-sky-200 bg-sky-50/90 px-3 py-2">
                               <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-900">
                                 If you see
@@ -810,12 +863,13 @@ export default function MissingPersonsPage() {
                                   Call {person.ifYouSeePhone}
                                 </p>
                               ) : null}
+                              {person.contactInfo ? (
+                                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-700">
+                                  <Phone className="h-3.5 w-3.5 shrink-0 text-sky-600" />
+                                  Additional: {person.contactInfo}
+                                </p>
+                              ) : null}
                             </div>
-                          ) : null}
-                          {person.contactInfo ? (
-                            <p className="flex items-center gap-1 text-xs text-slate-500">
-                              <Phone className="h-3 w-3 shrink-0" /> Also: {person.contactInfo}
-                            </p>
                           ) : null}
                         </div>
                       </div>
@@ -879,7 +933,7 @@ export default function MissingPersonsPage() {
                             <Calendar className="h-3.5 w-3.5 shrink-0" /> Date found: {formatDate(person.dateFound)}
                           </p>
                           <p className="text-slate-700">{person.description}</p>
-                          {person.reporterName || person.ifYouSeePhone ? (
+                          {person.reporterName || person.ifYouSeePhone || person.contactInfo ? (
                             <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/90 px-3 py-2">
                               <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-900">
                                 If you see
@@ -896,12 +950,13 @@ export default function MissingPersonsPage() {
                                   Call {person.ifYouSeePhone}
                                 </p>
                               ) : null}
+                              {person.contactInfo ? (
+                                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-700">
+                                  <Phone className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                                  Additional: {person.contactInfo}
+                                </p>
+                              ) : null}
                             </div>
-                          ) : null}
-                          {person.contactInfo ? (
-                            <p className="flex items-center gap-1 text-xs text-slate-500">
-                              <Phone className="h-3 w-3 shrink-0" /> Also: {person.contactInfo}
-                            </p>
                           ) : null}
                         </div>
                       </div>
