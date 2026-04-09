@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { PublicAlertsMap } from "@/components/PublicAlertsMap";
 import Loader from "@/components/Loader";
 import {
   AlertTriangle,
@@ -283,6 +284,12 @@ export default function AlertsPage() {
           </select>
         </div>
       </section>
+
+            <PublicAlertsMap
+        alerts={activeAlerts}
+        selectedDistrict={districtFilter}
+        onSelectDistrict={setDistrictFilter}
+      />
 
       <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-3">
