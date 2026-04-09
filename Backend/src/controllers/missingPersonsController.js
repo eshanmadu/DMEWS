@@ -8,6 +8,10 @@ const {
   isCloudinaryConfigured,
   destroyPublicId,
 } = require("../services/cloudinaryUpload");
+const {
+  isSendGridConfigured,
+  sendPossibleMatchEmail,
+} = require("../services/sendGridMailer");
 
 function todayYMD() {
   return new Date().toISOString().slice(0, 10);
@@ -302,6 +306,81 @@ function calculateScoreBreakdown(missing, found) {
 
 function calculateScore(missing, found) {
   return calculateScoreBreakdown(missing, found).total;
+}
+
+function scorePercent(match) {
+  const total = Number(match?.matchScore ?? 0);
+  const maxTotal = Number(match?.scoreBreakdown?.maxTotal ?? 120);
+  if (!Number.isFinite(total) || !Number.isFinite(maxTotal) || maxTotal <= 0) return 0;
+  return Math.round((total / maxTotal) * 100);
+}
+
+function getFrontendBaseUrl() {
+  return (
+    process.env.FRONTEND_URL ||
+    process.env.CLIENT_URL ||
+    process.env.APP_URL ||
+    "http://localhost:3000"
+  );
+}
+
+async function notifyMissingReportersForFoundMatch(foundDoc, missingMatches) {
+  if (!Array.isArray(missingMatches) || missingMatches.length === 0) return;
+  if (!isSendGridConfigured()) {
+    console.warn(
+      "SendGrid is not configured. Set SENDGRID_API_KEY and SENDGRID_TEMPLATE_ID to enable match emails."
+    );
+    return;
+  }
+
+  const threshold = 60;
+  const candidates = missingMatches.filter((m) => scorePercent(m) >= threshold);
+  if (candidates.length === 0) return;
+
+  const userIds = Array.from(
+    new Set(
+      candidates
+        .map((m) => m.submittedByUserId)
+        .filter((id) => id && mongoose.Types.ObjectId.isValid(String(id)))
+        .map((id) => String(id))
+    )
+  );
+  if (userIds.length === 0) return;
+
+  const users = await User.find({ _id: { $in: userIds } })
+    .select("_id name email")
+    .lean()
+    .exec();
+  const userById = new Map(users.map((u) => [String(u._id), u]));
+
+  const detailsLink = `${getFrontendBaseUrl().replace(/\/+$/, "")}/incidents/missing-persons`;
+  await Promise.all(
+    candidates.map(async (match) => {
+      const uid = String(match.submittedByUserId || "");
+      const u = userById.get(uid);
+      const to = String(u?.email || "").trim();
+      if (!to) return;
+      const pct = scorePercent(match);
+      try {
+        await sendPossibleMatchEmail({
+          to,
+          name: String(u?.name || match.reporterName || "there").trim(),
+          matchScore: pct,
+          location: foundDoc?.locationFound || "",
+          date: foundDoc?.dateFound || "",
+          image: foundDoc?.photoUrl || "",
+          link: detailsLink,
+        });
+      } catch (mailErr) {
+        console.error("Failed to send possible match email", {
+          to,
+          matchId: String(match?._id || ""),
+          err: mailErr?.message || mailErr,
+          sendgrid: mailErr?.raw || undefined,
+        });
+      }
+    })
+  );
 }
 
 async function findMissingMatchesForFound(foundDoc) {
@@ -736,6 +815,7 @@ async function createFoundReport(req, res) {
     let missingMatches = [];
     try {
       missingMatches = await findMissingMatchesForFound(doc);
+      await notifyMissingReportersForFoundMatch(doc.toObject(), missingMatches);
     } catch (matchErr) {
       console.error("Found-person match lookup error", matchErr);
     }
