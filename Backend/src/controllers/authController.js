@@ -3,10 +3,21 @@ const jwt = require("jsonwebtoken");
 
 const { connectDb } = require("../db");
 const { User } = require("../models/User");
+const { PasswordResetOtp } = require("../models/PasswordResetOtp");
 const { LoginLog } = require("../models/LoginLog");
 const { getVolunteerStatusForUser } = require("../services/volunteerStatus");
+const {
+  isSendGridConfigured,
+  sendPasswordResetOtpEmail,
+} = require("../services/sendGridMailer");
 
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-production";
+
+const PASSWORD_RESET_OTP_TTL_MS = 15 * 60 * 1000;
+
+function randomSixDigitOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
 
 function emailIsAdmin(email) {
   const raw = process.env.ADMIN_EMAILS || "";
@@ -273,6 +284,128 @@ async function updateProfile(req, res) {
   }
 }
 
+async function forgotPassword(req, res) {
+  try {
+    const { email: rawEmail } = req.body || {};
+    const email = String(rawEmail || "").toLowerCase().trim();
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required." });
+    }
+
+    await connectDb();
+
+    const genericMessage =
+      "If an account exists for that email, we sent a verification code.";
+
+    if (!isSendGridConfigured()) {
+      return res.status(503).json({
+        message:
+          "Password reset email is not available. Configure SMTP in the server environment.",
+      });
+    }
+
+    const user = await User.findOne({ email }).exec();
+    if (!user) {
+      return res.json({ message: genericMessage });
+    }
+
+    await PasswordResetOtp.deleteMany({ email }).exec();
+
+    const otp = randomSixDigitOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_OTP_TTL_MS);
+
+    await PasswordResetOtp.create({ email, otpHash, expiresAt });
+
+    const sendResult = await sendPasswordResetOtpEmail({
+      to: user.email,
+      name: user.name || "",
+      otp,
+    });
+
+    if (sendResult.skipped) {
+      await PasswordResetOtp.deleteMany({ email }).exec();
+      return res.status(503).json({
+        message: "Could not send email. Try again later.",
+      });
+    }
+
+    return res.json({ message: genericMessage });
+  } catch (error) {
+    console.error("Forgot password error", error);
+    return res.status(500).json({ message: "Failed to process request." });
+  }
+}
+
+async function resetPasswordWithOtp(req, res) {
+  try {
+    const { email: rawEmail, otp, password, confirmPassword } = req.body || {};
+    const email = String(rawEmail || "").toLowerCase().trim();
+    const code = String(otp || "").replace(/\D/g, "");
+
+    if (!email || !password || confirmPassword === undefined) {
+      return res.status(400).json({
+        message:
+          "Email, verification code, new password, and confirmation are required.",
+      });
+    }
+
+    if (code.length !== 6) {
+      return res
+        .status(400)
+        .json({ message: "Verification code must be 6 digits." });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: "Passwords do not match." });
+    }
+
+    if (String(password).length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 6 characters." });
+    }
+
+    await connectDb();
+
+    const record = await PasswordResetOtp.findOne({
+      email,
+      expiresAt: { $gt: new Date() },
+    })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    if (!record) {
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired verification code." });
+    }
+
+    const match = await bcrypt.compare(code, record.otpHash);
+    if (!match) {
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired verification code." });
+    }
+
+    const user = await User.findOne({ email }).exec();
+    if (!user) {
+      await PasswordResetOtp.deleteMany({ email }).exec();
+      return res.status(400).json({ message: "Invalid or expired verification code." });
+    }
+
+    user.passwordHash = await bcrypt.hash(password, 10);
+    await user.save();
+    await PasswordResetOtp.deleteMany({ email }).exec();
+
+    return res.json({ message: "Password updated. You can log in with your new password." });
+  } catch (error) {
+    console.error("Reset password with OTP error", error);
+    return res.status(500).json({ message: "Failed to reset password." });
+  }
+}
+
 async function changePassword(req, res) {
   try {
     if (req.isDevAdmin || req.userId === "dev-admin-session") {
@@ -369,6 +502,8 @@ function devAdminToken(req, res) {
 module.exports = {
   signup,
   login,
+  forgotPassword,
+  resetPasswordWithOtp,
   me,
   updateProfile,
   changePassword,

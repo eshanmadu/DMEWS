@@ -3,6 +3,8 @@ const router = require("express").Router();
 const {
   signup,
   login,
+  forgotPassword,
+  resetPasswordWithOtp,
   me,
   updateProfile,
   changePassword,
@@ -12,6 +14,8 @@ const { authMiddleware } = require("../middleware/authMiddleware");
 
 router.post("/signup", signup);
 router.post("/login", login);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password-otp", resetPasswordWithOtp);
 router.post("/dev-admin-token", devAdminToken);
 
 router.get("/me", authMiddleware, me);
