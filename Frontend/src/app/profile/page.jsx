@@ -22,6 +22,7 @@ import {
   BadgeCheck,
   FileText,
   Users,
+  Trash2,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -86,6 +87,11 @@ export default function ProfilePage() {
   const [volunteerErr, setVolunteerErr] = useState(null);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false); // NEW
+
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
+  const [deleteAccountBusy, setDeleteAccountBusy] = useState(false);
+  const [deleteAccountErr, setDeleteAccountErr] = useState(null);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -262,6 +268,40 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleDeleteAccount() {
+    const token = localStorage.getItem("dmews_token");
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+    setDeleteAccountErr(null);
+    setDeleteAccountBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/account`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ currentPassword: deleteAccountPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteAccountErr(data?.message || "Could not delete account.");
+        return;
+      }
+      localStorage.removeItem("dmews_token");
+      localStorage.removeItem("dmews_user");
+      localStorage.removeItem("dmews_user_district");
+      window.dispatchEvent(new Event("dmews-auth-changed"));
+      router.replace("/login?deleted=1");
+    } catch {
+      setDeleteAccountErr("Network error.");
+    } finally {
+      setDeleteAccountBusy(false);
+    }
+  }
+
   if (!mounted || profileLoading) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8">
@@ -357,7 +397,7 @@ export default function ProfilePage() {
               </div>
               <div>
                 <p className="text-sm font-semibold">My Incidents</p>
-                <p className="text-xs text-sky-100">Reports you've submitted</p>
+                <p className="text-xs text-sky-100">Incidents &amp; missing / found persons</p>
               </div>
             </Link>
 
@@ -489,6 +529,35 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {profile?.id && profile.id !== "dev-admin-session" && (
+        <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50/50 p-6 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-rose-900">
+                <Trash2 className="h-4 w-4" />
+                Delete account
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-rose-800/90">
+                Permanently remove your DMEWS account. Your incident reports, SOS alerts, missing and
+                found person reports, volunteer application, mission sign-ups, and sign-in history will
+                be deleted from our database. This cannot be undone.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteAccountErr(null);
+                setDeleteAccountPassword("");
+                setShowDeleteAccount(true);
+              }}
+              className="shrink-0 rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-800 shadow-sm transition hover:bg-rose-50"
+            >
+              Delete my account…
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Avatar Picker Modal */}
       {avatarPickerOpen && (
         <div
@@ -527,6 +596,71 @@ export default function ProfilePage() {
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteAccount && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => e.target === e.currentTarget && !deleteAccountBusy && setShowDeleteAccount(false)}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <h3 className="text-lg font-semibold text-slate-900">Delete account permanently?</h3>
+              <button
+                type="button"
+                onClick={() => !deleteAccountBusy && setShowDeleteAccount(false)}
+                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-500"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <p className="text-sm text-slate-600">
+                Enter your current password to confirm. All content you submitted through this account
+                will be removed.
+              </p>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Current password
+                </label>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={deleteAccountPassword}
+                  onChange={(e) => setDeleteAccountPassword(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                  placeholder="Your password"
+                />
+              </div>
+              {deleteAccountErr && (
+                <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {deleteAccountErr}
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={deleteAccountBusy}
+                  onClick={() => setShowDeleteAccount(false)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deleteAccountBusy || !deleteAccountPassword.trim()}
+                  onClick={handleDeleteAccount}
+                  className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {deleteAccountBusy ? "Deleting…" : "Delete forever"}
+                </button>
               </div>
             </div>
           </div>

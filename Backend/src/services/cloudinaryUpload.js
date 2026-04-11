@@ -69,9 +69,24 @@ async function destroyPublicId(publicId) {
   }
 }
 
+/**
+ * Destroy uploaded incident (or other) media — images vs video use different resource_type.
+ */
+async function destroyMediaPublicId(publicId, resourceType) {
+  if (!publicId || !isCloudinaryConfigured()) return;
+  ensureConfigured();
+  const rt = String(resourceType || "").toLowerCase() === "video" ? "video" : "image";
+  try {
+    await cloudinary.uploader.destroy(String(publicId), { resource_type: rt });
+  } catch (e) {
+    console.warn("Cloudinary destroy failed", publicId, rt, e?.message || e);
+  }
+}
+
 module.exports = {
   isCloudinaryConfigured,
   uploadBuffer,
   destroyPublicId,
+  destroyMediaPublicId,
 };
 

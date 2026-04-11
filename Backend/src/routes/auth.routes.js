@@ -8,6 +8,7 @@ const {
   me,
   updateProfile,
   changePassword,
+  deleteAccount,
   devAdminToken,
 } = require("../controllers/authController");
 const { authMiddleware } = require("../middleware/authMiddleware");
@@ -21,6 +22,7 @@ router.post("/dev-admin-token", devAdminToken);
 router.get("/me", authMiddleware, me);
 router.patch("/profile", authMiddleware, updateProfile);
 router.post("/change-password", authMiddleware, changePassword);
+router.delete("/account", authMiddleware, deleteAccount);
 
 module.exports = router;
 

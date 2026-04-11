@@ -4,6 +4,7 @@ const { authMiddleware, optionalAuthMiddleware } = require("../middleware/authMi
 const { adminMiddleware } = require("../middleware/adminMiddleware");
 const {
   listPersonReports,
+  listMyPersonReports,
   adminPersonOverview,
   createMissingReport,
   createFoundReport,
@@ -22,6 +23,7 @@ const upload = multer({
   },
 });
 
+router.get("/my", authMiddleware, listMyPersonReports);
 router.get("/", listPersonReports);
 router.get("/admin/overview", adminMiddleware, adminPersonOverview);
 router.post("/missing", optionalAuthMiddleware, upload.single("photo"), createMissingReport);

@@ -55,6 +55,42 @@ function getFillForRisk(level) {
   return "#22c55e"; // safe / default
 }
 
+/** Keep in sync with getFillForRisk — used for the public legend under the map */
+const RISK_LEGEND_ITEMS = [
+  { key: "safe", label: "Safe", hint: "normal conditions", color: "#22c55e" },
+  { key: "low", label: "Low", hint: "stay informed", color: "#eab308" },
+  { key: "medium", label: "Medium", hint: "elevated risk", color: "#ea580c" },
+  { key: "high", label: "High", hint: "severe — take precautions", color: "#dc2626" },
+];
+
+function RiskMapLegend() {
+  return (
+    <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        District risk colors
+      </p>
+      <ul className="flex flex-wrap gap-x-4 gap-y-2">
+        {RISK_LEGEND_ITEMS.map((item) => (
+          <li key={item.key} className="flex items-center gap-2 text-xs text-slate-700">
+            <span
+              className="h-3.5 w-3.5 shrink-0 rounded-sm border border-slate-300/80 shadow-sm ring-1 ring-black/5"
+              style={{ backgroundColor: item.color }}
+              aria-hidden
+            />
+            <span>
+              <span className="font-semibold text-slate-800">{item.label}</span>
+              <span className="text-slate-500"> — {item.hint}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-[11px] leading-snug text-slate-500">
+        Districts without a published level use the safe (green) color. Select a district on the map for details.
+      </p>
+    </div>
+  );
+}
+
 export function RiskMap() {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -226,19 +262,22 @@ export function RiskMap() {
   }, []);
 
   return (
-    <div className="relative h-[320px] w-full overflow-hidden rounded-xl bg-slate-800">
-      <div ref={containerRef} className="h-full w-full" />
-      {loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-900/70 text-sky-50">
-          <Loader size="md" />
-          <span className="text-xs">Loading risk map…</span>
-        </div>
-      )}
-      {error && !loading && (
-        <div className="absolute inset-x-4 bottom-4 rounded-lg bg-red-900/80 px-3 py-2 text-center text-xs text-red-50">
-          {error}
-        </div>
-      )}
+    <div className="w-full">
+      <div className="relative h-[320px] w-full overflow-hidden rounded-xl bg-slate-800">
+        <div ref={containerRef} className="h-full w-full" />
+        {loading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-900/70 text-sky-50">
+            <Loader size="md" />
+            <span className="text-xs">Loading risk map…</span>
+          </div>
+        )}
+        {error && !loading && (
+          <div className="absolute inset-x-4 bottom-4 rounded-lg bg-red-900/80 px-3 py-2 text-center text-xs text-red-50">
+            {error}
+          </div>
+        )}
+      </div>
+      <RiskMapLegend />
     </div>
   );
 }

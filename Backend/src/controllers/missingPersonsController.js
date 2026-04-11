@@ -586,6 +586,33 @@ async function listPersonReports(_req, res) {
   }
 }
 
+/** Authenticated user's missing & found reports (submitted while signed in). */
+async function listMyPersonReports(req, res) {
+  try {
+    if (req.isDevAdmin || req.userId === "dev-admin-session") {
+      return res.json({ missing: [], found: [] });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.userId)) {
+      return res.json({ missing: [], found: [] });
+    }
+
+    await connectDb();
+    const userOid = new mongoose.Types.ObjectId(req.userId);
+    const [missing, found] = await Promise.all([
+      MissingPerson.find({ submittedByUserId: userOid }).sort({ createdAt: -1 }).lean().exec(),
+      FoundPerson.find({ submittedByUserId: userOid }).sort({ createdAt: -1 }).lean().exec(),
+    ]);
+
+    return res.json({
+      missing: missing.map(normalizeMissing),
+      found: found.map(normalizeFound),
+    });
+  } catch (error) {
+    console.error("List my person reports error", error);
+    return res.status(500).json({ message: "Failed to load your person reports." });
+  }
+}
+
 async function adminPersonOverview(_req, res) {
   try {
     await connectDb();
@@ -906,6 +933,7 @@ async function deleteFoundReport(req, res) {
 
 module.exports = {
   listPersonReports,
+  listMyPersonReports,
   adminPersonOverview,
   createMissingReport,
   createFoundReport,

@@ -1,11 +1,19 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 
 const { connectDb } = require("../db");
 const { User } = require("../models/User");
 const { PasswordResetOtp } = require("../models/PasswordResetOtp");
 const { LoginLog } = require("../models/LoginLog");
+const { Volunteer } = require("../models/Volunteer");
+const { MissionJoin } = require("../models/MissionJoin");
+const { IncidentReport } = require("../models/IncidentReport");
+const { SosAlert } = require("../models/SosAlert");
+const { MissingPerson } = require("../models/MissingPerson");
+const { FoundPerson } = require("../models/FoundPerson");
 const { getVolunteerStatusForUser } = require("../services/volunteerStatus");
+const { destroyPublicId, destroyMediaPublicId } = require("../services/cloudinaryUpload");
 const {
   isSendGridConfigured,
   sendPasswordResetOtpEmail,
@@ -406,6 +414,93 @@ async function resetPasswordWithOtp(req, res) {
   }
 }
 
+/**
+ * Permanently delete the authenticated user, all DB rows they own, and best-effort Cloudinary assets.
+ */
+async function deleteAccount(req, res) {
+  try {
+    if (req.isDevAdmin || req.userId === "dev-admin-session") {
+      return res.status(403).json({
+        message: "The dev admin shortcut account cannot be deleted this way.",
+      });
+    }
+
+    const { currentPassword } = req.body || {};
+    if (!currentPassword) {
+      return res.status(400).json({
+        message: "Current password is required to delete your account.",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(req.userId)) {
+      return res.status(400).json({ message: "Invalid session." });
+    }
+
+    await connectDb();
+
+    const user = await User.findById(req.userId).exec();
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const valid = await bcrypt.compare(String(currentPassword), user.passwordHash);
+    if (!valid) {
+      return res.status(401).json({ message: "Current password is incorrect." });
+    }
+
+    const uid = user._id;
+    const uidStr = String(uid);
+    const email = user.email;
+
+    const incidents = await IncidentReport.find({ userId: uid }).lean().exec();
+    for (const inc of incidents) {
+      const media = Array.isArray(inc.media) ? inc.media : [];
+      for (const m of media) {
+        if (m?.publicId) {
+          await destroyMediaPublicId(m.publicId, m.resourceType);
+        }
+      }
+    }
+
+    const [missingDocs, foundDocs] = await Promise.all([
+      MissingPerson.find({ submittedByUserId: uid }).select("photoPublicId").lean().exec(),
+      FoundPerson.find({ submittedByUserId: uid }).select("photoPublicId").lean().exec(),
+    ]);
+    for (const d of [...missingDocs, ...foundDocs]) {
+      if (d.photoPublicId) {
+        await destroyPublicId(d.photoPublicId);
+      }
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      await LoginLog.deleteMany({ userId: uid }).session(session);
+      await Volunteer.deleteMany({ userId: uid }).session(session);
+      await MissionJoin.deleteMany({ userId: uidStr }).session(session);
+      await IncidentReport.deleteMany({ userId: uid }).session(session);
+      await SosAlert.deleteMany({ userId: uid }).session(session);
+      await MissingPerson.deleteMany({ submittedByUserId: uid }).session(session);
+      await FoundPerson.deleteMany({ submittedByUserId: uid }).session(session);
+      await PasswordResetOtp.deleteMany({ email }).session(session);
+      await User.deleteOne({ _id: uid }).session(session);
+      await session.commitTransaction();
+    } catch (e) {
+      await session.abortTransaction();
+      throw e;
+    } finally {
+      session.endSession();
+    }
+
+    return res.json({
+      message: "Your account and all data you added to DMEWS have been permanently removed.",
+    });
+  } catch (error) {
+    console.error("Delete account error", error);
+    return res.status(500).json({ message: "Failed to delete account." });
+  }
+}
+
 async function changePassword(req, res) {
   try {
     if (req.isDevAdmin || req.userId === "dev-admin-session") {
@@ -507,6 +602,7 @@ module.exports = {
   me,
   updateProfile,
   changePassword,
+  deleteAccount,
   devAdminToken,
 };
 

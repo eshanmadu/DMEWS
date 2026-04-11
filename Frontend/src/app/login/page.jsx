@@ -296,6 +296,12 @@ function LoginPageInner() {
               />
             </div>
 
+            {searchParams.get("deleted") === "1" && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                Your account was deleted and all data you had added was removed.
+              </div>
+            )}
+
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                 {error}
