@@ -45,7 +45,7 @@ const DONTS = [
   "Do not leave children or vulnerable people unattended.",
 ];
 
-// District to Province mapping for Sri Lanka
+// District to Province mapping
 const districtToProvince = {
   Ampara: "Eastern",
   Anuradhapura: "North Central",
@@ -74,7 +74,7 @@ const districtToProvince = {
   Vavuniya: "Northern",
 };
 
-// District contacts (original list)
+// District contacts
 const DISTRICT_CONTACTS = [
   { district: "Ampara", role: "Deputy Director", phones: ["+94 632 222 218", "+94 773 957 883"] },
   { district: "Anuradhapura", role: "Asst. Director", phones: ["+94 252 234 817", "+94 773 957 881"] },
@@ -103,7 +103,6 @@ const DISTRICT_CONTACTS = [
   { district: "Vavuniya", role: "Asst. Director", phones: ["+94 242 225 553", "+94 773 957 892"] },
 ];
 
-// Helper: group districts by province
 const groupByProvince = (contacts) => {
   const groups = {};
   contacts.forEach((contact) => {
@@ -112,7 +111,6 @@ const groupByProvince = (contacts) => {
     if (!groups[province]) groups[province] = [];
     groups[province].push(contact);
   });
-  // Sort districts within each province alphabetically
   Object.keys(groups).forEach((province) => {
     groups[province].sort((a, b) => a.district.localeCompare(b.district));
   });
@@ -126,6 +124,9 @@ export default function SheltersPage() {
   const [userDistrict, setUserDistrict] = useState(null);
   const [selectedDistrict, setSelectedDistrict] = useState("");
   const [districts, setDistricts] = useState([]);
+
+  // Shelters accordion state
+  const [expandedShelterDistricts, setExpandedShelterDistricts] = useState({});
 
   // Contacts state
   const [contactsSearchQuery, setContactsSearchQuery] = useState("");
@@ -143,7 +144,7 @@ export default function SheltersPage() {
     setUserDistrict(district || null);
   }, []);
 
-  // Fetch shelters (errors are scoped to the shelters section; contacts stay available)
+  // Fetch shelters
   useEffect(() => {
     setSheltersError(null);
     setSheltersLoading(true);
@@ -153,9 +154,7 @@ export default function SheltersPage() {
         if (!res.ok) {
           setShelters([]);
           setDistricts([]);
-          setSheltersError(
-            data?.message || `Could not load shelters (HTTP ${res.status}). Try again later.`
-          );
+          setSheltersError(data?.message || `Could not load shelters (HTTP ${res.status})`);
           return;
         }
         if (Array.isArray(data)) {
@@ -165,16 +164,23 @@ export default function SheltersPage() {
         } else {
           setShelters([]);
           setDistricts([]);
-          setSheltersError(data?.message || "Shelter list was not in the expected format.");
+          setSheltersError("Shelter list was not in the expected format.");
         }
       })
       .catch(() => {
         setShelters([]);
         setDistricts([]);
-        setSheltersError("Network error while loading shelters. Check your connection and try again.");
+        setSheltersError("Network error while loading shelters.");
       })
       .finally(() => setSheltersLoading(false));
   }, []);
+
+  // Auto-expand user's district in shelters when data loads
+  useEffect(() => {
+    if (userDistrict && shelters.length > 0 && !expandedShelterDistricts[userDistrict]) {
+      setExpandedShelterDistricts((prev) => ({ ...prev, [userDistrict]: true }));
+    }
+  }, [userDistrict, shelters, expandedShelterDistricts]);
 
   // Filter shelters by selected district
   const filteredByDistrict = selectedDistrict
@@ -190,15 +196,9 @@ export default function SheltersPage() {
     return 0;
   });
 
-  const userDistrictShelters = userDistrict
-    ? sortedShelters.filter(s => s.district === userDistrict)
-    : [];
-  const otherShelters = userDistrict
-    ? sortedShelters.filter(s => s.district !== userDistrict)
-    : sortedShelters;
-
   const handleResetFilter = () => setSelectedDistrict("");
 
+  // Contacts filtering & grouping
   const filteredContacts = useMemo(() => {
     let fc = DISTRICT_CONTACTS;
     if (showOnlyMyDistrict && userDistrict) {
@@ -214,17 +214,10 @@ export default function SheltersPage() {
     return fc;
   }, [showOnlyMyDistrict, userDistrict, contactsSearchQuery]);
 
-  const groupedContacts = useMemo(
-    () => groupByProvince(filteredContacts),
-    [filteredContacts]
-  );
+  const groupedContacts = useMemo(() => groupByProvince(filteredContacts), [filteredContacts]);
+  const sortedProvinces = useMemo(() => Object.keys(groupedContacts).sort(), [groupedContacts]);
 
-  const sortedProvinces = useMemo(
-    () => Object.keys(groupedContacts).sort(),
-    [groupedContacts]
-  );
-
-  // Auto-expand provinces when search is active or my district filter is on
+  // Auto-expand provinces when searching
   useEffect(() => {
     if (contactsSearchQuery || showOnlyMyDistrict) {
       const allExpanded = {};
@@ -238,13 +231,32 @@ export default function SheltersPage() {
   }, [contactsSearchQuery, showOnlyMyDistrict, sortedProvinces]);
 
   const toggleProvince = (province) => {
-    setExpandedProvinces((prev) => ({
-      ...prev,
-      [province]: !prev[province],
-    }));
+    setExpandedProvinces((prev) => ({ ...prev, [province]: !prev[province] }));
+  };
+
+  const toggleShelterDistrict = (district) => {
+    setExpandedShelterDistricts((prev) => ({ ...prev, [district]: !prev[district] }));
   };
 
   const cleanPhone = (phone) => phone.replace(/\s/g, "").replace(/\+/g, "");
+
+  // Group shelters by district for accordion display
+  const sheltersByDistrict = useMemo(() => {
+    const groups = {};
+    sortedShelters.forEach((shelter) => {
+      const dist = shelter.district || "Unknown";
+      if (!groups[dist]) groups[dist] = [];
+      groups[dist].push(shelter);
+    });
+    // Sort districts: user's first, then alphabetically
+    const districtNames = Object.keys(groups);
+    districtNames.sort((a, b) => {
+      if (userDistrict && a === userDistrict) return -1;
+      if (userDistrict && b === userDistrict) return 1;
+      return a.localeCompare(b);
+    });
+    return { groups, districtNames };
+  }, [sortedShelters, userDistrict]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -269,7 +281,7 @@ export default function SheltersPage() {
       </div>
 
       <div className="space-y-12">
-        {/* ========== SHELTERS ========== */}
+        {/* ========== SHELTERS SECTION – ACCORDION PER DISTRICT ========== */}
         <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-sky-50/40 px-5 py-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -283,10 +295,7 @@ export default function SheltersPage() {
 
           <div className="p-5">
             {sheltersError && (
-              <div
-                className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-                role="alert"
-              >
+              <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
                 <div>
                   <p className="font-semibold text-amber-900">Could not load shelters</p>
@@ -305,314 +314,396 @@ export default function SheltersPage() {
               </div>
             ) : (
               <>
-            {shelters.length > 0 && (
-              <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm border border-slate-200">
-                <div className="flex items-center gap-2">
-                  <Filter className="h-5 w-5 text-slate-500" />
-                  <span className="text-sm font-medium text-slate-700">Filter by district:</span>
-                </div>
-                <div className="flex flex-1 flex-wrap items-center gap-3">
-                  <select
-                    value={selectedDistrict}
-                    onChange={(e) => setSelectedDistrict(e.target.value)}
-                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  >
-                    <option value="">All districts</option>
-                    {districts.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedDistrict && (
-                    <button
-                      onClick={handleResetFilter}
-                      className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-100"
-                    >
-                      <X className="h-4 w-4" />
-                      Clear
-                    </button>
-                  )}
-                </div>
-                {userDistrict && (
-                  <div className="text-xs text-slate-600 bg-indigo-50 px-3 py-1.5 rounded-full font-medium">
-                    📌 Your district: {userDistrict}
+                {shelters.length > 0 && (
+                  <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm border border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <Filter className="h-5 w-5 text-slate-500" />
+                      <span className="text-sm font-medium text-slate-700">Filter by district:</span>
+                    </div>
+                    <div className="flex flex-1 flex-wrap items-center gap-3">
+                      <select
+                        value={selectedDistrict}
+                        onChange={(e) => setSelectedDistrict(e.target.value)}
+                        className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      >
+                        <option value="">All districts</option>
+                        {districts.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                      {selectedDistrict && (
+                        <button
+                          onClick={handleResetFilter}
+                          className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-100"
+                        >
+                          <X className="h-4 w-4" />
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    {userDistrict && (
+                      <div className="text-xs text-slate-600 bg-indigo-50 px-3 py-1.5 rounded-full font-medium">
+                        📌 Your district: {userDistrict}
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
 
-            {sortedShelters.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
-                <Building2 className="mb-4 h-12 w-12 text-slate-300" />
-                <p className="text-slate-600">
-                  {selectedDistrict
-                    ? `No shelters found in ${selectedDistrict}. Try a different district.`
-                    : "No shelters listed yet. Check back later or contact your local disaster management centre."}
-                </p>
-                <p className="mt-2 text-sm font-medium text-slate-500">Emergency: 117</p>
-              </div>
-            ) : (
-              <>
-                {userDistrict && userDistrictShelters.length > 0 && (
-                  <>
-                    <div className="mb-3 flex items-center gap-2">
-                      <div className="rounded-full bg-indigo-100 p-2">
-                        <Navigation className="h-5 w-5 text-indigo-700" />
-                      </div>
-                      <h2 className="text-xl font-semibold tracking-tight text-slate-800">
-                        Shelters in your district <span className="text-indigo-600">({userDistrict})</span>
-                      </h2>
-                    </div>
-                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                      {userDistrictShelters.map((s) => (
-                        <ShelterCard key={s.id} shelter={s} highlight />
-                      ))}
-                    </div>
-                  </>
-                )}
+                {sortedShelters.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
+                    <Building2 className="mb-4 h-12 w-12 text-slate-300" />
+                    <p className="text-slate-600">
+                      {selectedDistrict
+                        ? `No shelters found in ${selectedDistrict}. Try a different district.`
+                        : "No shelters listed yet. Check back later or contact your local disaster management centre."}
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-slate-500">Emergency: 117</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {sheltersByDistrict.districtNames.map((district) => {
+                      const sheltersList = sheltersByDistrict.groups[district];
+                      const isUserDistrict = userDistrict === district;
+                      const isExpanded = expandedShelterDistricts[district] || false;
 
-                {userDistrict && otherShelters.length > 0 && (
-                  <>
-                    <div className="mt-8 mb-3 flex items-center gap-2">
-                      <div className="rounded-full bg-slate-100 p-2">
-                        <Building2 className="h-5 w-5 text-slate-600" />
-                      </div>
-                      <h2 className="text-xl font-semibold tracking-tight text-slate-800">
-                        Other Districts
-                      </h2>
-                    </div>
-                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                      {otherShelters.map((s) => (
-                        <ShelterCard key={s.id} shelter={s} />
-                      ))}
-                    </div>
-                  </>
-                )}
-
-                {!userDistrict && (
-                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                    {sortedShelters.map((s) => (
-                      <ShelterCard key={s.id} shelter={s} />
-                    ))}
+                      return (
+                        <div
+                          key={district}
+                          className={`rounded-xl border transition-all ${
+                            isUserDistrict && !selectedDistrict
+                              ? "border-indigo-300 bg-gradient-to-r from-indigo-50/40 to-sky-50/40"
+                              : "border-slate-200 bg-white"
+                          }`}
+                        >
+                          <button
+                            onClick={() => toggleShelterDistrict(district)}
+                            className="flex w-full items-center justify-between p-4 text-left focus:outline-none focus:ring-2 focus:ring-indigo-200 rounded-xl"
+                          >
+                            <div className="flex items-center gap-2">
+                              {isExpanded ? (
+                                <ChevronDown className="h-5 w-5 text-slate-500" />
+                              ) : (
+                                <ChevronRight className="h-5 w-5 text-slate-500" />
+                              )}
+                              <h3 className="font-semibold text-slate-800">{district} District</h3>
+                              {isUserDistrict && !selectedDistrict && (
+                                <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                                  Your district
+                                </span>
+                              )}
+                              <span className="text-xs text-slate-500">({sheltersList.length} shelters)</span>
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="border-t border-slate-100 px-4 pb-4 pt-2">
+                              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                                {sheltersList.map((s) => (
+                                  <ShelterCard key={s.id} shelter={s} highlight={isUserDistrict} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-              </>
-            )}
               </>
             )}
           </div>
         </section>
 
-    {/* ========== DISTRICT DISASTER MANAGEMENT CONTACTS – TWO COLUMNS + ACCORDIONS ========== */}
-<section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-  <div className="border-b border-slate-100 bg-gradient-to-r from-red-50 to-orange-50/30 px-5 py-4">
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      <div className="flex items-center gap-2">
-        <Headphones className="h-5 w-5 text-red-600" />
-        <h2 className="text-lg font-semibold text-slate-800">District Disaster Management Contacts</h2>
-      </div>
-      <div className="text-xs text-slate-500 bg-white/60 px-3 py-1 rounded-full">
-        Call for official instructions & help
-      </div>
-    </div>
-  </div>
+        {/* ========== DISTRICT DISASTER MANAGEMENT CONTACTS – TWO COLUMNS + ACCORDIONS ========== */}
+        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-red-50 to-orange-50/30 px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Headphones className="h-5 w-5 text-red-600" />
+                <h2 className="text-lg font-semibold text-slate-800">District Disaster Management Contacts</h2>
+              </div>
+              <div className="text-xs text-slate-500 bg-white/60 px-3 py-1 rounded-full">
+                Call for official instructions & help
+              </div>
+            </div>
+          </div>
 
-  {/* Filter controls (unchanged) */}
-  <div className="border-b border-slate-100 bg-slate-50/50 px-5 py-3">
-    <div className="flex flex-wrap items-center gap-4">
-      <div className="flex flex-1 items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-1.5 focus-within:ring-2 focus-within:ring-red-200">
-        <Search className="h-4 w-4 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Search by district or province..."
-          value={contactsSearchQuery}
-          onChange={(e) => {
-            setContactsSearchQuery(e.target.value);
-            if (e.target.value) setShowOnlyMyDistrict(false);
-          }}
-          className="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
-        />
-        {contactsSearchQuery && (
-          <button onClick={() => setContactsSearchQuery("")} className="text-slate-400 hover:text-slate-600">
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-      {userDistrict && (
-        <button
-          onClick={() => {
-            setShowOnlyMyDistrict(!showOnlyMyDistrict);
-            if (!showOnlyMyDistrict) setContactsSearchQuery("");
-          }}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-            showOnlyMyDistrict
-              ? "bg-red-100 text-red-700 ring-1 ring-red-300"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          {showOnlyMyDistrict ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          {showOnlyMyDistrict ? "Showing only your district" : "Show only my district"}
-        </button>
-      )}
-    </div>
-  </div>
-
-  <div className="p-5">
-    {Object.keys(groupedContacts).length === 0 ? (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50/60 py-10 text-center px-4">
-        <AlertCircle className="mb-2 h-10 w-10 text-amber-600" />
-        <p className="font-semibold text-amber-950">
-          {showOnlyMyDistrict
-            ? `No directory entry for ${userDistrict || "your district"}`
-            : "No matching districts"}
-        </p>
-        <p className="mt-2 max-w-md text-sm text-amber-900/90">
-          {showOnlyMyDistrict
-            ? "This district may not be listed in the directory yet, or the name may not match your profile. Call national emergency 117 or 119, or clear the filter to browse all districts."
-            : "Try another search term, or clear filters to see all provinces."}
-        </p>
-        {(showOnlyMyDistrict || contactsSearchQuery) && (
-          <button
-            onClick={() => {
-              setShowOnlyMyDistrict(false);
-              setContactsSearchQuery("");
-            }}
-            className="mt-4 text-sm font-semibold text-red-700 hover:underline"
-          >
-            Clear filters
-          </button>
-        )}
-      </div>
-    ) : (
-      // TWO COLUMNS for provinces (accordion each)
-      <div className="grid gap-5 md:grid-cols-2">
-        {sortedProvinces.map((province) => {
-          const districtsInProvince = groupedContacts[province];
-          const isExpanded = expandedProvinces[province];
-          const isUserProvince = userDistrict && districtToProvince[userDistrict] === province;
-          return (
-            <div
-              key={province}
-              className={`rounded-xl border transition-all ${
-                isUserProvince && !showOnlyMyDistrict && !contactsSearchQuery
-                  ? "border-red-300 bg-gradient-to-r from-red-50/40 to-orange-50/40"
-                  : "border-slate-200 bg-white"
-              }`}
-            >
-              {/* Accordion header */}
-              <button
-                onClick={() => toggleProvince(province)}
-                className="flex w-full items-center justify-between p-4 text-left focus:outline-none focus:ring-2 focus:ring-red-200 rounded-xl"
-              >
-                <div className="flex items-center gap-2">
-                  {isExpanded ? (
-                    <ChevronDown className="h-5 w-5 text-slate-500" />
-                  ) : (
-                    <ChevronRight className="h-5 w-5 text-slate-500" />
-                  )}
-                  <h3 className="font-semibold text-slate-800">{province} Province</h3>
-                  {isUserProvince && !showOnlyMyDistrict && !contactsSearchQuery && (
-                    <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-                      Your district
-                    </span>
-                  )}
-                  <span className="text-xs text-slate-500">({districtsInProvince.length} districts)</span>
-                </div>
-              </button>
-              {/* Accordion content */}
-              {isExpanded && (
-                <div className="border-t border-slate-100 px-4 pb-4 pt-2">
-                  <div className="space-y-3">
-                    {districtsInProvince.map((contact) => {
-                      const isUserDistrictFlag = userDistrict && userDistrict.toLowerCase() === contact.district.toLowerCase();
-                      return (
-                        <div
-                          key={contact.district}
-                          className={`rounded-lg border p-3 transition-all hover:shadow-sm ${
-                            isUserDistrictFlag
-                              ? "border-red-200 bg-red-50/30"
-                              : "border-slate-200 bg-white hover:border-slate-300"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <div className="font-bold text-slate-800">{contact.district}</div>
-                              <div className="text-xs text-slate-500">{contact.role}</div>
-                            </div>
-                            <div className="rounded-full bg-slate-100 p-1">
-                              <Globe className="h-3 w-3 text-slate-400" />
-                            </div>
-                          </div>
-                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                            {contact.phones.map((phone, idx) => (
-                              <a
-                                key={idx}
-                                href={`tel:${cleanPhone(phone)}`}
-                                className="inline-flex items-center gap-1 text-indigo-700 transition hover:text-indigo-900"
-                              >
-                                <PhoneCall className="h-3 w-3" />
-                                <span className="break-all">{phone}</span>
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+          <div className="border-b border-slate-100 bg-slate-50/50 px-5 py-3">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-1 items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-1.5 focus-within:ring-2 focus-within:ring-red-200">
+                <Search className="h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by district or province..."
+                  value={contactsSearchQuery}
+                  onChange={(e) => {
+                    setContactsSearchQuery(e.target.value);
+                    if (e.target.value) setShowOnlyMyDistrict(false);
+                  }}
+                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
+                />
+                {contactsSearchQuery && (
+                  <button onClick={() => setContactsSearchQuery("")} className="text-slate-400 hover:text-slate-600">
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              {userDistrict && (
+                <button
+                  onClick={() => {
+                    setShowOnlyMyDistrict(!showOnlyMyDistrict);
+                    if (!showOnlyMyDistrict) setContactsSearchQuery("");
+                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                    showOnlyMyDistrict
+                      ? "bg-red-100 text-red-700 ring-1 ring-red-300"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {showOnlyMyDistrict ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  {showOnlyMyDistrict ? "Showing only your district" : "Show only my district"}
+                </button>
               )}
             </div>
-          );
-        })}
-      </div>
-    )}
-    <div className="mt-6 rounded-lg bg-slate-50 p-3 text-center text-xs text-slate-500 border border-slate-100">
-      📢 If you cannot reach your district contact, call national emergency hotline <strong className="text-red-600">117</strong> or <strong className="text-red-600">119</strong>.
-    </div>
-  </div>
-</section>
+          </div>
 
-          {/* ========== SAFETY INSTRUCTIONS (unchanged) ========== */}
-          <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50 to-yellow-50/30 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5 text-amber-600" />
-                <h2 className="text-lg font-semibold text-slate-800">Safety Instructions</h2>
+          <div className="p-5">
+            {Object.keys(groupedContacts).length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50/60 py-10 text-center px-4">
+                <AlertCircle className="mb-2 h-10 w-10 text-amber-600" />
+                <p className="font-semibold text-amber-950">
+                  {showOnlyMyDistrict
+                    ? `No directory entry for ${userDistrict || "your district"}`
+                    : "No matching districts"}
+                </p>
+                <p className="mt-2 max-w-md text-sm text-amber-900/90">
+                  {showOnlyMyDistrict
+                    ? "This district may not be listed in the directory yet. Call national emergency 117 or 119, or clear the filter."
+                    : "Try another search term, or clear filters to see all provinces."}
+                </p>
+                {(showOnlyMyDistrict || contactsSearchQuery) && (
+                  <button
+                    onClick={() => {
+                      setShowOnlyMyDistrict(false);
+                      setContactsSearchQuery("");
+                    }}
+                    className="mt-4 text-sm font-semibold text-red-700 hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                )}
               </div>
-              <p className="mt-1 text-sm text-slate-600">Important guidelines for your safety during an evacuation.</p>
-            </div>
-            <div className="grid gap-6 p-5 sm:grid-cols-2">
-              <div className="space-y-3 rounded-xl bg-emerald-50/60 p-4 border border-emerald-100">
-                <div className="flex items-center gap-2 text-emerald-800 border-b border-emerald-200 pb-2">
-                  <CheckCircle2 className="h-5 w-5" />
-                  <h3 className="font-semibold text-base">Do's</h3>
+            ) : (
+              // Two independent columns for provinces
+              <div className="flex flex-col gap-5 md:flex-row">
+                {/* Left column */}
+                <div className="flex-1 space-y-5">
+                  {sortedProvinces.slice(0, Math.ceil(sortedProvinces.length / 2)).map((province) => {
+                    const districtsInProvince = groupedContacts[province];
+                    const isExpanded = expandedProvinces[province] || false;
+                    const isUserProvince = userDistrict && districtToProvince[userDistrict] === province;
+                    return (
+                      <div
+                        key={province}
+                        className={`rounded-xl border transition-all ${
+                          isUserProvince && !showOnlyMyDistrict && !contactsSearchQuery
+                            ? "border-red-300 bg-gradient-to-r from-red-50/40 to-orange-50/40"
+                            : "border-slate-200 bg-white"
+                        }`}
+                      >
+                        <button
+                          onClick={() => toggleProvince(province)}
+                          className="flex w-full items-center justify-between p-4 text-left focus:outline-none focus:ring-2 focus:ring-red-200 rounded-xl"
+                        >
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? (
+                              <ChevronDown className="h-5 w-5 text-slate-500" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5 text-slate-500" />
+                            )}
+                            <h3 className="font-semibold text-slate-800">{province} Province</h3>
+                            {isUserProvince && !showOnlyMyDistrict && !contactsSearchQuery && (
+                              <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                                Your district
+                              </span>
+                            )}
+                            <span className="text-xs text-slate-500">({districtsInProvince.length} districts)</span>
+                          </div>
+                        </button>
+                        {isExpanded && (
+                          <div className="border-t border-slate-100 px-4 pb-4 pt-2">
+                            <div className="space-y-3">
+                              {districtsInProvince.map((contact) => {
+                                const isUserDistrictFlag = userDistrict && userDistrict.toLowerCase() === contact.district.toLowerCase();
+                                return (
+                                  <div
+                                    key={contact.district}
+                                    className={`rounded-lg border p-3 transition-all hover:shadow-sm ${
+                                      isUserDistrictFlag
+                                        ? "border-red-200 bg-red-50/30"
+                                        : "border-slate-200 bg-white hover:border-slate-300"
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <div className="font-bold text-slate-800">{contact.district}</div>
+                                        <div className="text-xs text-slate-500">{contact.role}</div>
+                                      </div>
+                                      <div className="rounded-full bg-slate-100 p-1">
+                                        <Globe className="h-3 w-3 text-slate-400" />
+                                      </div>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                                      {contact.phones.map((phone, idx) => (
+                                        <a
+                                          key={idx}
+                                          href={`tel:${cleanPhone(phone)}`}
+                                          className="inline-flex items-center gap-1 text-indigo-700 transition hover:text-indigo-900"
+                                        >
+                                          <PhoneCall className="h-3 w-3" />
+                                          <span className="break-all">{phone}</span>
+                                        </a>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <ul className="space-y-2.5">
-                  {DOS.map((item, i) => (
-                    <li key={i} className="flex gap-3 text-sm text-slate-800">
-                      <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-600" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="space-y-3 rounded-xl bg-rose-50/60 p-4 border border-rose-100">
-                <div className="flex items-center gap-2 text-rose-800 border-b border-rose-200 pb-2">
-                  <XCircle className="h-5 w-5" />
-                  <h3 className="font-semibold text-base">Don'ts</h3>
+
+                {/* Right column */}
+                <div className="flex-1 space-y-5">
+                  {sortedProvinces.slice(Math.ceil(sortedProvinces.length / 2)).map((province) => {
+                    const districtsInProvince = groupedContacts[province];
+                    const isExpanded = expandedProvinces[province] || false;
+                    const isUserProvince = userDistrict && districtToProvince[userDistrict] === province;
+                    return (
+                      <div
+                        key={province}
+                        className={`rounded-xl border transition-all ${
+                          isUserProvince && !showOnlyMyDistrict && !contactsSearchQuery
+                            ? "border-red-300 bg-gradient-to-r from-red-50/40 to-orange-50/40"
+                            : "border-slate-200 bg-white"
+                        }`}
+                      >
+                        <button
+                          onClick={() => toggleProvince(province)}
+                          className="flex w-full items-center justify-between p-4 text-left focus:outline-none focus:ring-2 focus:ring-red-200 rounded-xl"
+                        >
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? (
+                              <ChevronDown className="h-5 w-5 text-slate-500" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5 text-slate-500" />
+                            )}
+                            <h3 className="font-semibold text-slate-800">{province} Province</h3>
+                            {isUserProvince && !showOnlyMyDistrict && !contactsSearchQuery && (
+                              <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                                Your district
+                              </span>
+                            )}
+                            <span className="text-xs text-slate-500">({districtsInProvince.length} districts)</span>
+                          </div>
+                        </button>
+                        {isExpanded && (
+                          <div className="border-t border-slate-100 px-4 pb-4 pt-2">
+                            <div className="space-y-3">
+                              {districtsInProvince.map((contact) => {
+                                const isUserDistrictFlag = userDistrict && userDistrict.toLowerCase() === contact.district.toLowerCase();
+                                return (
+                                  <div
+                                    key={contact.district}
+                                    className={`rounded-lg border p-3 transition-all hover:shadow-sm ${
+                                      isUserDistrictFlag
+                                        ? "border-red-200 bg-red-50/30"
+                                        : "border-slate-200 bg-white hover:border-slate-300"
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <div className="font-bold text-slate-800">{contact.district}</div>
+                                        <div className="text-xs text-slate-500">{contact.role}</div>
+                                      </div>
+                                      <div className="rounded-full bg-slate-100 p-1">
+                                        <Globe className="h-3 w-3 text-slate-400" />
+                                      </div>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                                      {contact.phones.map((phone, idx) => (
+                                        <a
+                                          key={idx}
+                                          href={`tel:${cleanPhone(phone)}`}
+                                          className="inline-flex items-center gap-1 text-indigo-700 transition hover:text-indigo-900"
+                                        >
+                                          <PhoneCall className="h-3 w-3" />
+                                          <span className="break-all">{phone}</span>
+                                        </a>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <ul className="space-y-2.5">
-                  {DONTS.map((item, i) => (
-                    <li key={i} className="flex gap-3 text-sm text-slate-800">
-                      <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-rose-600" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
               </div>
+            )}
+            <div className="mt-6 rounded-lg bg-slate-50 p-3 text-center text-xs text-slate-500 border border-slate-100">
+              📢 If you cannot reach your district contact, call national emergency hotline <strong className="text-red-600">117</strong> or <strong className="text-red-600">119</strong>.
             </div>
-          </section>
+          </div>
+        </section>
+
+        {/* ========== SAFETY INSTRUCTIONS ========== */}
+        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50 to-yellow-50/30 px-5 py-4">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-amber-600" />
+              <h2 className="text-lg font-semibold text-slate-800">Safety Instructions</h2>
+            </div>
+            <p className="mt-1 text-sm text-slate-600">Important guidelines for your safety during an evacuation.</p>
+          </div>
+          <div className="grid gap-6 p-5 sm:grid-cols-2">
+            <div className="space-y-3 rounded-xl bg-emerald-50/60 p-4 border border-emerald-100">
+              <div className="flex items-center gap-2 text-emerald-800 border-b border-emerald-200 pb-2">
+                <CheckCircle2 className="h-5 w-5" />
+                <h3 className="font-semibold text-base">Do's</h3>
+              </div>
+              <ul className="space-y-2.5">
+                {DOS.map((item, i) => (
+                  <li key={i} className="flex gap-3 text-sm text-slate-800">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-600" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="space-y-3 rounded-xl bg-rose-50/60 p-4 border border-rose-100">
+              <div className="flex items-center gap-2 text-rose-800 border-b border-rose-200 pb-2">
+                <XCircle className="h-5 w-5" />
+                <h3 className="font-semibold text-base">Don'ts</h3>
+              </div>
+              <ul className="space-y-2.5">
+                {DONTS.map((item, i) => (
+                  <li key={i} className="flex gap-3 text-sm text-slate-800">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-rose-600" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
       </div>
 
       <p className="mt-10 text-center text-sm text-slate-500">
@@ -623,7 +714,7 @@ export default function SheltersPage() {
   );
 }
 
-// Shelter Card Component (unchanged)
+// Shelter Card Component
 function ShelterCard({ shelter, highlight }) {
   return (
     <div
@@ -666,7 +757,7 @@ function ShelterCard({ shelter, highlight }) {
           <div className="mt-4 border-t border-slate-100 pt-3">
             <a
               href={`tel:${shelter.contact.replace(/\D/g, '')}`}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
             >
               <PhoneCall className="h-3.5 w-3.5" />
               Call Shelter

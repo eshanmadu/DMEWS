@@ -11,15 +11,22 @@ import {
   Calendar,
   Phone,
   Trash2,
+  Pencil,
   X,
   ImageIcon,
   Sparkles,
   UserCircle,
   ZoomIn,
   AlertTriangle,
+  User,
+  CalendarDays,
+  FileText,
+  Loader2,
+  Camera,
 } from "lucide-react";
 
 import { MatchScoreBreakdown } from "@/components/MatchScoreBreakdown";
+import { LocationSuggestInput } from "@/components/LocationSuggestInput";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -111,6 +118,7 @@ export default function MissingPersonsPage() {
   const [missingPhoto, setMissingPhoto] = useState(null);
   const missingPhotoInputRef = useRef(null);
   const [missingErrors, setMissingErrors] = useState({});
+  const [missingPhotoPreview, setMissingPhotoPreview] = useState(null);
 
   const [foundForm, setFoundForm] = useState({
     name: "",
@@ -124,11 +132,24 @@ export default function MissingPersonsPage() {
   const [foundPhoto, setFoundPhoto] = useState(null);
   const foundPhotoInputRef = useRef(null);
   const [foundErrors, setFoundErrors] = useState({});
+  const [foundPhotoPreview, setFoundPhotoPreview] = useState(null);
 
   const [successMsg, setSuccessMsg] = useState(null);
   const [submitError, setSubmitError] = useState(null);
   const [submittingMissing, setSubmittingMissing] = useState(false);
   const [submittingFound, setSubmittingFound] = useState(false);
+  const [missingEdit, setMissingEdit] = useState(null);
+  const [missingEditPhoto, setMissingEditPhoto] = useState(null);
+  const [missingEditPreview, setMissingEditPreview] = useState(null);
+  const [missingEditErrors, setMissingEditErrors] = useState({});
+  const [submittingMissingEdit, setSubmittingMissingEdit] = useState(false);
+  const missingEditPhotoInputRef = useRef(null);
+  const [foundEdit, setFoundEdit] = useState(null);
+  const [foundEditPhoto, setFoundEditPhoto] = useState(null);
+  const [foundEditPreview, setFoundEditPreview] = useState(null);
+  const [foundEditErrors, setFoundEditErrors] = useState({});
+  const [submittingFoundEdit, setSubmittingFoundEdit] = useState(false);
+  const foundEditPhotoInputRef = useRef(null);
   const [foundMatchModal, setFoundMatchModal] = useState(null);
   const [photoLightboxUrl, setPhotoLightboxUrl] = useState(null);
   const [profileHint, setProfileHint] = useState({ name: "", mobile: "" });
@@ -197,6 +218,32 @@ export default function MissingPersonsPage() {
       window.removeEventListener("keydown", onKey);
     };
   }, [photoLightboxUrl]);
+
+  useEffect(() => {
+    const open = Boolean(missingEdit) || Boolean(foundEdit);
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setMissingEdit(null);
+        setFoundEdit(null);
+        setMissingEditPhoto(null);
+        setFoundEditPhoto(null);
+        setMissingEditPreview(null);
+        setFoundEditPreview(null);
+        setMissingEditErrors({});
+        setFoundEditErrors({});
+        if (missingEditPhotoInputRef.current) missingEditPhotoInputRef.current.value = "";
+        if (foundEditPhotoInputRef.current) foundEditPhotoInputRef.current.value = "";
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [missingEdit, foundEdit]);
 
   const validateMissing = () => {
     const errors = {};
@@ -268,6 +315,7 @@ export default function MissingPersonsPage() {
         contactInfo: "",
       });
       setMissingPhoto(null);
+      setMissingPhotoPreview(null);
       if (missingPhotoInputRef.current) missingPhotoInputRef.current.value = "";
       setSuccessMsg({ type: "missing", text: "✓ Missing person report submitted" });
       setShowMissingForm(false);
@@ -367,6 +415,7 @@ export default function MissingPersonsPage() {
         contactInfo: "",
       });
       setFoundPhoto(null);
+      setFoundPhotoPreview(null);
       if (foundPhotoInputRef.current) foundPhotoInputRef.current.value = "";
       setSuccessMsg({ type: "found", text: "✓ Found person report submitted" });
       setShowFoundForm(false);
@@ -399,6 +448,196 @@ export default function MissingPersonsPage() {
     return Number.isNaN(d.getTime()) ? String(dateStr) : d.toLocaleDateString();
   };
 
+  const toDateInputValue = (dateStr) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toISOString().slice(0, 10);
+  };
+
+  const openMissingEdit = (person) => {
+    setMissingEdit({
+      id: person.id,
+      fullName: person.fullName || "",
+      age: String(person.age ?? ""),
+      gender: person.gender || "",
+      lastSeenLocation: person.lastSeenLocation || "",
+      dateMissing: toDateInputValue(person.dateMissing),
+      description: person.description || "",
+      contactInfo: person.contactInfo || "",
+      existingPhotoUrl: person.photoUrl || "",
+    });
+    setMissingEditPhoto(null);
+    setMissingEditPreview(person.photoUrl || null);
+    setMissingEditErrors({});
+    if (missingEditPhotoInputRef.current) missingEditPhotoInputRef.current.value = "";
+  };
+
+  const openFoundEdit = (person) => {
+    setFoundEdit({
+      id: person.id,
+      name: person.name === "Unknown" ? "" : person.name || "",
+      gender: person.gender || "",
+      age: person.age != null && person.age !== "" ? String(person.age) : "",
+      locationFound: person.locationFound || "",
+      dateFound: toDateInputValue(person.dateFound),
+      description: person.description || "",
+      contactInfo: person.contactInfo || "",
+      existingPhotoUrl: person.photoUrl || "",
+    });
+    setFoundEditPhoto(null);
+    setFoundEditPreview(person.photoUrl || null);
+    setFoundEditErrors({});
+    if (foundEditPhotoInputRef.current) foundEditPhotoInputRef.current.value = "";
+  };
+
+  const validateMissingEdit = () => {
+    if (!missingEdit) return false;
+    const errors = {};
+    const f = missingEdit;
+    if (!f.fullName.trim()) errors.fullName = "Full name is required";
+    else if (!isValidPersonName(f.fullName)) errors.fullName = "Name can only contain letters";
+    if (!f.age) errors.age = "Age is required";
+    else if (isNaN(Number(f.age)) || Number(f.age) < 0 || Number(f.age) > 120)
+      errors.age = "Age must be 0–120";
+    if (!f.lastSeenLocation.trim()) errors.lastSeenLocation = "Last seen location is required";
+    if (!f.dateMissing) errors.dateMissing = "Date missing is required";
+    else if (new Date(f.dateMissing) > new Date()) errors.dateMissing = "Date cannot be in the future";
+    if (!f.description.trim()) errors.description = "Description is required";
+    if (!isValidPhone(f.contactInfo)) errors.contactInfo = "Additional contact must be a valid phone number";
+    if (missingEditPhoto && !String(missingEditPhoto.type || "").toLowerCase().startsWith("image/")) {
+      errors.photo = "Please choose an image file.";
+    }
+    setMissingEditErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const validateFoundEdit = () => {
+    if (!foundEdit) return false;
+    const errors = {};
+    const f = foundEdit;
+    if (f.name.trim() && !isValidPersonName(f.name)) errors.name = "Name can only contain letters";
+    if (!f.locationFound.trim()) errors.locationFound = "Location found is required";
+    if (!f.dateFound) errors.dateFound = "Date found is required";
+    else if (new Date(f.dateFound) > new Date()) errors.dateFound = "Date cannot be in the future";
+    if (!f.description.trim()) errors.description = "Description is required";
+    if (
+      f.age &&
+      (isNaN(Number(f.age)) || Number(f.age) < 0 || Number(f.age) > 120)
+    )
+      errors.age = "Age must be 0–120";
+    if (!isValidPhone(f.contactInfo)) errors.contactInfo = "Additional contact must be a valid phone number";
+    if (foundEditPhoto && !String(foundEditPhoto.type || "").toLowerCase().startsWith("image/")) {
+      errors.photo = "Please choose an image file.";
+    }
+    setFoundEditErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleMissingEditPhotoChange = (e) => {
+    const file = e.target.files?.[0] || null;
+    setMissingEditPhoto(file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setMissingEditPreview(reader.result);
+      reader.readAsDataURL(file);
+    } else {
+      setMissingEditPreview(missingEdit?.existingPhotoUrl || null);
+    }
+  };
+
+  const handleFoundEditPhotoChange = (e) => {
+    const file = e.target.files?.[0] || null;
+    setFoundEditPhoto(file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setFoundEditPreview(reader.result);
+      reader.readAsDataURL(file);
+    } else {
+      setFoundEditPreview(foundEdit?.existingPhotoUrl || null);
+    }
+  };
+
+  const handleUpdateMissing = async (e) => {
+    e.preventDefault();
+    setSubmitError(null);
+    if (!clientSignedIn || !missingEdit) return;
+    if (!validateMissingEdit()) return;
+    setSubmittingMissingEdit(true);
+    try {
+      const fd = new FormData();
+      fd.append("fullName", missingEdit.fullName.trim());
+      fd.append("age", String(missingEdit.age));
+      fd.append("gender", missingEdit.gender);
+      fd.append("lastSeenLocation", missingEdit.lastSeenLocation.trim());
+      fd.append("dateMissing", missingEdit.dateMissing);
+      fd.append("description", missingEdit.description.trim());
+      fd.append("contactInfo", missingEdit.contactInfo.trim());
+      if (missingEditPhoto) fd.append("photo", missingEditPhoto);
+      const res = await fetch(`${API_BASE}/missing-persons/missing/${missingEdit.id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Update failed.");
+      if (data.person) {
+        setMissingPersons((prev) => prev.map((p) => (p.id === data.person.id ? data.person : p)));
+      } else {
+        await loadLists();
+      }
+      setMissingEdit(null);
+      setMissingEditPhoto(null);
+      setMissingEditPreview(null);
+      if (missingEditPhotoInputRef.current) missingEditPhotoInputRef.current.value = "";
+      setSuccessMsg({ type: "missing", text: "✓ Missing person report updated" });
+    } catch (err) {
+      setSubmitError(err?.message || "Update failed.");
+    } finally {
+      setSubmittingMissingEdit(false);
+    }
+  };
+
+  const handleUpdateFound = async (e) => {
+    e.preventDefault();
+    setSubmitError(null);
+    if (!clientSignedIn || !foundEdit) return;
+    if (!validateFoundEdit()) return;
+    setSubmittingFoundEdit(true);
+    try {
+      const fd = new FormData();
+      fd.append("name", foundEdit.name.trim());
+      fd.append("gender", foundEdit.gender);
+      fd.append("age", foundEdit.age);
+      fd.append("locationFound", foundEdit.locationFound.trim());
+      fd.append("dateFound", foundEdit.dateFound);
+      fd.append("description", foundEdit.description.trim());
+      fd.append("contactInfo", foundEdit.contactInfo.trim());
+      if (foundEditPhoto) fd.append("photo", foundEditPhoto);
+      const res = await fetch(`${API_BASE}/missing-persons/found/${foundEdit.id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Update failed.");
+      if (data.person) {
+        setFoundPersons((prev) => prev.map((p) => (p.id === data.person.id ? data.person : p)));
+      } else {
+        await loadLists();
+      }
+      setFoundEdit(null);
+      setFoundEditPhoto(null);
+      setFoundEditPreview(null);
+      if (foundEditPhotoInputRef.current) foundEditPhotoInputRef.current.value = "";
+      setSuccessMsg({ type: "found", text: "✓ Found person report updated" });
+    } catch (err) {
+      setSubmitError(err?.message || "Update failed.");
+    } finally {
+      setSubmittingFoundEdit(false);
+    }
+  };
+
   function PersonPhotoThumb({ photoUrl, className, sizes = "96px" }) {
     if (!photoUrl) return null;
     return (
@@ -415,6 +654,31 @@ export default function MissingPersonsPage() {
       </button>
     );
   }
+
+  // Helper for image preview
+  const handleMissingPhotoChange = (e) => {
+    const file = e.target.files?.[0] || null;
+    setMissingPhoto(file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setMissingPhotoPreview(reader.result);
+      reader.readAsDataURL(file);
+    } else {
+      setMissingPhotoPreview(null);
+    }
+  };
+
+  const handleFoundPhotoChange = (e) => {
+    const file = e.target.files?.[0] || null;
+    setFoundPhoto(file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setFoundPhotoPreview(reader.result);
+      reader.readAsDataURL(file);
+    } else {
+      setFoundPhotoPreview(null);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -464,7 +728,7 @@ export default function MissingPersonsPage() {
         </div>
       </div>
 
-      {/* Global error / success messages (unchanged styling) */}
+      {/* Global error / success messages */}
       {submitError && (
         <div className="mb-6 flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
           <AlertTriangle className="h-4 w-4" />
@@ -485,46 +749,64 @@ export default function MissingPersonsPage() {
         </div>
       )}
 
-      {/* Missing Person Form (unchanged) */}
+      {/* MODERN MISSING PERSON FORM */}
       {showMissingForm && (
-        <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-2 border-b border-slate-200 pb-3">
-            <UserPlus className="h-5 w-5 text-rose-600" />
-            <h2 className="text-xl font-semibold text-slate-800">Report missing person</h2>
-          </div>
-          <form onSubmit={handleAddMissing} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Full name *</label>
-              <input
-                type="text"
-                value={missingForm.fullName}
-                onChange={(e) =>
-                  setMissingForm({ ...missingForm, fullName: sanitizeNameInput(e.target.value) })
-                }
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-              />
-              {missingErrors.fullName && <p className="mt-1 text-xs text-rose-600">{missingErrors.fullName}</p>}
+        <div className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl transition-all duration-300">
+          <div className="bg-gradient-to-r from-rose-600 to-rose-500 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+                <UserPlus className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Report Missing Person</h2>
             </div>
+            <p className="mt-1 text-sm text-rose-100">Help bring someone back home by sharing details</p>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Age *</label>
-                <input
-                  type="number"
-                  value={missingForm.age}
-                  onChange={(e) => setMissingForm({ ...missingForm, age: sanitizeAgeInput(e.target.value) })}
-                  min={0}
-                  max={120}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                />
+          <form onSubmit={handleAddMissing} className="p-6">
+            <div className="grid gap-5 sm:grid-cols-2">
+              {/* Full Name */}
+              <div className="relative">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Full name *</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={missingForm.fullName}
+                    onChange={(e) =>
+                      setMissingForm({ ...missingForm, fullName: sanitizeNameInput(e.target.value) })
+                    }
+                    className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                    placeholder="e.g., John Doe"
+                  />
+                </div>
+                {missingErrors.fullName && <p className="mt-1 text-xs text-rose-600">{missingErrors.fullName}</p>}
+              </div>
+
+              {/* Age */}
+              <div className="relative">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Age *</label>
+                <div className="relative">
+                  <CalendarDays className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="number"
+                    value={missingForm.age}
+                    onChange={(e) => setMissingForm({ ...missingForm, age: sanitizeAgeInput(e.target.value) })}
+                    min={0}
+                    max={120}
+                    className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                    placeholder="e.g., 28"
+                  />
+                </div>
                 {missingErrors.age && <p className="mt-1 text-xs text-rose-600">{missingErrors.age}</p>}
               </div>
+
+              {/* Gender */}
               <div>
-                <label className="block text-sm font-medium text-slate-700">Gender</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Gender</label>
                 <select
                   value={missingForm.gender}
                   onChange={(e) => setMissingForm({ ...missingForm, gender: e.target.value })}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
                 >
                   <option value="">Prefer not to say</option>
                   <option value="Male">Male</option>
@@ -532,58 +814,66 @@ export default function MissingPersonsPage() {
                   <option value="Non-binary">Non-binary</option>
                 </select>
               </div>
+
+              {/* Last Seen Location */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Last seen location *</label>
+                <LocationSuggestInput
+                  label=""
+                  value={missingForm.lastSeenLocation}
+                  onChange={(v) => setMissingForm({ ...missingForm, lastSeenLocation: v })}
+                  error={missingErrors.lastSeenLocation}
+                />
+              </div>
+
+              {/* Date Missing */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Date missing *</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="date"
+                    value={missingForm.dateMissing}
+                    onChange={(e) => setMissingForm({ ...missingForm, dateMissing: e.target.value })}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                {missingErrors.dateMissing && <p className="mt-1 text-xs text-rose-600">{missingErrors.dateMissing}</p>}
+              </div>
+
+              {/* Description */}
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Description (clothing, features) *</label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <textarea
+                    rows={3}
+                    value={missingForm.description}
+                    onChange={(e) => setMissingForm({ ...missingForm, description: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 pl-9 pr-3 pt-2 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                    placeholder="Describe appearance, clothing, distinguishing features..."
+                  />
+                </div>
+                {missingErrors.description && <p className="mt-1 text-xs text-rose-600">{missingErrors.description}</p>}
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Last seen location *</label>
-              <input
-                type="text"
-                value={missingForm.lastSeenLocation}
-                onChange={(e) => setMissingForm({ ...missingForm, lastSeenLocation: e.target.value })}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              {missingErrors.lastSeenLocation && (
-                <p className="mt-1 text-xs text-rose-600">{missingErrors.lastSeenLocation}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Date missing *</label>
-              <input
-                type="date"
-                value={missingForm.dateMissing}
-                onChange={(e) => setMissingForm({ ...missingForm, dateMissing: e.target.value })}
-                max={new Date().toISOString().slice(0, 10)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              {missingErrors.dateMissing && <p className="mt-1 text-xs text-rose-600">{missingErrors.dateMissing}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Description (clothing, features) *</label>
-              <textarea
-                rows={2}
-                value={missingForm.description}
-                onChange={(e) => setMissingForm({ ...missingForm, description: e.target.value })}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              {missingErrors.description && <p className="mt-1 text-xs text-rose-600">{missingErrors.description}</p>}
-            </div>
-
+            {/* Reporter Section */}
             {clientSignedIn ? (
-              <div className="rounded-lg border border-sky-200 bg-gradient-to-br from-sky-50 to-white p-4 text-sm shadow-sm">
-                <p className="font-semibold text-slate-800">If you see — reporter (from your account)</p>
+              <div className="mt-6 rounded-xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white p-5 shadow-sm">
+                <p className="font-semibold text-slate-800">📢 If you see — reporter (from your account)</p>
                 <p className="mt-1 text-xs text-slate-600">
-                  Your name and phone are taken from your profile when you submit (same as shown below).
+                  Your name and phone are taken from your profile when you submit.
                 </p>
-                <div className="mt-3 space-y-2 rounded-md border border-sky-100 bg-white/80 px-3 py-2">
-                  <p className="flex items-center gap-2 text-slate-800">
-                    <UserCircle className="h-4 w-4 shrink-0 text-sky-600" />
+                <div className="mt-3 space-y-2 rounded-lg border border-rose-100 bg-white/80 px-4 py-3">
+                  <p className="flex items-center gap-2 text-sm text-slate-800">
+                    <UserCircle className="h-4 w-4 shrink-0 text-rose-600" />
                     <span className="text-slate-500">Reporter name:</span>{" "}
                     <span className="font-medium">{profileHint.name || "—"}</span>
                   </p>
-                  <p className="flex items-center gap-2 text-slate-800">
-                    <Phone className="h-4 w-4 shrink-0 text-sky-600" />
+                  <p className="flex items-center gap-2 text-sm text-slate-800">
+                    <Phone className="h-4 w-4 shrink-0 text-rose-600" />
                     <span className="text-slate-500">Phone:</span>{" "}
                     <span className="font-medium">{profileHint.mobile || "—"}</span>
                   </p>
@@ -593,155 +883,207 @@ export default function MissingPersonsPage() {
                     Add a mobile number in your profile so callers can reach you.
                   </p>
                 )}
-                <div className="mt-3">
+                <div className="mt-4">
                   <label className="block text-sm font-medium text-slate-700">Additional contact (optional)</label>
-                  <input
-                    type="text"
-                    value={missingForm.contactInfo}
-                    onChange={(e) => setMissingForm({ ...missingForm, contactInfo: e.target.value })}
-                    placeholder="Extra phone number"
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  />
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={missingForm.contactInfo}
+                      onChange={(e) => setMissingForm({ ...missingForm, contactInfo: e.target.value })}
+                      placeholder="Extra phone number"
+                      className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                    />
+                  </div>
                   {missingErrors.contactInfo && (
                     <p className="mt-1 text-xs text-rose-600">{missingErrors.contactInfo}</p>
                   )}
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
+              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
                 <p className="font-medium">Sign in is required to submit a report</p>
                 <p className="mt-1 text-xs opacity-90">
-                  Missing person reports require a logged-in account so your reporter details appear in the
-                  &quot;If you see&quot; section.
+                  Missing person reports require a logged-in account so your reporter details appear.
                 </p>
               </div>
             )}
 
-            <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                <ImageIcon className="h-4 w-4 text-slate-500" />
+            {/* Photo Upload with Preview */}
+            <div className="mt-6">
+              <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700">
+                <Camera className="h-4 w-4 text-slate-500" />
                 Photo (optional, max 10MB)
               </label>
-              <input
-                ref={missingPhotoInputRef}
-                type="file"
-                accept="image/*"
-                onChange={(e) => setMissingPhoto(e.target.files?.[0] || null)}
-                className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
-              />
+              <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">
+                  <ImageIcon className="h-4 w-4" />
+                  Choose image
+                  <input
+                    ref={missingPhotoInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleMissingPhotoChange}
+                    className="hidden"
+                  />
+                </label>
+                {missingPhotoPreview && (
+                  <div className="relative h-16 w-16 overflow-hidden rounded-lg border border-slate-200 shadow-sm">
+                    <img src={missingPhotoPreview} alt="Preview" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMissingPhoto(null);
+                        setMissingPhotoPreview(null);
+                        if (missingPhotoInputRef.current) missingPhotoInputRef.current.value = "";
+                      }}
+                      className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 text-red-600 shadow-md"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
               {missingErrors.photo && <p className="mt-1 text-xs text-rose-600">{missingErrors.photo}</p>}
             </div>
 
             <button
               type="submit"
               disabled={submittingMissing || !clientSignedIn}
-              className="w-full rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 disabled:opacity-60"
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition-all hover:from-rose-700 hover:to-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-400 disabled:opacity-60"
             >
-              {submittingMissing ? "Submitting…" : "Submit missing person report"}
+              {submittingMissing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+              {submittingMissing ? "Submitting..." : "Submit missing person report"}
             </button>
           </form>
         </div>
       )}
 
-      {/* Found Person Form (unchanged) */}
+      {/* MODERN FOUND PERSON FORM */}
       {showFoundForm && (
-        <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-2 border-b border-slate-200 pb-3">
-            <UserCheck className="h-5 w-5 text-emerald-600" />
-            <h2 className="text-xl font-semibold text-slate-800">Report found person</h2>
+        <div className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl transition-all duration-300">
+          <div className="bg-gradient-to-r from-emerald-600 to-teal-500 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+                <UserCheck className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Report Found Person</h2>
+            </div>
+            <p className="mt-1 text-sm text-emerald-100">Help reunite someone with their family</p>
           </div>
-          <form onSubmit={handleAddFound} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Name (if known)</label>
-              <input
-                type="text"
-                value={foundForm.name}
-                onChange={(e) => setFoundForm({ ...foundForm, name: sanitizeNameInput(e.target.value) })}
-                placeholder="Leave blank for unknown"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              {foundErrors.name && <p className="mt-1 text-xs text-rose-600">{foundErrors.name}</p>}
+
+          <form onSubmit={handleAddFound} className="p-6">
+            <div className="grid gap-5 sm:grid-cols-2">
+              {/* Name (optional) */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Name (if known)</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={foundForm.name}
+                    onChange={(e) => setFoundForm({ ...foundForm, name: sanitizeNameInput(e.target.value) })}
+                    placeholder="Leave blank for unknown"
+                    className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+                {foundErrors.name && <p className="mt-1 text-xs text-rose-600">{foundErrors.name}</p>}
+              </div>
+
+              {/* Gender */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Gender (optional)</label>
+                <select
+                  value={foundForm.gender}
+                  onChange={(e) => setFoundForm({ ...foundForm, gender: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                >
+                  <option value="">Prefer not to say</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Non-binary">Non-binary</option>
+                </select>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  If provided on both reports, matching compares gender.
+                </p>
+              </div>
+
+              {/* Estimated Age */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Estimated age</label>
+                <div className="relative">
+                  <CalendarDays className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="number"
+                    value={foundForm.age}
+                    onChange={(e) => setFoundForm({ ...foundForm, age: sanitizeAgeInput(e.target.value) })}
+                    min={0}
+                    max={120}
+                    className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                    placeholder="e.g., 35"
+                  />
+                </div>
+                {foundErrors.age && <p className="mt-1 text-xs text-rose-600">{foundErrors.age}</p>}
+              </div>
+
+              {/* Location Found */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Location found *</label>
+                <LocationSuggestInput
+                  label=""
+                  value={foundForm.locationFound}
+                  onChange={(v) => setFoundForm({ ...foundForm, locationFound: v })}
+                  error={foundErrors.locationFound}
+                />
+              </div>
+
+              {/* Date Found */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Date found *</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="date"
+                    value={foundForm.dateFound}
+                    onChange={(e) => setFoundForm({ ...foundForm, dateFound: e.target.value })}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+                {foundErrors.dateFound && <p className="mt-1 text-xs text-rose-600">{foundErrors.dateFound}</p>}
+              </div>
+
+              {/* Description */}
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Description *</label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <textarea
+                    rows={3}
+                    value={foundForm.description}
+                    onChange={(e) => setFoundForm({ ...foundForm, description: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 pl-9 pr-3 pt-2 text-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                    placeholder="Describe appearance, clothing, condition, any details..."
+                  />
+                </div>
+                {foundErrors.description && <p className="mt-1 text-xs text-rose-600">{foundErrors.description}</p>}
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Gender (optional)</label>
-              <select
-                value={foundForm.gender}
-                onChange={(e) => setFoundForm({ ...foundForm, gender: e.target.value })}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="">Prefer not to say</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Non-binary">Non-binary</option>
-              </select>
-              <p className="mt-1 text-[11px] text-slate-500">
-                If provided on both reports, matching compares gender for a higher score.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Estimated age</label>
-              <input
-                type="number"
-                value={foundForm.age}
-                onChange={(e) => setFoundForm({ ...foundForm, age: sanitizeAgeInput(e.target.value) })}
-                min={0}
-                max={120}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              {foundErrors.age && <p className="mt-1 text-xs text-rose-600">{foundErrors.age}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Location found *</label>
-              <input
-                type="text"
-                value={foundForm.locationFound}
-                onChange={(e) => setFoundForm({ ...foundForm, locationFound: e.target.value })}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              {foundErrors.locationFound && (
-                <p className="mt-1 text-xs text-rose-600">{foundErrors.locationFound}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Date found *</label>
-              <input
-                type="date"
-                value={foundForm.dateFound}
-                onChange={(e) => setFoundForm({ ...foundForm, dateFound: e.target.value })}
-                max={new Date().toISOString().slice(0, 10)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              {foundErrors.dateFound && <p className="mt-1 text-xs text-rose-600">{foundErrors.dateFound}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Description *</label>
-              <textarea
-                rows={2}
-                value={foundForm.description}
-                onChange={(e) => setFoundForm({ ...foundForm, description: e.target.value })}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              {foundErrors.description && <p className="mt-1 text-xs text-rose-600">{foundErrors.description}</p>}
-            </div>
-
+            {/* Reporter Section */}
             {clientSignedIn ? (
-              <div className="rounded-lg border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4 text-sm shadow-sm">
-                <p className="font-semibold text-slate-800">If you see — reporter (from your account)</p>
+              <div className="mt-6 rounded-xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm">
+                <p className="font-semibold text-slate-800">📢 If you see — reporter (from your account)</p>
                 <p className="mt-1 text-xs text-slate-600">
                   Your name and phone are taken from your profile when you submit.
                 </p>
-                <div className="mt-3 space-y-2 rounded-md border border-emerald-100 bg-white/80 px-3 py-2">
-                  <p className="flex items-center gap-2 text-slate-800">
+                <div className="mt-3 space-y-2 rounded-lg border border-emerald-100 bg-white/80 px-4 py-3">
+                  <p className="flex items-center gap-2 text-sm text-slate-800">
                     <UserCircle className="h-4 w-4 shrink-0 text-emerald-600" />
                     <span className="text-slate-500">Reporter name:</span>{" "}
                     <span className="font-medium">{profileHint.name || "—"}</span>
                   </p>
-                  <p className="flex items-center gap-2 text-slate-800">
+                  <p className="flex items-center gap-2 text-sm text-slate-800">
                     <Phone className="h-4 w-4 shrink-0 text-emerald-600" />
                     <span className="text-slate-500">Phone:</span>{" "}
                     <span className="font-medium">{profileHint.mobile || "—"}</span>
@@ -752,51 +1094,77 @@ export default function MissingPersonsPage() {
                     Add a mobile number in your profile so callers can reach you.
                   </p>
                 )}
-                <div className="mt-3">
+                <div className="mt-4">
                   <label className="block text-sm font-medium text-slate-700">Additional contact (optional)</label>
-                  <input
-                    type="text"
-                    value={foundForm.contactInfo}
-                    onChange={(e) => setFoundForm({ ...foundForm, contactInfo: e.target.value })}
-                    placeholder="Extra phone number"
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  />
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={foundForm.contactInfo}
+                      onChange={(e) => setFoundForm({ ...foundForm, contactInfo: e.target.value })}
+                      placeholder="Extra phone number"
+                      className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                    />
+                  </div>
                   {foundErrors.contactInfo && (
                     <p className="mt-1 text-xs text-rose-600">{foundErrors.contactInfo}</p>
                   )}
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
+              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
                 <p className="font-medium">Sign in is required to submit a report</p>
                 <p className="mt-1 text-xs opacity-90">
-                  Found person reports require a logged-in account so your reporter details appear in the
-                  &quot;If you see&quot; section.
+                  Found person reports require a logged-in account.
                 </p>
               </div>
             )}
 
-            <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                <ImageIcon className="h-4 w-4 text-slate-500" />
+            {/* Photo Upload with Preview */}
+            <div className="mt-6">
+              <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700">
+                <Camera className="h-4 w-4 text-slate-500" />
                 Photo (optional, max 10MB)
               </label>
-              <input
-                ref={foundPhotoInputRef}
-                type="file"
-                accept="image/*"
-                onChange={(e) => setFoundPhoto(e.target.files?.[0] || null)}
-                className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
-              />
+              <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">
+                  <ImageIcon className="h-4 w-4" />
+                  Choose image
+                  <input
+                    ref={foundPhotoInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFoundPhotoChange}
+                    className="hidden"
+                  />
+                </label>
+                {foundPhotoPreview && (
+                  <div className="relative h-16 w-16 overflow-hidden rounded-lg border border-slate-200 shadow-sm">
+                    <img src={foundPhotoPreview} alt="Preview" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFoundPhoto(null);
+                        setFoundPhotoPreview(null);
+                        if (foundPhotoInputRef.current) foundPhotoInputRef.current.value = "";
+                      }}
+                      className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 text-red-600 shadow-md"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
               {foundErrors.photo && <p className="mt-1 text-xs text-rose-600">{foundErrors.photo}</p>}
             </div>
 
             <button
               type="submit"
               disabled={submittingFound || !clientSignedIn}
-              className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition-all hover:from-emerald-700 hover:to-teal-600 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-60"
             >
-              {submittingFound ? "Submitting…" : "Submit found person report"}
+              {submittingFound ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+              {submittingFound ? "Submitting..." : "Submit found person report"}
             </button>
           </form>
         </div>
@@ -874,14 +1242,26 @@ export default function MissingPersonsPage() {
                         </div>
                       </div>
                       {canDeleteEntry(person) ? (
-                        <button
-                          type="button"
-                          onClick={() => deleteMissing(person.id)}
-                          className="shrink-0 text-slate-400 hover:text-rose-600"
-                          aria-label="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex shrink-0 flex-col gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openMissingEdit(person)}
+                            className="text-slate-400 hover:text-sky-600"
+                            aria-label="Edit report"
+                            title="Edit"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteMissing(person.id)}
+                            className="text-slate-400 hover:text-rose-600"
+                            aria-label="Delete"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                   </div>
@@ -961,14 +1341,26 @@ export default function MissingPersonsPage() {
                         </div>
                       </div>
                       {canDeleteEntry(person) ? (
-                        <button
-                          type="button"
-                          onClick={() => deleteFound(person.id)}
-                          className="shrink-0 text-slate-400 hover:text-rose-600"
-                          aria-label="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex shrink-0 flex-col gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openFoundEdit(person)}
+                            className="text-slate-400 hover:text-sky-600"
+                            aria-label="Edit report"
+                            title="Edit"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteFound(person.id)}
+                            className="text-slate-400 hover:text-rose-600"
+                            aria-label="Delete"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                   </div>
@@ -979,24 +1371,414 @@ export default function MissingPersonsPage() {
         </div>
       </div>
 
-      {/* ========== IMPROVED FOUND MATCH MODAL - BEAUTIFUL UI ========== */}
+      {/* Edit missing person */}
+      {missingEdit ? (
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-missing-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"
+            onClick={() => {
+              setMissingEdit(null);
+              setMissingEditPhoto(null);
+              setMissingEditPreview(null);
+              setMissingEditErrors({});
+            }}
+            aria-label="Close"
+          />
+          <div className="relative z-10 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-rose-600 to-rose-500 px-5 py-4">
+              <h2 id="edit-missing-title" className="text-lg font-bold text-white">
+                Edit missing person report
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setMissingEdit(null);
+                  setMissingEditPhoto(null);
+                  setMissingEditPreview(null);
+                  setMissingEditErrors({});
+                }}
+                className="rounded-full p-1 text-white/90 hover:bg-white/20"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateMissing} className="space-y-4 p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Full name *</label>
+                  <input
+                    type="text"
+                    value={missingEdit.fullName}
+                    onChange={(e) =>
+                      setMissingEdit({ ...missingEdit, fullName: sanitizeNameInput(e.target.value) })
+                    }
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                  />
+                  {missingEditErrors.fullName && (
+                    <p className="mt-1 text-xs text-rose-600">{missingEditErrors.fullName}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Age *</label>
+                  <input
+                    type="number"
+                    value={missingEdit.age}
+                    onChange={(e) =>
+                      setMissingEdit({ ...missingEdit, age: sanitizeAgeInput(e.target.value) })
+                    }
+                    min={0}
+                    max={120}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                  />
+                  {missingEditErrors.age && (
+                    <p className="mt-1 text-xs text-rose-600">{missingEditErrors.age}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Gender</label>
+                  <select
+                    value={missingEdit.gender}
+                    onChange={(e) => setMissingEdit({ ...missingEdit, gender: e.target.value })}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                  >
+                    <option value="">Prefer not to say</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Non-binary">Non-binary</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Last seen location *</label>
+                  <LocationSuggestInput
+                    label=""
+                    value={missingEdit.lastSeenLocation}
+                    onChange={(v) => setMissingEdit({ ...missingEdit, lastSeenLocation: v })}
+                    error={missingEditErrors.lastSeenLocation}
+                    inputClassName="h-11 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Date missing *</label>
+                  <input
+                    type="date"
+                    value={missingEdit.dateMissing}
+                    onChange={(e) => setMissingEdit({ ...missingEdit, dateMissing: e.target.value })}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                  />
+                  {missingEditErrors.dateMissing && (
+                    <p className="mt-1 text-xs text-rose-600">{missingEditErrors.dateMissing}</p>
+                  )}
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Description *</label>
+                  <textarea
+                    rows={3}
+                    value={missingEdit.description}
+                    onChange={(e) => setMissingEdit({ ...missingEdit, description: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                  />
+                  {missingEditErrors.description && (
+                    <p className="mt-1 text-xs text-rose-600">{missingEditErrors.description}</p>
+                  )}
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Additional contact (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={missingEdit.contactInfo}
+                    onChange={(e) => setMissingEdit({ ...missingEdit, contactInfo: e.target.value })}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                  />
+                  {missingEditErrors.contactInfo && (
+                    <p className="mt-1 text-xs text-rose-600">{missingEditErrors.contactInfo}</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <Camera className="h-4 w-4" />
+                  Replace photo (optional)
+                </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm hover:bg-slate-100">
+                    Choose image
+                    <input
+                      ref={missingEditPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleMissingEditPhotoChange}
+                      className="hidden"
+                    />
+                  </label>
+                  {missingEditPreview ? (
+                    <div className="relative h-16 w-16 overflow-hidden rounded-lg border border-slate-200">
+                      <img src={missingEditPreview} alt="" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMissingEditPhoto(null);
+                          setMissingEditPreview(missingEdit.existingPhotoUrl || null);
+                          if (missingEditPhotoInputRef.current) missingEditPhotoInputRef.current.value = "";
+                        }}
+                        className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 text-red-600 shadow"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                {missingEditErrors.photo && (
+                  <p className="mt-1 text-xs text-rose-600">{missingEditErrors.photo}</p>
+                )}
+              </div>
+              <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMissingEdit(null);
+                    setMissingEditPhoto(null);
+                    setMissingEditPreview(null);
+                    setMissingEditErrors({});
+                  }}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingMissingEdit}
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {submittingMissingEdit ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Edit found person */}
+      {foundEdit ? (
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-found-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"
+            onClick={() => {
+              setFoundEdit(null);
+              setFoundEditPhoto(null);
+              setFoundEditPreview(null);
+              setFoundEditErrors({});
+            }}
+            aria-label="Close"
+          />
+          <div className="relative z-10 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-emerald-600 to-teal-500 px-5 py-4">
+              <h2 id="edit-found-title" className="text-lg font-bold text-white">
+                Edit found person report
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setFoundEdit(null);
+                  setFoundEditPhoto(null);
+                  setFoundEditPreview(null);
+                  setFoundEditErrors({});
+                }}
+                className="rounded-full p-1 text-white/90 hover:bg-white/20"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateFound} className="space-y-4 p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Name (if known)</label>
+                  <input
+                    type="text"
+                    value={foundEdit.name}
+                    onChange={(e) =>
+                      setFoundEdit({ ...foundEdit, name: sanitizeNameInput(e.target.value) })
+                    }
+                    placeholder="Leave blank for unknown"
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                  {foundEditErrors.name && (
+                    <p className="mt-1 text-xs text-rose-600">{foundEditErrors.name}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Gender (optional)</label>
+                  <select
+                    value={foundEdit.gender}
+                    onChange={(e) => setFoundEdit({ ...foundEdit, gender: e.target.value })}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  >
+                    <option value="">Prefer not to say</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Non-binary">Non-binary</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Estimated age</label>
+                  <input
+                    type="number"
+                    value={foundEdit.age}
+                    onChange={(e) =>
+                      setFoundEdit({ ...foundEdit, age: sanitizeAgeInput(e.target.value) })
+                    }
+                    min={0}
+                    max={120}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                  {foundEditErrors.age && (
+                    <p className="mt-1 text-xs text-rose-600">{foundEditErrors.age}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Location found *</label>
+                  <LocationSuggestInput
+                    label=""
+                    value={foundEdit.locationFound}
+                    onChange={(v) => setFoundEdit({ ...foundEdit, locationFound: v })}
+                    error={foundEditErrors.locationFound}
+                    inputClassName="h-11 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Date found *</label>
+                  <input
+                    type="date"
+                    value={foundEdit.dateFound}
+                    onChange={(e) => setFoundEdit({ ...foundEdit, dateFound: e.target.value })}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                  {foundEditErrors.dateFound && (
+                    <p className="mt-1 text-xs text-rose-600">{foundEditErrors.dateFound}</p>
+                  )}
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Description *</label>
+                  <textarea
+                    rows={3}
+                    value={foundEdit.description}
+                    onChange={(e) => setFoundEdit({ ...foundEdit, description: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                  {foundEditErrors.description && (
+                    <p className="mt-1 text-xs text-rose-600">{foundEditErrors.description}</p>
+                  )}
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Additional contact (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={foundEdit.contactInfo}
+                    onChange={(e) => setFoundEdit({ ...foundEdit, contactInfo: e.target.value })}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  />
+                  {foundEditErrors.contactInfo && (
+                    <p className="mt-1 text-xs text-rose-600">{foundEditErrors.contactInfo}</p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <Camera className="h-4 w-4" />
+                  Replace photo (optional)
+                </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm hover:bg-slate-100">
+                    Choose image
+                    <input
+                      ref={foundEditPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFoundEditPhotoChange}
+                      className="hidden"
+                    />
+                  </label>
+                  {foundEditPreview ? (
+                    <div className="relative h-16 w-16 overflow-hidden rounded-lg border border-slate-200">
+                      <img src={foundEditPreview} alt="" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFoundEditPhoto(null);
+                          setFoundEditPreview(foundEdit.existingPhotoUrl || null);
+                          if (foundEditPhotoInputRef.current) foundEditPhotoInputRef.current.value = "";
+                        }}
+                        className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 text-red-600 shadow"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                {foundEditErrors.photo && (
+                  <p className="mt-1 text-xs text-rose-600">{foundEditErrors.photo}</p>
+                )}
+              </div>
+              <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFoundEdit(null);
+                    setFoundEditPhoto(null);
+                    setFoundEditPreview(null);
+                    setFoundEditErrors({});
+                  }}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingFoundEdit}
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {submittingFoundEdit ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Found Match Modal (unchanged) */}
       {foundMatchModal ? (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="found-match-modal-title"
         >
-          {/* Backdrop with blur and fade */}
           <button
             type="button"
             className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm transition-all duration-200"
             onClick={() => setFoundMatchModal(null)}
             aria-label="Close"
           />
-          {/* Modal card - elegant, larger, with smooth shadow */}
           <div className="relative z-10 w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 animate-in zoom-in-95 fade-in duration-200">
-            {/* Header with gradient and icon */}
             <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5 text-white">
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
@@ -1022,7 +1804,6 @@ export default function MissingPersonsPage() {
               </div>
             </div>
 
-            {/* Scrollable matches list */}
             <div className="max-h-[calc(85vh-12rem)] overflow-y-auto px-4 py-5 sm:px-6">
               <div className="space-y-5">
                 {foundMatchModal.matches.map((person) => (
@@ -1031,7 +1812,6 @@ export default function MissingPersonsPage() {
                     className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:border-emerald-200"
                   >
                     <div className="flex flex-col sm:flex-row gap-4">
-                      {/* Photo column */}
                       <div className="flex justify-center sm:block">
                         {person.photoUrl ? (
                           <PersonPhotoThumb
@@ -1046,7 +1826,6 @@ export default function MissingPersonsPage() {
                         )}
                       </div>
 
-                      {/* Details column */}
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex flex-wrap items-center gap-2">
@@ -1082,7 +1861,6 @@ export default function MissingPersonsPage() {
                           )}
                         </div>
 
-                        {/* Reporter contact section */}
                         {(person.reporterName || person.ifYouSeePhone) && (
                           <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50/50 px-3 py-2 text-sm">
                             <p className="text-xs font-semibold uppercase tracking-wide text-sky-800">If you see</p>
@@ -1109,7 +1887,6 @@ export default function MissingPersonsPage() {
                       </div>
                     </div>
 
-                    {/* Match breakdown (if available) */}
                     {person.scoreBreakdown && (
                       <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/30 p-3">
                         <MatchScoreBreakdown breakdown={person.scoreBreakdown} />
@@ -1120,7 +1897,6 @@ export default function MissingPersonsPage() {
               </div>
             </div>
 
-            {/* Footer with action button */}
             <div className="border-t border-slate-100 bg-slate-50/90 px-6 py-4">
               <button
                 type="button"
@@ -1137,7 +1913,7 @@ export default function MissingPersonsPage() {
       {/* Photo lightbox (unchanged) */}
       {photoLightboxUrl ? (
         <div
-          className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
           aria-label="Photo preview"
@@ -1157,7 +1933,6 @@ export default function MissingPersonsPage() {
             >
               <X className="h-5 w-5" />
             </button>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={photoLightboxUrl}
               alt=""
