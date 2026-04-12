@@ -33,6 +33,14 @@ function coerceNumber(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Empty string if omitted; 10 digits if provided; null if invalid. */
+function normalizeOptionalAdditionalPhone(raw) {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (digits.length === 0) return "";
+  if (digits.length !== 10) return null;
+  return digits;
+}
+
 function parsePointFromBody(body) {
   // Accept any of these (multipart/form-data sends strings):
   // - { locationLat, locationLng }
@@ -1004,7 +1012,12 @@ async function createMissingReport(req, res) {
     const lastSeenLocation = String(req.body?.lastSeenLocation || "").trim();
     const dateMissingRaw = String(req.body?.dateMissing || "").trim();
     const description = String(req.body?.description || "").trim();
-    const contactInfo = String(req.body?.contactInfo || "").trim();
+    const contactInfoNorm = normalizeOptionalAdditionalPhone(req.body?.contactInfo);
+    if (contactInfoNorm === null) {
+      return res.status(400).json({
+        message: "Additional contact must be exactly 10 digits, or leave blank.",
+      });
+    }
 
     if (!fullName) {
       return res.status(400).json({ message: "fullName is required." });
@@ -1063,7 +1076,7 @@ async function createMissingReport(req, res) {
       location: location || undefined,
       dateMissing,
       description: description.slice(0, 4000),
-      contactInfo: contactInfo.slice(0, 500),
+      contactInfo: contactInfoNorm,
       photoUrl,
       photoPublicId,
       submittedByUserId: optionalSubmitterObjectId(req),
@@ -1097,7 +1110,12 @@ async function updateMissingReport(req, res) {
     const lastSeenLocation = String(req.body?.lastSeenLocation || "").trim();
     const dateMissingRaw = String(req.body?.dateMissing || "").trim();
     const description = String(req.body?.description || "").trim();
-    const contactInfo = String(req.body?.contactInfo || "").trim();
+    const contactInfoNorm = normalizeOptionalAdditionalPhone(req.body?.contactInfo);
+    if (contactInfoNorm === null) {
+      return res.status(400).json({
+        message: "Additional contact must be exactly 10 digits, or leave blank.",
+      });
+    }
 
     if (!fullName) {
       return res.status(400).json({ message: "fullName is required." });
@@ -1169,7 +1187,7 @@ async function updateMissingReport(req, res) {
     doc.location = location || undefined;
     doc.dateMissing = dateMissing;
     doc.description = description.slice(0, 4000);
-    doc.contactInfo = contactInfo.slice(0, 500);
+    doc.contactInfo = contactInfoNorm;
     doc.photoUrl = photoUrl;
     doc.photoPublicId = photoPublicId;
     doc.reporterName = reporter.reporterName;
@@ -1203,7 +1221,12 @@ async function updateFoundReport(req, res) {
     const locationFound = String(req.body?.locationFound || "").trim();
     const dateFoundRaw = String(req.body?.dateFound || "").trim();
     const description = String(req.body?.description || "").trim();
-    const contactInfo = String(req.body?.contactInfo || "").trim();
+    const contactInfoNorm = normalizeOptionalAdditionalPhone(req.body?.contactInfo);
+    if (contactInfoNorm === null) {
+      return res.status(400).json({
+        message: "Additional contact must be exactly 10 digits, or leave blank.",
+      });
+    }
 
     let age = null;
     if (ageRaw) {
@@ -1277,7 +1300,7 @@ async function updateFoundReport(req, res) {
     doc.location = location || undefined;
     doc.dateFound = dateFound;
     doc.description = description.slice(0, 4000);
-    doc.contactInfo = contactInfo.slice(0, 500);
+    doc.contactInfo = contactInfoNorm;
     doc.photoUrl = photoUrl;
     doc.photoPublicId = photoPublicId;
     doc.reporterName = reporter.reporterName;
@@ -1300,7 +1323,12 @@ async function createFoundReport(req, res) {
     const locationFound = String(req.body?.locationFound || "").trim();
     const dateFoundRaw = String(req.body?.dateFound || "").trim();
     const description = String(req.body?.description || "").trim();
-    const contactInfo = String(req.body?.contactInfo || "").trim();
+    const contactInfoNorm = normalizeOptionalAdditionalPhone(req.body?.contactInfo);
+    if (contactInfoNorm === null) {
+      return res.status(400).json({
+        message: "Additional contact must be exactly 10 digits, or leave blank.",
+      });
+    }
 
     let age = null;
     if (ageRaw) {
@@ -1360,7 +1388,7 @@ async function createFoundReport(req, res) {
       location: location || undefined,
       dateFound,
       description: description.slice(0, 4000),
-      contactInfo: contactInfo.slice(0, 500),
+      contactInfo: contactInfoNorm,
       photoUrl,
       photoPublicId,
       submittedByUserId: optionalSubmitterObjectId(req),

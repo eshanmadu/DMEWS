@@ -81,10 +81,34 @@ function isValidPersonName(value) {
   return /^[A-Za-z][A-Za-z\s.'-]*$/.test(normalized);
 }
 
-function isValidPhone(value) {
-  const normalized = String(value || "").trim();
-  if (!normalized) return true;
-  return /^\+?[0-9][0-9\s\-()]{6,19}$/.test(normalized);
+function additionalPhoneDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+/** Optional field: empty OK, otherwise exactly 10 digits. */
+function isValidOptionalAdditionalPhone(value) {
+  const d = additionalPhoneDigits(value);
+  if (d.length === 0) return true;
+  return d.length === 10;
+}
+
+function sanitizeAdditionalPhoneInput(value) {
+  return additionalPhoneDigits(value).slice(0, 10);
+}
+
+function normalizeAdditionalPhoneForSubmit(value) {
+  const d = additionalPhoneDigits(value);
+  return d.length === 10 ? d : "";
+}
+
+/** Primary = account phone; additional = optional second number. */
+function formatContactCallDisplay(primary, additional) {
+  const p = String(primary || "").trim();
+  const a = String(additional || "").trim();
+  if (!p && !a) return "";
+  if (p && a) return `Call ${p} / ${a} (additional)`;
+  if (p) return `Call ${p}`;
+  return `${a} (additional)`;
 }
 
 function sanitizeNameInput(value) {
@@ -260,7 +284,8 @@ export default function MissingPersonsPage() {
     if (!missingForm.dateMissing) errors.dateMissing = "Date missing is required";
     else if (new Date(missingForm.dateMissing) > new Date()) errors.dateMissing = "Date cannot be in the future";
     if (!missingForm.description.trim()) errors.description = "Description is required";
-    if (!isValidPhone(missingForm.contactInfo)) errors.contactInfo = "Additional contact must be a valid phone number";
+    if (!isValidOptionalAdditionalPhone(missingForm.contactInfo))
+      errors.contactInfo = "Additional contact must be exactly 10 digits, or leave blank";
     if (missingPhoto && !String(missingPhoto.type || "").toLowerCase().startsWith("image/")) {
       errors.photo = "Please choose an image file.";
     }
@@ -286,7 +311,7 @@ export default function MissingPersonsPage() {
       fd.append("lastSeenLocation", missingForm.lastSeenLocation.trim());
       fd.append("dateMissing", missingForm.dateMissing);
       fd.append("description", missingForm.description.trim());
-      fd.append("contactInfo", missingForm.contactInfo.trim());
+      fd.append("contactInfo", normalizeAdditionalPhoneForSubmit(missingForm.contactInfo));
       if (missingPhoto) fd.append("photo", missingPhoto);
 
       const res = await fetch(`${API_BASE}/missing-persons/missing`, {
@@ -355,7 +380,8 @@ export default function MissingPersonsPage() {
       (isNaN(Number(foundForm.age)) || Number(foundForm.age) < 0 || Number(foundForm.age) > 120)
     )
       errors.age = "Age must be 0–120";
-    if (!isValidPhone(foundForm.contactInfo)) errors.contactInfo = "Additional contact must be a valid phone number";
+    if (!isValidOptionalAdditionalPhone(foundForm.contactInfo))
+      errors.contactInfo = "Additional contact must be exactly 10 digits, or leave blank";
     if (foundPhoto && !String(foundPhoto.type || "").toLowerCase().startsWith("image/")) {
       errors.photo = "Please choose an image file.";
     }
@@ -381,7 +407,7 @@ export default function MissingPersonsPage() {
       fd.append("locationFound", foundForm.locationFound.trim());
       fd.append("dateFound", foundForm.dateFound);
       fd.append("description", foundForm.description.trim());
-      fd.append("contactInfo", foundForm.contactInfo.trim());
+      fd.append("contactInfo", normalizeAdditionalPhoneForSubmit(foundForm.contactInfo));
       if (foundPhoto) fd.append("photo", foundPhoto);
 
       const res = await fetch(`${API_BASE}/missing-persons/found`, {
@@ -464,7 +490,7 @@ export default function MissingPersonsPage() {
       lastSeenLocation: person.lastSeenLocation || "",
       dateMissing: toDateInputValue(person.dateMissing),
       description: person.description || "",
-      contactInfo: person.contactInfo || "",
+      contactInfo: sanitizeAdditionalPhoneInput(person.contactInfo || ""),
       existingPhotoUrl: person.photoUrl || "",
     });
     setMissingEditPhoto(null);
@@ -482,7 +508,7 @@ export default function MissingPersonsPage() {
       locationFound: person.locationFound || "",
       dateFound: toDateInputValue(person.dateFound),
       description: person.description || "",
-      contactInfo: person.contactInfo || "",
+      contactInfo: sanitizeAdditionalPhoneInput(person.contactInfo || ""),
       existingPhotoUrl: person.photoUrl || "",
     });
     setFoundEditPhoto(null);
@@ -504,7 +530,8 @@ export default function MissingPersonsPage() {
     if (!f.dateMissing) errors.dateMissing = "Date missing is required";
     else if (new Date(f.dateMissing) > new Date()) errors.dateMissing = "Date cannot be in the future";
     if (!f.description.trim()) errors.description = "Description is required";
-    if (!isValidPhone(f.contactInfo)) errors.contactInfo = "Additional contact must be a valid phone number";
+    if (!isValidOptionalAdditionalPhone(f.contactInfo))
+      errors.contactInfo = "Additional contact must be exactly 10 digits, or leave blank";
     if (missingEditPhoto && !String(missingEditPhoto.type || "").toLowerCase().startsWith("image/")) {
       errors.photo = "Please choose an image file.";
     }
@@ -526,7 +553,8 @@ export default function MissingPersonsPage() {
       (isNaN(Number(f.age)) || Number(f.age) < 0 || Number(f.age) > 120)
     )
       errors.age = "Age must be 0–120";
-    if (!isValidPhone(f.contactInfo)) errors.contactInfo = "Additional contact must be a valid phone number";
+    if (!isValidOptionalAdditionalPhone(f.contactInfo))
+      errors.contactInfo = "Additional contact must be exactly 10 digits, or leave blank";
     if (foundEditPhoto && !String(foundEditPhoto.type || "").toLowerCase().startsWith("image/")) {
       errors.photo = "Please choose an image file.";
     }
@@ -572,7 +600,7 @@ export default function MissingPersonsPage() {
       fd.append("lastSeenLocation", missingEdit.lastSeenLocation.trim());
       fd.append("dateMissing", missingEdit.dateMissing);
       fd.append("description", missingEdit.description.trim());
-      fd.append("contactInfo", missingEdit.contactInfo.trim());
+      fd.append("contactInfo", normalizeAdditionalPhoneForSubmit(missingEdit.contactInfo));
       if (missingEditPhoto) fd.append("photo", missingEditPhoto);
       const res = await fetch(`${API_BASE}/missing-persons/missing/${missingEdit.id}`, {
         method: "PATCH",
@@ -612,7 +640,7 @@ export default function MissingPersonsPage() {
       fd.append("locationFound", foundEdit.locationFound.trim());
       fd.append("dateFound", foundEdit.dateFound);
       fd.append("description", foundEdit.description.trim());
-      fd.append("contactInfo", foundEdit.contactInfo.trim());
+      fd.append("contactInfo", normalizeAdditionalPhoneForSubmit(foundEdit.contactInfo));
       if (foundEditPhoto) fd.append("photo", foundEditPhoto);
       const res = await fetch(`${API_BASE}/missing-persons/found/${foundEdit.id}`, {
         method: "PATCH",
@@ -890,8 +918,16 @@ export default function MissingPersonsPage() {
                     <input
                       type="text"
                       value={missingForm.contactInfo}
-                      onChange={(e) => setMissingForm({ ...missingForm, contactInfo: e.target.value })}
-                      placeholder="Extra phone number"
+                      onChange={(e) =>
+                        setMissingForm({
+                          ...missingForm,
+                          contactInfo: sanitizeAdditionalPhoneInput(e.target.value),
+                        })
+                      }
+                      placeholder="10-digit number (optional)"
+                      inputMode="numeric"
+                      maxLength={10}
+                      autoComplete="tel"
                       className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
                     />
                   </div>
@@ -1101,8 +1137,16 @@ export default function MissingPersonsPage() {
                     <input
                       type="text"
                       value={foundForm.contactInfo}
-                      onChange={(e) => setFoundForm({ ...foundForm, contactInfo: e.target.value })}
-                      placeholder="Extra phone number"
+                      onChange={(e) =>
+                        setFoundForm({
+                          ...foundForm,
+                          contactInfo: sanitizeAdditionalPhoneInput(e.target.value),
+                        })
+                      }
+                      placeholder="10-digit number (optional)"
+                      inputMode="numeric"
+                      maxLength={10}
+                      autoComplete="tel"
                       className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                     />
                   </div>
@@ -1225,16 +1269,10 @@ export default function MissingPersonsPage() {
                                   <span className="text-slate-500">Reporter:</span> {person.reporterName}
                                 </p>
                               ) : null}
-                              {person.ifYouSeePhone ? (
-                                <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-slate-900">
+                              {person.ifYouSeePhone || person.contactInfo ? (
+                                <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm font-medium text-slate-900">
                                   <Phone className="h-3.5 w-3.5 shrink-0 text-sky-600" />
-                                  Call {person.ifYouSeePhone}
-                                </p>
-                              ) : null}
-                              {person.contactInfo ? (
-                                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-700">
-                                  <Phone className="h-3.5 w-3.5 shrink-0 text-sky-600" />
-                                  Additional: {person.contactInfo}
+                                  {formatContactCallDisplay(person.ifYouSeePhone, person.contactInfo)}
                                 </p>
                               ) : null}
                             </div>
@@ -1324,16 +1362,10 @@ export default function MissingPersonsPage() {
                                   <span className="text-slate-500">Reporter:</span> {person.reporterName}
                                 </p>
                               ) : null}
-                              {person.ifYouSeePhone ? (
-                                <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-slate-900">
+                              {person.ifYouSeePhone || person.contactInfo ? (
+                                <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm font-medium text-slate-900">
                                   <Phone className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                                  Call {person.ifYouSeePhone}
-                                </p>
-                              ) : null}
-                              {person.contactInfo ? (
-                                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-700">
-                                  <Phone className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                                  Additional: {person.contactInfo}
+                                  {formatContactCallDisplay(person.ifYouSeePhone, person.contactInfo)}
                                 </p>
                               ) : null}
                             </div>
@@ -1496,7 +1528,16 @@ export default function MissingPersonsPage() {
                   <input
                     type="text"
                     value={missingEdit.contactInfo}
-                    onChange={(e) => setMissingEdit({ ...missingEdit, contactInfo: e.target.value })}
+                    onChange={(e) =>
+                      setMissingEdit({
+                        ...missingEdit,
+                        contactInfo: sanitizeAdditionalPhoneInput(e.target.value),
+                      })
+                    }
+                    placeholder="10-digit number (optional)"
+                    inputMode="numeric"
+                    maxLength={10}
+                    autoComplete="tel"
                     className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
                   />
                   {missingEditErrors.contactInfo && (
@@ -1693,7 +1734,16 @@ export default function MissingPersonsPage() {
                   <input
                     type="text"
                     value={foundEdit.contactInfo}
-                    onChange={(e) => setFoundEdit({ ...foundEdit, contactInfo: e.target.value })}
+                    onChange={(e) =>
+                      setFoundEdit({
+                        ...foundEdit,
+                        contactInfo: sanitizeAdditionalPhoneInput(e.target.value),
+                      })
+                    }
+                    placeholder="10-digit number (optional)"
+                    inputMode="numeric"
+                    maxLength={10}
+                    autoComplete="tel"
                     className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                   />
                   {foundEditErrors.contactInfo && (
@@ -1861,7 +1911,7 @@ export default function MissingPersonsPage() {
                           )}
                         </div>
 
-                        {(person.reporterName || person.ifYouSeePhone) && (
+                        {(person.reporterName || person.ifYouSeePhone || person.contactInfo) && (
                           <div className="mt-3 rounded-lg border border-sky-100 bg-sky-50/50 px-3 py-2 text-sm">
                             <p className="text-xs font-semibold uppercase tracking-wide text-sky-800">If you see</p>
                             {person.reporterName && (
@@ -1870,19 +1920,13 @@ export default function MissingPersonsPage() {
                                 {person.reporterName}
                               </p>
                             )}
-                            {person.ifYouSeePhone && (
-                              <p className="mt-0.5 flex items-center gap-1.5 font-medium text-slate-900">
+                            {(person.ifYouSeePhone || person.contactInfo) && (
+                              <p className="mt-0.5 flex flex-wrap items-center gap-1.5 font-medium text-slate-900">
                                 <Phone className="h-3.5 w-3.5 text-sky-600" />
-                                {person.ifYouSeePhone}
+                                {formatContactCallDisplay(person.ifYouSeePhone, person.contactInfo)}
                               </p>
                             )}
                           </div>
-                        )}
-                        {person.contactInfo && (
-                          <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-                            <Phone className="h-3 w-3" />
-                            Also: {person.contactInfo}
-                          </p>
                         )}
                       </div>
                     </div>
