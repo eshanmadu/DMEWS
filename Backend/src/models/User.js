@@ -10,8 +10,8 @@ const UserSchema = new Schema(
     },
     district: {
       type: String,
-      required: true,
       trim: true,
+      default: "",
     },
     email: {
       type: String,
@@ -32,7 +32,20 @@ const UserSchema = new Schema(
     },
     passwordHash: {
       type: String,
-      required: true,
+      required: false,
+    },
+    /** Google subject ("sub") when user signs in with Google */
+    googleSub: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
+    /** User-selected language (e.g. "en", "si") */
+    preferredLanguage: {
+      type: String,
+      trim: true,
+      default: "",
     },
   },
   {

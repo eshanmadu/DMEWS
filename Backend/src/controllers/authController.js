@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
+const { OAuth2Client } = require("google-auth-library");
 
 const { connectDb } = require("../db");
 const { User } = require("../models/User");
@@ -22,6 +23,9 @@ const {
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-production";
 
 const PASSWORD_RESET_OTP_TTL_MS = 15 * 60 * 1000;
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID || undefined);
 
 function randomSixDigitOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -46,8 +50,39 @@ async function attachVolunteerStatus(userDoc) {
     email: userDoc.email,
     mobile: userDoc.mobile || "",
     avatar: userDoc.avatar || "",
+    preferredLanguage: userDoc.preferredLanguage || "",
+    hasPassword: Boolean(userDoc.passwordHash),
     volunteerStatus: status,
   };
+}
+
+function normalizePreferredLanguage(raw) {
+  const v = String(raw || "").trim().toLowerCase();
+  if (v === "si" || v === "en") return v;
+  return "";
+}
+
+function profileIsComplete(user) {
+  const mobile = String(user.mobile || "").trim();
+  const district = String(user.district || "").trim();
+  const preferredLanguage = normalizePreferredLanguage(user.preferredLanguage);
+  return Boolean(/^\d{10}$/.test(mobile) && district && preferredLanguage);
+}
+
+function signUserJwt(user) {
+  return jwt.sign(
+    {
+      sub: user._id.toString(),
+      email: user.email,
+      district: user.district || "",
+      name: user.name || "",
+      mobile: user.mobile || "",
+      avatar: user.avatar || "",
+      preferredLanguage: normalizePreferredLanguage(user.preferredLanguage),
+    },
+    JWT_SECRET,
+    { expiresIn: "7d" }
+  );
 }
 
 async function signup(req, res) {
@@ -84,19 +119,7 @@ async function signup(req, res) {
       passwordHash,
     });
 
-    const token = jwt.sign(
-      {
-        sub: user._id.toString(),
-        email: user.email,
-        district: user.district,
-        name: user.name,
-        mobile: user.mobile,
-        avatar: user.avatar || "",
-        avatar: user.avatar || "",
-      },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = signUserJwt(user);
 
     const userOut = await attachVolunteerStatus(user);
 
@@ -127,22 +150,18 @@ async function login(req, res) {
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
+    if (!user.passwordHash) {
+      return res.status(401).json({
+        message: "This account uses Google sign-in. Please continue with Google.",
+      });
+    }
+
     const isValid = await bcrypt.compare(password, user.passwordHash);
     if (!isValid) {
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
-    const token = jwt.sign(
-      {
-        sub: user._id.toString(),
-        email: user.email,
-        district: user.district,
-        name: user.name,
-        mobile: user.mobile,
-      },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = signUserJwt(user);
 
     // Save a login log (best-effort)
     try {
@@ -169,12 +188,92 @@ async function login(req, res) {
         email: user.email,
         mobile: user.mobile || "",
         avatar: user.avatar || "",
+        preferredLanguage: user.preferredLanguage || "",
+        hasPassword: Boolean(user.passwordHash),
         isAdmin: emailIsAdmin(user.email),
       },
     });
   } catch (error) {
     console.error("Login error", error);
     return res.status(500).json({ message: "Failed to log in." });
+  }
+}
+
+async function googleAuth(req, res) {
+  try {
+    const { idToken } = req.body || {};
+    const token = String(idToken || "").trim();
+    if (!token) {
+      return res.status(400).json({ message: "Google ID token is required." });
+    }
+    if (!GOOGLE_CLIENT_ID) {
+      return res.status(503).json({
+        message: "Google sign-in is not configured on the server.",
+      });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const email = String(payload?.email || "").toLowerCase().trim();
+    const emailVerified = Boolean(payload?.email_verified);
+    const sub = String(payload?.sub || "").trim();
+    const name = String(payload?.name || "").trim();
+    const picture = String(payload?.picture || "").trim();
+
+    if (!sub || !email) {
+      return res.status(400).json({ message: "Invalid Google token." });
+    }
+    if (!emailVerified) {
+      return res.status(400).json({ message: "Google email is not verified." });
+    }
+
+    await connectDb();
+
+    // Prefer matching by email for linking local+google accounts
+    let user = await User.findOne({ email }).exec();
+    let isNewUser = false;
+    if (user) {
+      if (!user.googleSub) {
+        user.googleSub = sub;
+      } else if (user.googleSub !== sub) {
+        // Safety: email collision / changed Google account
+        return res.status(409).json({
+          message:
+            "This email is already linked to a different Google account. Please use the original sign-in method.",
+        });
+      }
+      if (!user.name && name) user.name = name;
+      if (!user.avatar && picture) user.avatar = picture;
+      await user.save();
+    } else {
+      // Create a new user with incomplete profile (district/mobile/language to be completed)
+      isNewUser = true;
+      user = await User.create({
+        name: name || "",
+        email,
+        avatar: picture || "",
+        googleSub: sub,
+        passwordHash: undefined,
+        district: "",
+        mobile: "",
+        preferredLanguage: "",
+      });
+    }
+
+    const appToken = signUserJwt(user);
+    const userOut = await attachVolunteerStatus(user);
+    return res.json({
+      token: appToken,
+      user: userOut,
+      profileComplete: profileIsComplete(user),
+      isNewUser,
+    });
+  } catch (error) {
+    console.error("Google auth error", error);
+    return res.status(500).json({ message: "Failed to sign in with Google." });
   }
 }
 
@@ -195,7 +294,7 @@ async function me(req, res) {
 
     await connectDb();
     const user = await User.findById(req.userId)
-      .select("name email district mobile avatar")
+      .select("name email district mobile avatar preferredLanguage passwordHash")
       .lean()
       .exec();
 
@@ -210,6 +309,8 @@ async function me(req, res) {
       district: user.district,
       mobile: user.mobile,
       avatar: user.avatar,
+      preferredLanguage: user.preferredLanguage,
+      passwordHash: user.passwordHash,
     });
     return res.json({
       ...profile,
@@ -218,6 +319,60 @@ async function me(req, res) {
   } catch (error) {
     console.error("Me error", error);
     return res.status(500).json({ message: "Failed to load profile." });
+  }
+}
+
+async function completeProfile(req, res) {
+  try {
+    if (req.isDevAdmin || req.userId === "dev-admin-session") {
+      return res.status(403).json({
+        message: "Profile completion is not available for the dev admin shortcut.",
+      });
+    }
+
+    const { mobile, district, preferredLanguage, avatar } = req.body || {};
+
+    const trimmedMobile = String(mobile || "").trim();
+    const trimmedDistrict = String(district || "").trim();
+    const lang = normalizePreferredLanguage(preferredLanguage);
+    const trimmedAvatar = avatar !== undefined ? String(avatar || "").trim() : undefined;
+
+    if (!/^\d{10}$/.test(trimmedMobile)) {
+      return res
+        .status(400)
+        .json({ message: "Mobile number must be exactly 10 digits." });
+    }
+    if (!trimmedDistrict) {
+      return res.status(400).json({ message: "District is required." });
+    }
+    if (!lang) {
+      return res.status(400).json({ message: "Language is required." });
+    }
+
+    await connectDb();
+    const user = await User.findById(req.userId).exec();
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    user.mobile = trimmedMobile;
+    user.district = trimmedDistrict;
+    user.preferredLanguage = lang;
+    if (trimmedAvatar !== undefined) {
+      user.avatar = trimmedAvatar;
+    }
+    await user.save();
+
+    const token = signUserJwt(user);
+    const userOut = await attachVolunteerStatus(user);
+    return res.json({
+      token,
+      user: userOut,
+      profileComplete: true,
+    });
+  } catch (error) {
+    console.error("Complete profile error", error);
+    return res.status(500).json({ message: "Failed to complete profile." });
   }
 }
 
@@ -264,21 +419,11 @@ async function updateProfile(req, res) {
 
     if (name !== undefined) user.name = String(name).trim();
     if (avatar !== undefined) user.avatar = String(avatar).trim();
+    if (district !== undefined) user.district = String(district).trim();
 
     await user.save();
 
-    const token = jwt.sign(
-      {
-        sub: user._id.toString(),
-        email: user.email,
-        district: user.district,
-        name: user.name,
-        mobile: user.mobile,
-        avatar: user.avatar || "",
-      },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = signUserJwt(user);
 
     const userOut = await attachVolunteerStatus(user);
 
@@ -426,11 +571,6 @@ async function deleteAccount(req, res) {
     }
 
     const { currentPassword } = req.body || {};
-    if (!currentPassword) {
-      return res.status(400).json({
-        message: "Current password is required to delete your account.",
-      });
-    }
 
     if (!mongoose.Types.ObjectId.isValid(req.userId)) {
       return res.status(400).json({ message: "Invalid session." });
@@ -443,9 +583,16 @@ async function deleteAccount(req, res) {
       return res.status(404).json({ message: "User not found." });
     }
 
-    const valid = await bcrypt.compare(String(currentPassword), user.passwordHash);
-    if (!valid) {
-      return res.status(401).json({ message: "Current password is incorrect." });
+    if (user.passwordHash) {
+      if (!currentPassword) {
+        return res.status(400).json({
+          message: "Current password is required to delete your account.",
+        });
+      }
+      const valid = await bcrypt.compare(String(currentPassword), user.passwordHash);
+      if (!valid) {
+        return res.status(401).json({ message: "Current password is incorrect." });
+      }
     }
 
     const uid = user._id;
@@ -597,10 +744,12 @@ function devAdminToken(req, res) {
 module.exports = {
   signup,
   login,
+  googleAuth,
   forgotPassword,
   resetPasswordWithOtp,
   me,
   updateProfile,
+  completeProfile,
   changePassword,
   deleteAccount,
   devAdminToken,
