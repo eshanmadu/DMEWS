@@ -19,6 +19,13 @@ const SKILL_OPTIONS = [
   "General Volunteer",
 ];
 
+const STEPS = [
+  { id: 0, name: "Basic Info", shortName: "Info" },
+  { id: 1, name: "Skills", shortName: "Skills" },
+  { id: 2, name: "Health & Safety", shortName: "Health" },
+  { id: 3, name: "Agreement", shortName: "Agree" },
+];
+
 export default function VolunteerJoinPage() {
   const { t } = useTranslation();
 
@@ -29,6 +36,8 @@ export default function VolunteerJoinPage() {
   const [error, setError] = useState("");
   const [volunteer, setVolunteer] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [stepError, setStepError] = useState("");
 
   const [form, setForm] = useState({
     fullName: "",
@@ -52,6 +61,60 @@ export default function VolunteerJoinPage() {
   const approved = status === "approved";
   const pending = status === "pending";
   const rejected = status === "rejected";
+
+  // Validate current step
+  const validateStep = (step) => {
+    switch (step) {
+      case 0: // Basic Information
+        if (!form.fullName.trim()) return "Full name is required.";
+        if (!form.dateOfBirth) return "Date of birth is required.";
+        if (!form.gender) return "Gender is required.";
+        if (!form.phoneNumber.trim()) return "Phone number is required.";
+        if (!form.emailAddress.trim()) return "Email address is required.";
+        if (!form.districtCity.trim()) return "District / City is required.";
+        if (!form.currentLocation.trim()) return "Current location is required.";
+        return "";
+      case 1: // Skills & Expertise - optional
+        return "";
+      case 2: // Health & Safety
+        if (!form.emergencyContactPerson.trim()) return "Emergency contact person is required.";
+        if (!form.emergencyContactNumber.trim()) return "Emergency contact number is required.";
+        return "";
+      case 3: // Agreement
+        if (!form.agreeSafetyGuidelines) return "You must agree to follow safety guidelines.";
+        if (!form.agreeEmergencyContact) return "You must agree to be contacted during emergencies.";
+        return "";
+      default:
+        return "";
+    }
+  };
+
+  const handleNext = () => {
+    const validationError = validateStep(currentStep);
+    if (validationError) {
+      setStepError(validationError);
+      return;
+    }
+    setStepError("");
+    if (currentStep < STEPS.length - 1) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+      setStepError("");
+    }
+  };
+
+  const goToStep = (stepIndex) => {
+    // Allow going to previous steps or current step (no skipping forward)
+    if (stepIndex <= currentStep) {
+      setCurrentStep(stepIndex);
+      setStepError("");
+    }
+  };
 
   // Close modal on escape key
   useEffect(() => {
@@ -178,7 +241,6 @@ export default function VolunteerJoinPage() {
       if (!res.ok) {
         setError(data?.message || "Could not submit your request.");
       } else {
-        // Show confirmation modal on successful submission
         setShowConfirmModal(true);
         if (data?.volunteer) setVolunteer(data.volunteer);
         if (data?.user && typeof window !== "undefined") {
@@ -298,258 +360,327 @@ export default function VolunteerJoinPage() {
             ) : null}
 
             {!approved && (
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
-                  <h3 className="text-sm font-bold text-slate-900">
-                    1. Basic Information
-                  </h3>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Full Name
-                      </label>
-                      <input
-                        required
-                        value={form.fullName}
-                        onChange={(e) => setField("fullName", e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Date of Birth
-                      </label>
-                      <input
-                        required
-                        type="date"
-                        value={form.dateOfBirth}
-                        onChange={(e) => setField("dateOfBirth", e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Gender
-                      </label>
-                      <select
-                        required
-                        value={form.gender}
-                        onChange={(e) => setField("gender", e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+              <>
+                {/* Step Indicator Bar */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between">
+                    {STEPS.map((step, idx) => (
+                      <button
+                        key={step.id}
+                        onClick={() => goToStep(idx)}
+                        disabled={idx > currentStep}
+                        className={`relative flex flex-1 flex-col items-center transition-all ${
+                          idx > currentStep
+                            ? "cursor-not-allowed opacity-50"
+                            : "cursor-pointer"
+                        }`}
                       >
-                        <option value="">Select gender</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                        <option value="Prefer not to say">
-                          Prefer not to say
-                        </option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        NIC / ID Number (optional)
-                      </label>
-                      <input
-                        value={form.nicIdNumber}
-                        onChange={(e) => setField("nicIdNumber", e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Phone Number
-                      </label>
-                      <input
-                        required
-                        value={form.phoneNumber}
-                        onChange={(e) => setField("phoneNumber", e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Email Address
-                      </label>
-                      <input
-                        required
-                        type="email"
-                        value={form.emailAddress}
-                        onChange={(e) =>
-                          setField("emailAddress", e.target.value)
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        District / City
-                      </label>
-                      <input
-                        required
-                        value={form.districtCity}
-                        onChange={(e) =>
-                          setField("districtCity", e.target.value)
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Current Location
-                      </label>
-                      <input
-                        required
-                        value={form.currentLocation}
-                        onChange={(e) =>
-                          setField("currentLocation", e.target.value)
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Can you travel to other districts?
-                    </label>
-                    <select
-                      value={String(form.canTravelOtherDistricts)}
-                      onChange={(e) =>
-                        setField(
-                          "canTravelOtherDistricts",
-                          e.target.value === "true"
-                        )
-                      }
-                      className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm sm:w-60"
-                    >
-                      <option value="false">No</option>
-                      <option value="true">Yes</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
-                  <h3 className="text-sm font-bold text-slate-900">
-                    2. Skills & Expertise
-                  </h3>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {SKILL_OPTIONS.map((skill) => (
-                      <label
-                        key={skill}
-                        className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={form.skills.includes(skill)}
-                          onChange={() => toggleSkill(skill)}
-                        />
-                        <span>{skill}</span>
-                      </label>
+                        <div
+                          className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-semibold ${
+                            idx === currentStep
+                              ? "border-rose-600 bg-rose-600 text-white"
+                              : idx < currentStep
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : "border-slate-300 bg-white text-slate-500"
+                          }`}
+                        >
+                          {idx < currentStep ? (
+                            <CheckCircle className="h-5 w-5" />
+                          ) : (
+                            idx + 1
+                          )}
+                        </div>
+                        <span className="mt-2 hidden text-xs font-medium text-slate-600 sm:block">
+                          {step.name}
+                        </span>
+                        <span className="mt-2 block text-xs font-medium text-slate-600 sm:hidden">
+                          {step.shortName}
+                        </span>
+                        {idx < STEPS.length - 1 && (
+                          <div
+                            className={`absolute left-1/2 top-5 h-[2px] w-full -translate-y-1/2 ${
+                              idx < currentStep
+                                ? "bg-emerald-500"
+                                : "bg-slate-200"
+                            }`}
+                            style={{ left: "50%", width: "calc(100% - 2rem)" }}
+                          />
+                        )}
+                      </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
-                  <h3 className="text-sm font-bold text-slate-900">
-                    3. Health & Safety
-                  </h3>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Do you have any medical conditions? (optional)
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={form.medicalConditions}
-                        onChange={(e) =>
-                          setField("medicalConditions", e.target.value)
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
-                      />
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  {/* Step 0: Basic Information */}
+                  {currentStep === 0 && (
+                    <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                      <h3 className="text-sm font-bold text-slate-900">
+                        1. Basic Information
+                      </h3>
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Full Name *
+                          </label>
+                          <input
+                            required
+                            value={form.fullName}
+                            onChange={(e) => setField("fullName", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Date of Birth *
+                          </label>
+                          <input
+                            required
+                            type="date"
+                            value={form.dateOfBirth}
+                            onChange={(e) => setField("dateOfBirth", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Gender *
+                          </label>
+                          <select
+                            required
+                            value={form.gender}
+                            onChange={(e) => setField("gender", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          >
+                            <option value="">Select gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                            <option value="Prefer not to say">
+                              Prefer not to say
+                            </option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            NIC / ID Number (optional)
+                          </label>
+                          <input
+                            value={form.nicIdNumber}
+                            onChange={(e) => setField("nicIdNumber", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Phone Number *
+                          </label>
+                          <input
+                            required
+                            value={form.phoneNumber}
+                            onChange={(e) => setField("phoneNumber", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Email Address *
+                          </label>
+                          <input
+                            required
+                            type="email"
+                            value={form.emailAddress}
+                            onChange={(e) => setField("emailAddress", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            District / City *
+                          </label>
+                          <input
+                            required
+                            value={form.districtCity}
+                            onChange={(e) => setField("districtCity", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Current Location *
+                          </label>
+                          <input
+                            required
+                            value={form.currentLocation}
+                            onChange={(e) => setField("currentLocation", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Can you travel to other districts?
+                        </label>
+                        <select
+                          value={String(form.canTravelOtherDistricts)}
+                          onChange={(e) =>
+                            setField("canTravelOtherDistricts", e.target.value === "true")
+                          }
+                          className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm sm:w-60"
+                        >
+                          <option value="false">No</option>
+                          <option value="true">Yes</option>
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Emergency Contact Person
-                      </label>
-                      <input
-                        required
-                        value={form.emergencyContactPerson}
-                        onChange={(e) =>
-                          setField("emergencyContactPerson", e.target.value)
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Emergency Contact Number
-                      </label>
-                      <input
-                        required
-                        value={form.emergencyContactNumber}
-                        onChange={(e) =>
-                          setField("emergencyContactNumber", e.target.value)
-                        }
-                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
-                  <h3 className="text-sm font-bold text-slate-900">
-                    4. Agreement
-                  </h3>
-                  <div className="mt-3 space-y-2 text-sm">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={form.agreeSafetyGuidelines}
-                        onChange={(e) =>
-                          setField("agreeSafetyGuidelines", e.target.checked)
-                        }
-                      />
-                      <span>
-                        I agree to follow DisasterWatch safety guidelines.
-                      </span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={form.agreeEmergencyContact}
-                        onChange={(e) =>
-                          setField("agreeEmergencyContact", e.target.checked)
-                        }
-                      />
-                      <span>I agree to be contacted during emergencies.</span>
-                    </label>
-                  </div>
-                </div>
-
-                {error && (
-                  <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    {error}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={submitting || approved}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Submitting…
-                    </>
-                  ) : pending ? (
-                    "Update application"
-                  ) : (
-                    "Submit volunteer application"
                   )}
-                </button>
-              </form>
+
+                  {/* Step 1: Skills & Expertise */}
+                  {currentStep === 1 && (
+                    <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                      <h3 className="text-sm font-bold text-slate-900">
+                        2. Skills & Expertise
+                      </h3>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {SKILL_OPTIONS.map((skill) => (
+                          <label
+                            key={skill}
+                            className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={form.skills.includes(skill)}
+                              onChange={() => toggleSkill(skill)}
+                            />
+                            <span>{skill}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 2: Health & Safety */}
+                  {currentStep === 2 && (
+                    <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                      <h3 className="text-sm font-bold text-slate-900">
+                        3. Health & Safety
+                      </h3>
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        <div className="sm:col-span-2">
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Do you have any medical conditions? (optional)
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={form.medicalConditions}
+                            onChange={(e) => setField("medicalConditions", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Emergency Contact Person *
+                          </label>
+                          <input
+                            required
+                            value={form.emergencyContactPerson}
+                            onChange={(e) => setField("emergencyContactPerson", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Emergency Contact Number *
+                          </label>
+                          <input
+                            required
+                            value={form.emergencyContactNumber}
+                            onChange={(e) => setField("emergencyContactNumber", e.target.value)}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 3: Agreement */}
+                  {currentStep === 3 && (
+                    <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                      <h3 className="text-sm font-bold text-slate-900">
+                        4. Agreement
+                      </h3>
+                      <div className="mt-3 space-y-2 text-sm">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={form.agreeSafetyGuidelines}
+                            onChange={(e) => setField("agreeSafetyGuidelines", e.target.checked)}
+                          />
+                          <span>
+                            I agree to follow DisasterWatch safety guidelines. *
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={form.agreeEmergencyContact}
+                            onChange={(e) => setField("agreeEmergencyContact", e.target.checked)}
+                          />
+                          <span>
+                            I agree to be contacted during emergencies. *
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step Error Display */}
+                  {stepError && (
+                    <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      {stepError}
+                    </div>
+                  )}
+
+                  {/* Navigation Buttons */}
+                  <div className="flex justify-between gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={handlePrev}
+                      disabled={currentStep === 0}
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    {currentStep < STEPS.length - 1 ? (
+                      <button
+                        type="button"
+                        onClick={handleNext}
+                        className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500"
+                      >
+                        Next
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {submitting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Submitting…
+                          </>
+                        ) : pending ? (
+                          "Update application"
+                        ) : (
+                          "Submit volunteer application"
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </>
             )}
           </div>
         </div>
@@ -562,14 +693,11 @@ export default function VolunteerJoinPage() {
           aria-modal="true"
           role="dialog"
         >
-          {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
             onClick={() => setShowConfirmModal(false)}
           />
-          {/* Modal panel */}
           <div className="relative w-full max-w-md transform overflow-hidden rounded-2xl bg-white shadow-2xl transition-all">
-            {/* Gradient header bar */}
             <div className="bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 px-6 py-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
