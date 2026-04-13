@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,6 +18,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/emergencies", label: "Emergencies", icon: Siren },
@@ -32,6 +35,41 @@ const navItems = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
+  const [hasSosNotification, setHasSosNotification] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkSos() {
+      if (typeof window === "undefined") return;
+      const token = window.localStorage.getItem("dmews_token");
+      if (!token) {
+        if (!cancelled) setHasSosNotification(false);
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/sos/admin/list`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const data = await res.json().catch(() => []);
+        if (!res.ok || cancelled) return;
+        const rows = Array.isArray(data) ? data : [];
+        // Highlight when there is at least one unresolved SOS.
+        const hasUnresolved = rows.some((r) => r?.status !== "resolved");
+        setHasSosNotification(hasUnresolved);
+      } catch {
+        if (!cancelled) setHasSosNotification(false);
+      }
+    }
+
+    checkSos();
+    const id = window.setInterval(checkSos, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   return (
     <aside className="flex w-full flex-col border-r border-sky-200/80 bg-gradient-to-b from-sky-700 via-sky-600 to-sky-700 text-sky-50 shadow-lg lg:w-56 lg:flex-shrink-0">
@@ -66,7 +104,16 @@ export function AdminSidebar() {
                     isActive ? "text-white" : "text-sky-200"
                   )}
                 />
-                <span className="flex-1">{item.label}</span>
+                <span className="flex flex-1 items-center gap-2">
+                  <span>{item.label}</span>
+                  {item.href === "/admin/emergencies" && hasSosNotification && (
+                    <span
+                      className="h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white/30"
+                      aria-label="New SOS notifications"
+                      title="New SOS notifications"
+                    />
+                  )}
+                </span>
                 <ChevronRight
                   className={clsx(
                     "h-4 w-4 flex-shrink-0",

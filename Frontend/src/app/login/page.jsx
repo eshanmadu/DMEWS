@@ -6,9 +6,12 @@ import dynamic from "next/dynamic";
 import { useTranslation } from "react-i18next";
 import Loader from "@/components/Loader";
 import { AuthLanguageStep } from "@/components/AuthLanguageStep";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import welcomeAnimation from "@/img/Welcome.json";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const PENDING_TOKEN_KEY = "dmews_pending_token";
+const PENDING_USER_KEY = "dmews_pending_user";
 
 const Lottie = dynamic(() => import("lottie-react"), { ssr: false });
 
@@ -21,6 +24,7 @@ function LoginPageInner() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotStep, setForgotStep] = useState("email");
@@ -41,6 +45,53 @@ function LoginPageInner() {
     const saved = window.localStorage.getItem("dmews_lang");
     setStep(saved ? "form" : "lang");
   }, []);
+
+  async function handleGoogleIdToken(idToken) {
+    setError(null);
+    setGoogleLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.message || "Google sign-in failed.");
+        return;
+      }
+
+      const next = searchParams.get("redirect");
+      const safe =
+        next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+      if (data?.profileComplete) {
+        if (data?.token) window.localStorage.setItem("dmews_token", data.token);
+        if (data?.user) window.localStorage.setItem("dmews_user", JSON.stringify(data.user));
+        if (data?.user?.district)
+          window.localStorage.setItem("dmews_user_district", data.user.district);
+        window.localStorage.removeItem(PENDING_TOKEN_KEY);
+        window.localStorage.removeItem(PENDING_USER_KEY);
+        window.dispatchEvent(new Event("dmews-auth-changed"));
+        router.push(safe);
+      } else {
+        if (data?.token) window.localStorage.setItem(PENDING_TOKEN_KEY, data.token);
+        if (data?.user) window.localStorage.setItem(PENDING_USER_KEY, JSON.stringify(data.user));
+        window.localStorage.removeItem("dmews_token");
+        window.localStorage.removeItem("dmews_user");
+        window.localStorage.removeItem("dmews_user_district");
+        if (data?.isNewUser) {
+          router.push(`/signup?mode=google-profile&redirect=${encodeURIComponent(safe)}`);
+        } else {
+          // Existing Google user with incomplete profile (fallback path).
+          router.push(`/signup?mode=google-profile&redirect=${encodeURIComponent(safe)}`);
+        }
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -267,6 +318,26 @@ function LoginPageInner() {
         <div className="px-6 py-8 sm:px-8">
           <h1 className="text-xl font-semibold text-slate-950">{t("loginPage.title")}</h1>
           <p className="mt-1 text-xs text-slate-500">{t("loginPage.subtitle")}</p>
+
+          <div className="mt-5">
+            <GoogleSignInButton
+              disabled={googleLoading || loading}
+              onIdToken={handleGoogleIdToken}
+            />
+            {googleLoading && (
+              <div className="mt-2 flex items-center justify-center text-xs text-slate-500">
+                <Loader size="sm" className="mr-2" /> Signing in with Google...
+              </div>
+            )}
+          </div>
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              or
+            </span>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>

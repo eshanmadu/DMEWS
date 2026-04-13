@@ -20,6 +20,9 @@ export const AVATARS = [
 
 export function avatarSrcById(id) {
   const found = AVATARS.find((a) => a.id === id);
-  return found?.src || null;
+  if (found?.src) return found.src;
+  const raw = String(id || "").trim();
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return null;
 }
 

@@ -283,7 +283,9 @@ export default function ProfilePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ currentPassword: deleteAccountPassword }),
+        body: JSON.stringify(
+          accountHasPassword ? { currentPassword: deleteAccountPassword } : {}
+        ),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -329,6 +331,7 @@ export default function ProfilePage() {
 
   const displayName = profile?.name?.trim() || profile?.email || "User";
   const activeAvatar = avatarSrcById(avatar);
+  const accountHasPassword = Boolean(profile?.hasPassword);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -498,34 +501,44 @@ export default function ProfilePage() {
             </div>
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Security</h2>
-              <p className="text-xs text-slate-500">Change your password</p>
+              <p className="text-xs text-slate-500">
+                {accountHasPassword
+                  ? "Change your password"
+                  : "This account uses Google sign-in (no password)"}
+              </p>
             </div>
           </div>
-          <form onSubmit={handlePasswordSubmit} className="space-y-4">
-            <InputWithIcon icon={Lock} label="Current Password" type="password" required value={currentPassword} onChange={setCurrentPassword} placeholder="Enter current password" />
-            <InputWithIcon icon={KeyRound} label="New Password" type="password" required minLength={6} value={newPassword} onChange={setNewPassword} placeholder="At least 6 characters" />
-            <InputWithIcon icon={KeyRound} label="Confirm New Password" type="password" required minLength={6} value={confirmNewPassword} onChange={setConfirmNewPassword} placeholder="Re-enter new password" />
-            {passwordMsg && (
-              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                {passwordMsg}
-              </div>
-            )}
-            {passwordSuccess && (
-              <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5 text-sm text-green-700">
-                <CheckCircle className="h-4 w-4 shrink-0" />
-                {passwordSuccess}
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={passwordSaving}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:opacity-70"
-            >
-              {passwordSaving ? <Loader size="sm" /> : <Lock className="h-4 w-4" />}
-              {passwordSaving ? "Updating..." : "Change Password"}
-            </button>
-          </form>
+          {accountHasPassword ? (
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <InputWithIcon icon={Lock} label="Current Password" type="password" required value={currentPassword} onChange={setCurrentPassword} placeholder="Enter current password" />
+              <InputWithIcon icon={KeyRound} label="New Password" type="password" required minLength={6} value={newPassword} onChange={setNewPassword} placeholder="At least 6 characters" />
+              <InputWithIcon icon={KeyRound} label="Confirm New Password" type="password" required minLength={6} value={confirmNewPassword} onChange={setConfirmNewPassword} placeholder="Re-enter new password" />
+              {passwordMsg && (
+                <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {passwordMsg}
+                </div>
+              )}
+              {passwordSuccess && (
+                <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5 text-sm text-green-700">
+                  <CheckCircle className="h-4 w-4 shrink-0" />
+                  {passwordSuccess}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={passwordSaving}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:opacity-70"
+              >
+                {passwordSaving ? <Loader size="sm" /> : <Lock className="h-4 w-4" />}
+                {passwordSaving ? "Updating..." : "Change Password"}
+              </button>
+            </form>
+          ) : (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+              Google accounts do not have a local password to change.
+            </div>
+          )}
         </div>
       </div>
 
@@ -622,22 +635,25 @@ export default function ProfilePage() {
             </div>
             <div className="space-y-4 p-5">
               <p className="text-sm text-slate-600">
-                Enter your current password to confirm. All content you submitted through this account
-                will be removed.
+                {accountHasPassword
+                  ? "Enter your current password to confirm. All content you submitted through this account will be removed."
+                  : "Confirm deletion. All content you submitted through this account will be removed."}
               </p>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Current password
-                </label>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={deleteAccountPassword}
-                  onChange={(e) => setDeleteAccountPassword(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
-                  placeholder="Your password"
-                />
-              </div>
+              {accountHasPassword && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Current password
+                  </label>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={deleteAccountPassword}
+                    onChange={(e) => setDeleteAccountPassword(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                    placeholder="Your password"
+                  />
+                </div>
+              )}
               {deleteAccountErr && (
                 <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                   <AlertCircle className="h-4 w-4 shrink-0" />
@@ -655,7 +671,9 @@ export default function ProfilePage() {
                 </button>
                 <button
                   type="button"
-                  disabled={deleteAccountBusy || !deleteAccountPassword.trim()}
+                  disabled={
+                    deleteAccountBusy || (accountHasPassword && !deleteAccountPassword.trim())
+                  }
                   onClick={handleDeleteAccount}
                   className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
