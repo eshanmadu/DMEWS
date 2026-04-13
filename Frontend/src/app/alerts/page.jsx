@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PublicAlertsMap } from "@/components/PublicAlertsMap";
 import Loader from "@/components/Loader";
+import Link from "next/link";
 import {
   AlertTriangle,
   MapPin,
@@ -111,7 +112,14 @@ function AlertCard({ alert, featured = false }) {
           </div>
         )}
       </div>
+      <Link
+        href={`/alerts/${alert?._id}`}
+        className="inline-flex w-center items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+      >
+        View Live Details
+      </Link>
     </article>
+    
   );
 }
 

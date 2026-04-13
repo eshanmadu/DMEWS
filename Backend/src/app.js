@@ -15,6 +15,7 @@ const missionsRoutes = require("./routes/missions.routes");
 const missingPersonsRoutes = require("./routes/missingPersons.routes");
 const riskPredictionsRoutes = require("./routes/riskPredictions.routes");
 const adminUsersRoutes = require("./routes/adminUsers.routes");
+const sensorRoutes = require("./routes/sensorRoutes");
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use("/missions", missionsRoutes);
 app.use("/missing-persons", missingPersonsRoutes);
 app.use("/risk-predictions", riskPredictionsRoutes);
 app.use("/admin/users", adminUsersRoutes);
+app.use("/sensors", sensorRoutes);
 
 module.exports = app;
 
