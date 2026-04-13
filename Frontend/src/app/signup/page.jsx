@@ -52,12 +52,15 @@ export default function SignupPage() {
 
   const [langModalOpen, setLangModalOpen] = useState(false);
 
-  const [method, setMethod] = useState(null); // null | "email" | "google"
-  const [googleStep, setGoogleStep] = useState("signin"); // "signin" | "profile"
+  // Method: null | "email" | "google"
+  const [method, setMethod] = useState(null);
+  // Google flow: step 0 = sign-in, step 1 = profile completion
+  const [googleStep, setGoogleStep] = useState(0); // 0: signin, 1: profile
   const [googleUser, setGoogleUser] = useState(null);
-  const [googleAvatarMode, setGoogleAvatarMode] = useState("google"); // "google" | "avatar"
+  const [googleAvatarMode, setGoogleAvatarMode] = useState("google");
   const [preferredLanguage, setPreferredLanguage] = useState("en");
 
+  // Email flow fields (unchanged)
   const [name, setName] = useState("");
   const [district, setDistrict] = useState("");
   const [email, setEmail] = useState("");
@@ -76,15 +79,7 @@ export default function SignupPage() {
     return a?.src;
   }, [avatars, avatar]);
 
-  const steps = useMemo(() => {
-    if (method !== "google") return [];
-    return [
-      { id: "method", label: "Method", done: true, active: false },
-      { id: "google", label: "Google", done: googleStep !== "signin", active: googleStep === "signin" },
-      { id: "profile", label: "Complete profile", done: false, active: googleStep === "profile" },
-    ];
-  }, [method, googleStep]);
-
+  // Restore pending Google profile (when returning from OAuth redirect)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mode = searchParams.get("mode");
@@ -99,7 +94,7 @@ export default function SignupPage() {
     }
 
     setMethod("google");
-    setGoogleStep("profile");
+    setGoogleStep(1); // already signed in, go to profile step
     setGoogleUser(pendingUser);
     setName(pendingUser?.name || "");
     setEmail(pendingUser?.email || "");
@@ -113,10 +108,17 @@ export default function SignupPage() {
     setLoading(false);
     setGoogleLoading(false);
     setMethod(null);
-    setGoogleStep("signin");
+    setGoogleStep(0);
     setGoogleUser(null);
     setGoogleAvatarMode("google");
     setPreferredLanguage("en");
+    setName("");
+    setDistrict("");
+    setEmail("");
+    setMobile("");
+    setPassword("");
+    setConfirmPassword("");
+    setAvatar("man1");
   }
 
   async function handleGoogleIdToken(idToken) {
@@ -143,6 +145,8 @@ export default function SignupPage() {
           window.localStorage.removeItem(PENDING_TOKEN_KEY);
           window.localStorage.removeItem(PENDING_USER_KEY);
           window.dispatchEvent(new Event("dmews-auth-changed"));
+          router.push(redirectPath);
+          return;
         } else {
           if (data?.token) window.localStorage.setItem(PENDING_TOKEN_KEY, data.token);
           if (data?.user) window.localStorage.setItem(PENDING_USER_KEY, JSON.stringify(data.user));
@@ -152,19 +156,17 @@ export default function SignupPage() {
         }
       }
 
-      if (data?.profileComplete) {
-        router.push(redirectPath);
-      } else {
-        setGoogleUser(data?.user || null);
-        setName(data?.user?.name || "");
-        setEmail(data?.user?.email || "");
-        setMobile(data?.user?.mobile || "");
-        setDistrict(data?.user?.district || "");
-        setPreferredLanguage(
-          (typeof window !== "undefined" && window.localStorage.getItem("dmews_lang")) || "en"
-        );
-        setGoogleStep("profile");
-      }
+      // Profile not complete → go to step 2 (profile completion)
+      setGoogleUser(data?.user || null);
+      setName(data?.user?.name || "");
+      setEmail(data?.user?.email || "");
+      setMobile(data?.user?.mobile || "");
+      setDistrict(data?.user?.district || "");
+      setPreferredLanguage(
+        (typeof window !== "undefined" && window.localStorage.getItem("dmews_lang")) || "en"
+      );
+      setMethod("google");
+      setGoogleStep(1);
     } catch {
       setError(t("signupPage.networkError"));
     } finally {
@@ -184,7 +186,8 @@ export default function SignupPage() {
           : null;
       if (!token) {
         setError("Session expired. Please sign in with Google again.");
-        setGoogleStep("signin");
+        setMethod(null);
+        setGoogleStep(0);
         return;
       }
 
@@ -231,7 +234,7 @@ export default function SignupPage() {
     }
   }
 
-  async function handleSubmit(e) {
+  async function handleEmailSubmit(e) {
     e.preventDefault();
     setError(null);
 
@@ -271,8 +274,8 @@ export default function SignupPage() {
   }
 
   return (
-  <>
-   <SignupLanguageModal
+    <>
+      <SignupLanguageModal
         open={langModalOpen}
         onSelected={() => setLangModalOpen(false)}
       />
@@ -286,10 +289,9 @@ export default function SignupPage() {
         aria-hidden={langModalOpen}
       >
         <div className="grid w-full gap-6 rounded-2xl bg-white/80 shadow-lg ring-1 ring-slate-200 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.1fr)]">
-
           {/* Left Panel */}
           <div className="hidden flex-col justify-center rounded-l-2xl bg-gradient-to-br from-sky-700 via-sky-600 to-sky-700 px-6 py-8 text-sky-50 sm:flex">
-            <h1 className="font-oswald font-bold text-3xl  tracking-wide">
+            <h1 className="font-oswald font-bold text-3xl tracking-wide">
               {t("signupPage.heroTitle")}
             </h1>
             <h2 className="mt-2 text-sm font-semibold uppercase tracking-wide text-sky-100">
@@ -309,36 +311,50 @@ export default function SignupPage() {
               {t("signupPage.subtitle")}
             </p>
 
-            {/* Step indicator (Google flow only) */}
+            {/* Step Indicator (only for Google flow) */}
             {method === "google" && (
               <div className="mt-5 flex items-center gap-2">
-                {steps.map((s, idx) => (
-                  <div key={s.id} className="flex flex-1 items-center gap-2">
-                    <div
-                      className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-bold ${
-                        s.done
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                          : s.active
-                            ? "border-sky-400 bg-sky-50 text-sky-700"
-                            : "border-slate-200 bg-white text-slate-400"
-                      }`}
-                    >
-                      {idx + 1}
-                    </div>
-                    <div
-                      className={`text-xs font-semibold ${
-                        s.active ? "text-slate-900" : "text-slate-500"
-                      }`}
-                    >
-                      {s.label}
-                    </div>
-                    {idx < steps.length - 1 && <div className="h-px flex-1 bg-slate-200" />}
+                <div className="flex flex-1 items-center gap-2">
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-bold ${
+                      googleStep === 1
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                        : "border-sky-400 bg-sky-50 text-sky-700"
+                    }`}
+                  >
+                    1
                   </div>
-                ))}
+                  <div
+                    className={`text-xs font-semibold ${
+                      googleStep === 1 ? "text-slate-500" : "text-slate-900"
+                    }`}
+                  >
+                    Sign in with Google
+                  </div>
+                  <div className="h-px flex-1 bg-slate-200" />
+                </div>
+                <div className="flex flex-1 items-center gap-2">
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-bold ${
+                      googleStep === 1
+                        ? "border-sky-400 bg-sky-50 text-sky-700"
+                        : "border-slate-200 bg-white text-slate-400"
+                    }`}
+                  >
+                    2
+                  </div>
+                  <div
+                    className={`text-xs font-semibold ${
+                      googleStep === 1 ? "text-slate-900" : "text-slate-500"
+                    }`}
+                  >
+                    Complete profile
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* Method chooser */}
+            {/* Initial method selection */}
             {method === null && (
               <div className="mt-6 space-y-3">
                 <button
@@ -346,11 +362,19 @@ export default function SignupPage() {
                   onClick={() => {
                     setError(null);
                     setMethod("google");
-                    setGoogleStep("signin");
+                    setGoogleStep(0);
                   }}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:border-sky-300 hover:bg-sky-50/60"
                 >
-                  Sign up with Google
+                  <span className="inline-flex items-center gap-2">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+                      <path
+                        fill="#EA4335"
+                        d="M12 10.2v3.9h5.5c-.2 1.2-1.4 3.5-5.5 3.5-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.2.8 3.9 1.5l2.7-2.6C17 2.9 14.7 2 12 2 6.9 2 2.8 6.1 2.8 11.2S6.9 20.4 12 20.4c6.9 0 9.1-4.8 9.1-7.3 0-.5 0-.8-.1-1.2H12z"
+                      />
+                    </svg>
+                    <span>Sign up with Google</span>
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -361,7 +385,26 @@ export default function SignupPage() {
                   }}
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:border-sky-300 hover:bg-sky-50/60"
                 >
-                  Sign up with Email & Password
+                  <span className="inline-flex items-center gap-2">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="h-5 w-5 text-slate-700"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M4 6.5h16A1.5 1.5 0 0 1 21.5 8v8A1.5 1.5 0 0 1 20 17.5H4A1.5 1.5 0 0 1 2.5 16V8A1.5 1.5 0 0 1 4 6.5Z"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      />
+                      <path
+                        d="m3 8 8.1 5.4a1.5 1.5 0 0 0 1.8 0L21 8"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      />
+                    </svg>
+                    <span>Sign up with Email & Password</span>
+                  </span>
                 </button>
                 {error && (
                   <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -371,8 +414,8 @@ export default function SignupPage() {
               </div>
             )}
 
-            {/* Google flow */}
-            {method === "google" && googleStep === "signin" && (
+            {/* Google Step 0: Sign in with Google */}
+            {method === "google" && googleStep === 0 && (
               <div className="mt-6 space-y-3">
                 <GoogleSignInButton
                   disabled={googleLoading || loading || langModalOpen}
@@ -398,8 +441,10 @@ export default function SignupPage() {
               </div>
             )}
 
-            {method === "google" && googleStep === "profile" && (
+            {/* Google Step 1: Complete profile (single page) */}
+            {method === "google" && googleStep === 1 && (
               <form onSubmit={submitGoogleProfile} className="mt-6 space-y-4">
+                {/* Avatar selector */}
                 <div className="rounded-xl border border-slate-200 bg-white p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -407,7 +452,7 @@ export default function SignupPage() {
                         Profile photo
                       </div>
                       <div className="mt-0.5 text-xs text-slate-500">
-                        Keep Google photo or choose an avatar.
+                        Choose your profile picture
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -453,7 +498,9 @@ export default function SignupPage() {
                           sizes="56px"
                           className="object-cover"
                         />
-                      ) : null}
+                      ) : (
+                        <div className="h-full w-full bg-slate-200" />
+                      )}
                     </div>
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-slate-900">
@@ -497,22 +544,7 @@ export default function SignupPage() {
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    {t("signupPage.mobile")}
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={mobile}
-                    onChange={(e) =>
-                      setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
-                    }
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                    placeholder={t("signupPage.mobilePlaceholder")}
-                  />
-                </div>
-
+                {/* District */}
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                     {t("signupPage.district")}
@@ -532,6 +564,7 @@ export default function SignupPage() {
                   </select>
                 </div>
 
+                {/* Language */}
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Language
@@ -562,6 +595,23 @@ export default function SignupPage() {
                   </div>
                 </div>
 
+                {/* Phone number */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    {t("signupPage.mobile")}
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={mobile}
+                    onChange={(e) =>
+                      setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                    placeholder={t("signupPage.mobilePlaceholder")}
+                  />
+                </div>
+
                 {error && (
                   <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                     {error}
@@ -574,7 +624,7 @@ export default function SignupPage() {
                   className="btn-primary flex w-full items-center justify-center rounded-full disabled:opacity-70"
                 >
                   {loading && <Loader size="sm" className="mr-2" />}
-                  <span>{loading ? "Saving..." : "Continue"}</span>
+                  <span>{loading ? "Saving..." : "Complete signup"}</span>
                 </button>
 
                 <button
@@ -587,7 +637,7 @@ export default function SignupPage() {
               </form>
             )}
 
-            {/* Email/password flow (existing form) */}
+            {/* Email & Password flow (unchanged) */}
             {method === "email" && (
               <>
                 <div className="mt-5 flex items-center justify-between">
@@ -603,162 +653,159 @@ export default function SignupPage() {
                   </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+                <form onSubmit={handleEmailSubmit} className="mt-6 space-y-4">
+                  {/* Avatar Selection (unchanged) */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {t("signupPage.profilePicture")}
+                    </label>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {t("signupPage.avatarHint")}
+                    </p>
+                    <div className="mt-3 grid grid-cols-4 gap-3">
+                      {avatars.map((a) => {
+                        const selected = avatar === a.id;
+                        return (
+                          <button
+                            key={a.id}
+                            type="button"
+                            title={a.label}
+                            onClick={() => setAvatar(a.id)}
+                            className={`flex items-center justify-center rounded-xl border p-2 transition ${
+                              selected
+                                ? "border-sky-500 bg-sky-50 shadow-sm"
+                                : "border-slate-200 bg-white hover:border-sky-300 hover:bg-sky-50/60"
+                            }`}
+                          >
+                            <div className="relative h-12 w-12 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+                              <Image
+                                src={a.src}
+                                alt={a.label}
+                                fill
+                                sizes="48px"
+                                className="object-cover"
+                              />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-              {/* Avatar Selection */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  {t("signupPage.profilePicture")}
-                </label>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  {t("signupPage.avatarHint")}
-                </p>
+                  {/* Name */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {t("signupPage.name")}
+                    </label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                      placeholder={t("signupPage.namePlaceholder")}
+                    />
+                  </div>
 
-                <div className="mt-3 grid grid-cols-4 gap-3">
-                  {avatars.map((a) => {
-                    const selected = avatar === a.id;
+                  {/* District */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {t("signupPage.district")}
+                    </label>
+                    <select
+                      required
+                      value={district}
+                      onChange={(e) => setDistrict(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                    >
+                      <option value="">{t("signupPage.selectDistrict")}</option>
+                      {DISTRICTS.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                    return (
-                      <button
-                        key={a.id}
-                        type="button"
-                        title={a.label} 
-                        onClick={() => setAvatar(a.id)}
-                        className={`flex items-center justify-center rounded-xl border p-2 transition ${
-                          selected
-                            ? "border-sky-500 bg-sky-50 shadow-sm"
-                            : "border-slate-200 bg-white hover:border-sky-300 hover:bg-sky-50/60"
-                        }`}
-                      >
-                        <div className="relative h-12 w-12 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
-                          <Image
-                            src={a.src}
-                            alt={a.label}
-                            fill
-                            sizes="48px"
-                            className="object-cover"
-                          />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                  {/* Email */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {t("signupPage.email")}
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                      placeholder={t("loginPage.emailPlaceholder")}
+                    />
+                  </div>
 
-              {/* Name */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  {t("signupPage.name")}
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                  placeholder={t("signupPage.namePlaceholder")}
-                />
-              </div>
+                  {/* Mobile */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {t("signupPage.mobile")}
+                    </label>
+                    <input
+                      type="tel"
+                      value={mobile}
+                      onChange={(e) => setMobile(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                      placeholder={t("signupPage.mobilePlaceholder")}
+                    />
+                  </div>
 
-              {/* District */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  {t("signupPage.district")}
-                </label>
-                <select
-                  required
-                  value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                >
-                  <option value="">{t("signupPage.selectDistrict")}</option>
-                  {DISTRICTS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  {/* Password */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {t("signupPage.password")}
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                      placeholder={t("signupPage.passwordPlaceholder")}
+                    />
+                  </div>
 
-              {/* Email */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  {t("signupPage.email")}
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                  placeholder={t("loginPage.emailPlaceholder")}
-                />
-              </div>
+                  {/* Confirm Password */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {t("signupPage.confirmPassword")}
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                      placeholder={t("signupPage.confirmPlaceholder")}
+                    />
+                  </div>
 
-              {/* Mobile */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  {t("signupPage.mobile")}
-                </label>
-                <input
-                  type="tel"
-                  value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                  placeholder={t("signupPage.mobilePlaceholder")}
-                />
-              </div>
+                  {error && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                      {error}
+                    </div>
+                  )}
 
-              {/* Password */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  {t("signupPage.password")}
-                </label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                  placeholder={t("signupPage.passwordPlaceholder")}
-                />
-              </div>
-
-              {/* Confirm Password */}
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  {t("signupPage.confirmPassword")}
-                </label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                  placeholder={t("signupPage.confirmPlaceholder")}
-                />
-              </div>
-
-              {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading || langModalOpen}
-                className="btn-primary flex w-full items-center justify-center rounded-full disabled:opacity-70"
-              >
-                {loading && <Loader size="sm" className="mr-2" />}
-                <span>
-                  {loading
-                    ? t("signupPage.submitting")
-                    : t("signupPage.submit")}
-                </span>
-              </button>
-            </form>
+                  <button
+                    type="submit"
+                    disabled={loading || langModalOpen}
+                    className="btn-primary flex w-full items-center justify-center rounded-full disabled:opacity-70"
+                  >
+                    {loading && <Loader size="sm" className="mr-2" />}
+                    <span>
+                      {loading
+                        ? t("signupPage.submitting")
+                        : t("signupPage.submit")}
+                    </span>
+                  </button>
+                </form>
               </>
             )}
 

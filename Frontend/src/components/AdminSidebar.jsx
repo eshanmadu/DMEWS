@@ -108,7 +108,7 @@ export function AdminSidebar() {
                   <span>{item.label}</span>
                   {item.href === "/admin/emergencies" && hasSosNotification && (
                     <span
-                      className="h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white/30"
+                      className="h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white/30"
                       aria-label="New SOS notifications"
                       title="New SOS notifications"
                     />
