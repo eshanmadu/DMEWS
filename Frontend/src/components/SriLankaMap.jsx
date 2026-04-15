@@ -46,146 +46,6 @@ const DISTRICTS = [
   { name: "Kegalle", lat: 7.2513, lon: 80.3464 },
 ];
 
-// Basic mapping of Open-Meteo weather codes to labels
-function describeWeatherCode(code) {
-  if (code == null) return "Unknown";
-  if (code === 0) return "Clear sky";
-  if ([1, 2, 3].includes(code)) return "Partly cloudy";
-  if ([45, 48].includes(code)) return "Fog";
-  if ([51, 53, 55].includes(code)) return "Drizzle";
-  if ([61, 63, 65].includes(code)) return "Rain";
-  if ([66, 67].includes(code)) return "Freezing rain";
-  if ([71, 73, 75].includes(code)) return "Snow";
-  if ([80, 81, 82].includes(code)) return "Rain showers";
-  if ([95].includes(code)) return "Thunderstorm";
-  if ([96, 99].includes(code)) return "Thunderstorm with hail";
-  return `Code ${code}`;
-}
-
-// Map weather code to a simple icon (sun / clouds / rain / storm), aware of day/night
-function getWeatherIcon(code, isDay) {
-  if (code == null) return isDay ? "☁️" : "🌙";
-  if (code === 0) return isDay ? "☀️" : "🌕"; // clear sky
-  if ([1, 2, 3].includes(code)) return isDay ? "🌤️" : "🌙"; // partly cloudy
-  if ([45, 48].includes(code)) return "🌫️"; // fog
-  if ([51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) {
-    return "🌧️"; // drizzle / rain
-  }
-  if ([95, 96, 99].includes(code)) return "⛈️"; // thunderstorms
-  return isDay ? "☁️" : "🌙";
-}
-
-// Animated SVG icon for popup (very lightweight), aware of day/night
-function getAnimatedWeatherSvg(code, isDay) {
-  const baseSize = 40;
-  // Clear / sunny
-  if (code === 0) {
-    if (!isDay) {
-      // Night: full moon with subtle glow
-      return `
-        <svg width="${baseSize}" height="${baseSize}" viewBox="0 0 40 40">
-          <defs>
-            <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#f8fafc"/>
-              <stop offset="100%" stop-color="#cbd5e1"/>
-            </radialGradient>
-          </defs>
-          <g transform="translate(20,20)">
-            <circle r="9" fill="url(#moonGlow)" opacity="0.9">
-              <animate attributeName="opacity" values="0.85;1;0.85" dur="3s" repeatCount="indefinite" />
-            </circle>
-          </g>
-        </svg>
-      `;
-    }
-
-    return `
-      <svg width="${baseSize}" height="${baseSize}" viewBox="0 0 40 40">
-        <defs>
-          <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#fde68a"/>
-            <stop offset="100%" stop-color="#f59e0b"/>
-          </radialGradient>
-        </defs>
-        <g transform="translate(20,20)">
-          <circle r="8" fill="url(#sunGlow)">
-            <animate attributeName="r" values="7;9;7" dur="2.2s" repeatCount="indefinite" />
-          </circle>
-          <g stroke="#fbbf24" stroke-width="2" stroke-linecap="round">
-            <line y1="-13" y2="-17">
-              <animate attributeName="y2" values="-17;-19;-17" dur="2.2s" repeatCount="indefinite" />
-            </line>
-            <line y1="13" y2="17">
-              <animate attributeName="y2" values="17;19;17" dur="2.2s" repeatCount="indefinite" />
-            </line>
-            <line x1="-13" x2="-17">
-              <animate attributeName="x2" values="-17;-19;-17" dur="2.2s" repeatCount="indefinite" />
-            </line>
-            <line x1="13" x2="17">
-              <animate attributeName="x2" values="17;19;17" dur="2.2s" repeatCount="indefinite" />
-            </line>
-          </g>
-        </g>
-      </svg>
-    `;
-  }
-
-  // Rain / drizzle / showers
-  if (
-    [51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)
-  ) {
-    return `
-      <svg width="${baseSize}" height="${baseSize}" viewBox="0 0 40 40">
-        <g fill="none" stroke-linecap="round">
-          <path d="M10 18c0-3 2.5-5.5 5.5-5.5 1 0 1.9.3 2.7.8C19 11.8 20.9 10.5 23 10.5 26 10.5 28.5 13 28.5 16" stroke="#e5e7eb" stroke-width="2.2" stroke-linejoin="round"/>
-          <g stroke="#60a5fa" stroke-width="2">
-            <line x1="13" y1="20" x2="11" y2="25">
-              <animate attributeName="y1" values="20;22;20" dur="1.2s" repeatCount="indefinite" />
-              <animate attributeName="y2" values="25;27;25" dur="1.2s" repeatCount="indefinite" />
-            </line>
-            <line x1="19" y1="21" x2="17" y2="26">
-              <animate attributeName="y1" values="21;23;21" dur="1.2s" begin="0.2s" repeatCount="indefinite" />
-              <animate attributeName="y2" values="26;28;26" dur="1.2s" begin="0.2s" repeatCount="indefinite" />
-            </line>
-            <line x1="25" y1="20" x2="23" y2="25">
-              <animate attributeName="y1" values="20;22;20" dur="1.2s" begin="0.4s" repeatCount="indefinite" />
-              <animate attributeName="y2" values="25;27;25" dur="1.2s" begin="0.4s" repeatCount="indefinite" />
-            </line>
-          </g>
-        </g>
-      </svg>
-    `;
-  }
-
-  // Thunderstorm
-  if ([95, 96, 99].includes(code)) {
-    return `
-      <svg width="${baseSize}" height="${baseSize}" viewBox="0 0 40 40">
-        <g fill="none" stroke-linecap="round">
-          <path d="M11 18c0-3 2.4-5.5 5.3-5.5 1 0 1.8.3 2.6.8C19.2 11.8 21 10.5 23 10.5 26 10.5 28.5 13 28.5 16" stroke="#e5e7eb" stroke-width="2.2" stroke-linejoin="round"/>
-          <polygon points="18,19 14,27 18.5,27 16,33 23,24.5 18.5,24.5 21,19" fill="#facc15">
-            <animate attributeName="opacity" values="1;0.4;1" dur="0.7s" repeatCount="indefinite" />
-          </polygon>
-        </g>
-      </svg>
-    `;
-  }
-
-  // Default: small breathing cloud
-  return `
-    <svg width="${baseSize}" height="${baseSize}" viewBox="0 0 40 40">
-      <path d="M10 21c0-3 2.5-5.5 5.5-5.5 1.2 0 2.3.4 3.2 1 0.7-2.1 2.7-3.5 4.9-3.5 3 0 5.4 2.4 5.4 5.4" fill="none" stroke="#e5e7eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <animate attributeName="d" dur="2.4s" repeatCount="indefinite"
-          values="
-            M10 21c0-3 2.5-5.5 5.5-5.5 1.2 0 2.3.4 3.2 1 0.7-2.1 2.7-3.5 4.9-3.5 3 0 5.4 2.4 5.4 5.4;
-            M10 21c0-2.6 2.3-5 5.1-5 1.3 0 2.5.5 3.4 1.2 0.7-1.8 2.4-3.1 4.4-3.1 2.8 0 4.9 2.1 4.9 4.9;
-            M10 21c0-3 2.5-5.5 5.5-5.5 1.2 0 2.3.4 3.2 1 0.7-2.1 2.7-3.5 4.9-3.5 3 0 5.4 2.4 5.4 5.4
-          " />
-      </path>
-    </svg>
-  `;
-}
-
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -319,7 +179,7 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
           }
         }
 
-        async function fetchGoogleDistricts() {
+        async function fetchDistrictsWeather() {
           const API_BASE =
             process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
           const res = await fetch(`${API_BASE}/weather/districts`);
@@ -328,7 +188,8 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
             console.error("Weather API error", res.status, list);
             throw new Error("Failed to load weather");
           }
-          return Array.isArray(list) ? list : [];
+          if (!Array.isArray(list)) return [];
+          return list.filter((row) => row?.weather?.provider === "weatherapi");
         }
 
         // Multi-location responses are inconsistent across Open-Meteo changes.
@@ -340,15 +201,32 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
           Array.isArray(cached) &&
           cached.length === DISTRICTS.length &&
           cached.every((d) => d && typeof d.name === "string" && d.name.length) &&
-          cached.some((d) => typeof d?.weather?.temperature === "number");
+          cached.some((d) => d?.weather?.provider === "weatherapi");
 
-        const results = cachedOk ? cached : await fetchGoogleDistricts();
+        const results = cachedOk ? cached : await fetchDistrictsWeather();
         if (isDisposed || !map || !districtsLayer) return;
 
-        const normalizedResults =
-          Array.isArray(results) && results.length === DISTRICTS.length
-            ? results
-            : DISTRICTS.map((d) => ({ ...d, weather: null, daily: null }));
+        // Prefer WeatherAPI rows when present, keyed by district name.
+        const list = Array.isArray(results) ? results : [];
+        const byName = new Map(
+          list
+            .filter((r) => r?.name)
+            .map((r) => [String(r.name).trim().toLowerCase(), r])
+        );
+
+        const normalizedResults = DISTRICTS.map((d) => {
+          const key = d.name.trim().toLowerCase();
+          const row = byName.get(key);
+          if (!row) return { ...d, weather: null, daily: null };
+          return {
+            ...d,
+            ...row,
+            weather:
+              row?.weather?.provider === "weatherapi"
+                ? row.weather
+                : row?.weather || null,
+          };
+        });
 
         if (!cachedOk && Array.isArray(results) && results.length) {
           writeCache(results);
@@ -367,14 +245,13 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
         normalizedResults.forEach((d) => {
           const temp = d.weather?.temperature;
           const wind = d.weather?.windspeed;
-          const code = d.weather?.weathercode;
-          const isDay = d.weather?.is_day === 1;
+          const conditionText = d.weather?.text || "WeatherAPI condition unavailable";
+          const conditionIcon = d.weather?.condition_icon;
           const todayRain =
             d.daily && Array.isArray(d.daily.precipitation_sum)
               ? d.daily.precipitation_sum[0]
               : null;
 
-          const iconChar = getWeatherIcon(code, isDay);
           const ringColor = "rgba(148,163,184,0.9)"; // neutral ring
           const iconHtml = `
             <div
@@ -387,10 +264,14 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
                 border-radius:9999px;
                 background:rgba(15,23,42,0.9);
                 box-shadow:0 0 0 3px ${ringColor};
-                font-size:18px;
+                overflow:hidden;
               "
             >
-              <span>${iconChar}</span>
+              ${
+                conditionIcon
+                  ? `<img src="${conditionIcon}" alt="" style="width:24px;height:24px;object-fit:contain;" />`
+                  : `<span style="font-size:14px;color:#e2e8f0;">W</span>`
+              }
             </div>
           `;
 
@@ -403,9 +284,9 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
             }),
           });
 
-          const description = describeWeatherCode(code);
-
-          const animatedSvg = getAnimatedWeatherSvg(code, isDay);
+          const popupIcon = conditionIcon
+            ? `<img src="${conditionIcon}" alt="" style="width:40px;height:40px;object-fit:contain;" />`
+            : `<div style="width:40px;height:40px;border-radius:9999px;display:flex;align-items:center;justify-content:center;background:#1e293b;color:#e2e8f0;font-size:11px;">N/A</div>`;
 
           const popupHtml = `
             <div
@@ -423,7 +304,7 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
             >
               <div style="display:flex;gap:10px;align-items:center;">
                 <div style="flex-shrink:0;">
-                  ${animatedSvg}
+                  ${popupIcon}
                 </div>
                 <div style="flex-grow:1;">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
@@ -480,7 +361,7 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
                   color:#d1d5db;
                 "
               >
-                ${description}
+                ${conditionText}
               </div>
             </div>
           `;
@@ -493,7 +374,7 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
               name: d.name,
               temp,
               wind,
-              code,
+              conditionText,
               todayRain,
             };
             setHovered(nextHovered);
@@ -501,6 +382,11 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
               onHover(nextHovered);
             }
             marker.openPopup();
+          });
+          marker.on("click", () => {
+            if (typeof onSelect === "function") {
+              onSelect(d.name);
+            }
           });
           marker.on("mouseout", () => {
             setHovered(null);
@@ -612,7 +498,7 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
                 Condition
               </div>
               <div className="text-slate-100">
-                {describeWeatherCode(hovered.code)}
+                {hovered.conditionText || "—"}
               </div>
             </div>
           </div>

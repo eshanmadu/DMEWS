@@ -80,15 +80,6 @@ function getIsDayInSriLanka(unixSeconds) {
   return Number.isFinite(hour) ? hour >= 6 && hour < 18 : true;
 }
 
-function pickGoogleRain(d) {
-  const w = d?.weather;
-  return {
-    lastHour: typeof w?.google_rain_last_hour_mm === "number" ? w.google_rain_last_hour_mm : null,
-    last24h: typeof w?.google_rain_last_24h_mm === "number" ? w.google_rain_last_24h_mm : null,
-    prob: typeof w?.google_rain_probability_percent === "number" ? w.google_rain_probability_percent : null,
-  };
-}
-
 function pickWeatherMetrics(d) {
   const w = d?.weather;
   if (!w) return null;
@@ -114,6 +105,7 @@ export function SriLankaWeather() {
   const [lockToUserDistrict, setLockToUserDistrict] = useState(true);
   const [showAllDistricts, setShowAllDistricts] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [sourceNotice, setSourceNotice] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -149,10 +141,6 @@ export function SriLankaWeather() {
     const tomorrowProb = districts.map((d) => pickDaily(d.daily, 1, "precipitation_probability_max")).filter((v) => typeof v === "number");
     const tomorrowWindMax = districts.map((d) => pickDaily(d.daily, 1, "windspeed_10m_max")).filter((v) => typeof v === "number");
 
-    const googleHour = districts.map((d) => pickGoogleRain(d).lastHour).filter((v) => typeof v === "number");
-    const google24h = districts.map((d) => pickGoogleRain(d).last24h).filter((v) => typeof v === "number");
-    const googleProb = districts.map((d) => pickGoogleRain(d).prob).filter((v) => typeof v === "number");
-
     const feels = districts.map((d) => d.weather?.feelslike_c).filter((v) => typeof v === "number");
     const hums = districts.map((d) => d.weather?.humidity).filter((v) => typeof v === "number");
     const pres = districts.map((d) => d.weather?.pressure_mb).filter((v) => typeof v === "number");
@@ -166,11 +154,6 @@ export function SriLankaWeather() {
       currentCode: codes.length ? codes[0] : null,
       currentTemp: avg(temps),
       currentWind: avg(winds),
-      googleRain: {
-        lastHour: avg(googleHour),
-        last24h: avg(google24h),
-        prob: avg(googleProb),
-      },
       wa: {
         feelslike: feels.length ? avg(feels) : null,
         humidity: hums.length ? avg(hums) : null,
@@ -289,7 +272,6 @@ export function SriLankaWeather() {
       });
   }, [districts, selected]);
 
-  const googleRain = selected ? pickGoogleRain(selected) : nationwide.googleRain;
   const currentTempVal = typeof selected?.weather?.temperature === "number"
     ? selected.weather.temperature
     : typeof nationwide.currentTemp === "number"
@@ -308,7 +290,17 @@ export function SriLankaWeather() {
         <MapLockFrame className="h-full w-full">
           <SriLankaMap
             onData={(list) => {
-              setDistricts(list);
+              const arr = Array.isArray(list) ? list : [];
+              const weatherApiRows = arr.filter(
+                (d) => d?.weather?.provider === "weatherapi"
+              );
+              if (weatherApiRows.length > 0) {
+                setDistricts(weatherApiRows);
+                setSourceNotice("");
+              } else {
+                setDistricts(arr);
+                setSourceNotice("WeatherAPI district data unavailable right now.");
+              }
               const currentUserDistrict = getUserDistrictFromStorage();
               if (currentUserDistrict) {
                 setUserDistrict(currentUserDistrict);
@@ -341,6 +333,12 @@ export function SriLankaWeather() {
               </p>
             </div>
           </div>
+
+          {sourceNotice ? (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              {sourceNotice}
+            </div>
+          ) : null}
 
           {/* Current weather block */}
           <div className="mt-4 overflow-hidden rounded-xl bg-gradient-to-br from-sky-50 via-white to-sky-50/80 p-4 shadow-inner">
@@ -427,37 +425,20 @@ export function SriLankaWeather() {
             )}
 
             {/* Rain info */}
-            {isWeatherApi ? (
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
-                  <div className="font-semibold text-emerald-900">Precip (recent)</div>
-                  <div className="mt-0.5 text-base tabular-nums">{metrics?.precip != null ? `${metrics.precip.toFixed(1)} mm` : "—"}</div>
-                </div>
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
-                  <div className="font-semibold text-emerald-900">Today total (forecast)</div>
-                  <div className="mt-0.5 text-base tabular-nums">{today.rain != null ? `${today.rain.toFixed(1)} mm` : "—"}</div>
-                </div>
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
-                  <div className="font-semibold text-emerald-900">Rain chance (today)</div>
-                  <div className="mt-0.5 text-base tabular-nums">{today.rainProb != null ? `${today.rainProb.toFixed(0)}%` : "—"}</div>
-                </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+                <div className="font-semibold text-emerald-900">Precip (recent)</div>
+                <div className="mt-0.5 text-base tabular-nums">{metrics?.precip != null ? `${metrics.precip.toFixed(1)} mm` : "—"}</div>
               </div>
-            ) : (
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-sky-100 bg-white/70 px-3 py-2">
-                  <div className="font-semibold text-slate-700">Rain (last hr)</div>
-                  <div className="mt-0.5 text-base tabular-nums">{googleRain?.lastHour != null ? `${googleRain.lastHour.toFixed(1)} mm` : "—"}</div>
-                </div>
-                <div className="rounded-xl border border-sky-100 bg-white/70 px-3 py-2">
-                  <div className="font-semibold text-slate-700">Rain (24h)</div>
-                  <div className="mt-0.5 text-base tabular-nums">{googleRain?.last24h != null ? `${googleRain.last24h.toFixed(1)} mm` : "—"}</div>
-                </div>
-                <div className="rounded-xl border border-sky-100 bg-white/70 px-3 py-2">
-                  <div className="font-semibold text-slate-700">Rain probability</div>
-                  <div className="mt-0.5 text-base tabular-nums">{googleRain?.prob != null ? `${googleRain.prob.toFixed(0)}%` : "—"}</div>
-                </div>
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+                <div className="font-semibold text-emerald-900">Today total (forecast)</div>
+                <div className="mt-0.5 text-base tabular-nums">{today.rain != null ? `${today.rain.toFixed(1)} mm` : "—"}</div>
               </div>
-            )}
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2">
+                <div className="font-semibold text-emerald-900">Rain chance (today)</div>
+                <div className="mt-0.5 text-base tabular-nums">{today.rainProb != null ? `${today.rainProb.toFixed(0)}%` : "—"}</div>
+              </div>
+            </div>
           </div>
 
           {/* Today & Tomorrow cards */}

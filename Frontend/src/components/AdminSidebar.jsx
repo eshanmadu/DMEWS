@@ -15,6 +15,7 @@ import {
   FileText,
   Boxes,
   UserSearch,
+  FileBarChart,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -31,6 +32,7 @@ const navItems = [
   { href: "/admin/volunteers", label: "Volunteers", icon: Heart },
   { href: "/admin/missions", label: "Missions", icon: Boxes },
   { href: "/admin/missing-persons", label: "Missing Persons", icon: UserSearch },
+  { href: "/admin/reports", label: "Reports", icon: FileBarChart },
 ];
 
 export function AdminSidebar() {
