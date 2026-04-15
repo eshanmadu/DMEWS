@@ -8,7 +8,8 @@
     "signup": "Sign up",
     "logout": "Logout",
     "profile": "Profile",
-    "volunteer": "Volunteer"
+    "volunteer": "Volunteer",
+    "helpSupport": "Help & Support"
   },
 
   "slideshow": {
@@ -188,6 +189,49 @@
     "loginToApply": "Log in to apply",
     "signupToApply": "Create an account",
     "needLoginApply": "Sign in to submit your volunteer application."
+  },
+
+  "helpSupport": {
+    "title": "Help & Support",
+    "subtitle": "Find answers to common questions, access emergency contacts, or reach out to our support team for assistance.",
+    "emergencyTitle": "Emergency contacts",
+    "emergencySubtitle": "Save these numbers. Call immediately in an emergency.",
+    "emergency": "Emergency",
+    "police": "Police",
+    "ambulance": "Ambulance",
+    "fire": "Fire & Rescue",
+    "disaster": "Disaster Management",
+    "faqTitle": "Frequently asked questions",
+    "faqSubtitle": "Quick answers to common questions about DisasterWatch",
+    "faq1Question": "How do I receive disaster alerts?",
+    "faq1Answer": "Sign up for an account and enable notifications for your district. You'll receive real-time alerts via email and push notifications when disasters are detected in your area. You can also view all active alerts on the Alerts page.",
+    "faq2Question": "What should I do during an emergency?",
+    "faq2Answer": "First, stay calm and check active alerts and incidents on DisasterWatch. Follow instructions from emergency services, evacuate if advised, and contact emergency hotlines if you need immediate assistance. Keep emergency contacts saved and have an evacuation plan ready.",
+    "faq3Question": "How do I find the nearest shelter?",
+    "faq3Answer": "Visit the Shelters page to view all active emergency shelters near you. Each shelter shows location, capacity, and available facilities. During emergencies, shelters are updated in real-time with availability information.",
+    "faq4Question": "How can I volunteer for disaster response?",
+    "faq4Answer": "Visit the Volunteer page to submit an application. Choose your preferred roles (emergency response, field reporter, shelter support, supply distribution, or remote data support). Once approved, you can join active missions and help communities respond faster.",
+    "faq5Question": "How do I report an incident or missing person?",
+    "faq5Answer": "Use the Incidents page to report emergencies, damage, or missing persons. Provide as much detail as possible including location, photos, and descriptions. Reports help coordinators allocate resources and respond effectively.",
+    "guidesTitle": "Quick guides",
+    "guidesSubtitle": "Learn how to use key features of DisasterWatch",
+    "guide1Title": "View & manage alerts",
+    "guide1Desc": "Stay informed with real-time disaster alerts for your district",
+    "guide2Title": "Report incidents",
+    "guide2Desc": "Report emergencies, damage, or missing persons to help coordinators",
+    "guide3Title": "Find emergency shelters",
+    "guide3Desc": "Locate nearby shelters with capacity and facility information",
+    "guide4Title": "Join as a volunteer",
+    "guide4Desc": "Apply to volunteer and join active missions in your area",
+    "contactTitle": "Contact support",
+    "contactSubtitle": "Can't find what you need? Send us a message",
+    "formName": "Name",
+    "formEmail": "Email",
+    "formMessage": "Message",
+    "formSubmit": "Send message",
+    "formSubmitting": "Sending...",
+    "formSuccess": "Message sent! We'll get back to you soon.",
+    "backToHome": "Back to home"
   }
 }
 

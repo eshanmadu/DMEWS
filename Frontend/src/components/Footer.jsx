@@ -17,6 +17,7 @@ import {
   Twitter,
   Instagram,
   Linkedin,
+  LifeBuoy,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "@/lib/i18n";
@@ -37,6 +38,11 @@ const quickLinks = [
     href: "/shelters",
     labelKey: "nav.shelters",
     icon: Building2,
+  },
+  {
+    href: "/help-support",
+    labelKey: "nav.helpSupport",
+    icon: LifeBuoy,
   },
 ];
 
