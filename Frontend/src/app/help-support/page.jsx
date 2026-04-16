@@ -129,9 +129,7 @@ function FAQItem({ question, answer, Icon }) {
 export default function HelpSupportPage() {
   const { t } = useTranslation();
 
-  // Translation keys for new FAQ content (to be added to your locale files)
-  // For demo purposes, we'll provide fallback English text directly in component.
-  // In real usage, use t() with proper keys.
+
   const getFaqQuestion = (key) => {
     const questions = {
       faq1Question: "How does the early warning system work?",
@@ -195,7 +193,7 @@ export default function HelpSupportPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-50/30">
-      {/* Hero Section with modern gradient and pattern */}
+      {/* Hero Section  */}
       <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-sky-900 to-indigo-900 text-white">
         <div className="absolute inset-0 opacity-20">
           <svg className="h-full w-full" viewBox="0 0 1200 600" preserveAspectRatio="none">
@@ -239,7 +237,7 @@ export default function HelpSupportPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 -mt-8">
-        {/* Emergency Contacts - Modern cards with hover effect */}
+        {/* Emergency Contacts */}
         <div className="mb-12 rounded-3xl bg-white/80 backdrop-blur-sm shadow-xl border border-white/50 p-6 sm:p-8">
           <div className="mb-6">
             <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
@@ -304,7 +302,7 @@ export default function HelpSupportPage() {
               </div>
             </div>
 
-            {/* FAQ Section - Recreated with disaster management content */}
+            {/* FAQ Section  */}
             <div className="rounded-3xl bg-white/80 backdrop-blur-sm shadow-xl border border-white/50 p-6 sm:p-8">
               <div className="mb-6">
                 <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
@@ -326,7 +324,7 @@ export default function HelpSupportPage() {
             </div>
           </div>
 
-          {/* Contact Form - Modern sticky card */}
+          {/* Contact Form */}
           <div>
             <div className="sticky top-8 rounded-3xl bg-white/80 backdrop-blur-sm shadow-xl border border-white/50 p-6 sm:p-8">
               <div className="mb-6">
