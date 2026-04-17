@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "seed:risk-predictions": "node scripts/seedRiskPredictions.js"
+    "seed:risk-predictions": "node scripts/seedRiskPredictions.js",
+    "seed:lk-locations": "node scripts/seedLkLocations.js"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",

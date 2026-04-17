@@ -13,6 +13,14 @@ const UserSchema = new Schema(
       trim: true,
       default: "",
     },
+    /** City / area within district (English label), from location API */
+    city: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    cityLatitude: { type: Number },
+    cityLongitude: { type: Number },
     email: {
       type: String,
       required: true,

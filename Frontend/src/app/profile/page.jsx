@@ -24,15 +24,9 @@ import {
   Users,
   Trash2,
 } from "lucide-react";
+import { formatLkCityLabel } from "@/lib/lkLocations";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-const DISTRICTS = [
-  "Colombo", "Gampaha", "Kalutara", "Kandy", "Matale", "Nuwara Eliya",
-  "Galle", "Matara", "Hambantota", "Jaffna", "Kilinochchi", "Mannar",
-  "Vavuniya", "Mullaitivu", "Batticaloa", "Ampara", "Trincomalee",
-  "Kurunegala", "Puttalam", "Anuradhapura", "Polonnaruwa", "Badulla",
-  "Monaragala", "Ratnapura", "Kegalle",
-];
 
 function InputWithIcon({ icon: Icon, label, type = "text", value, onChange, placeholder, required, minLength, as = "input", options }) {
   const baseClasses = "w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-200";
@@ -78,6 +72,15 @@ export default function ProfilePage() {
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [district, setDistrict] = useState("");
+  const [districtsList, setDistrictsList] = useState([]);
+  const [citiesList, setCitiesList] = useState([]);
+  const [districtId, setDistrictId] = useState("");
+  const [cityRowId, setCityRowId] = useState("");
+  const [city, setCity] = useState("");
+  const [cityLatitude, setCityLatitude] = useState(null);
+  const [cityLongitude, setCityLongitude] = useState(null);
+  const [locationsLoading, setLocationsLoading] = useState(false);
+  const [locationsError, setLocationsError] = useState(null);
   const [avatar, setAvatar] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState(null);
@@ -133,6 +136,11 @@ export default function ProfilePage() {
         setEmail(data.email || "");
         setMobile(data.mobile || "");
         setDistrict(data.district || "");
+        setCity(data.city || "");
+        setCityLatitude(typeof data.cityLatitude === "number" ? data.cityLatitude : null);
+        setCityLongitude(typeof data.cityLongitude === "number" ? data.cityLongitude : null);
+        setCityRowId("");
+        setDistrictId("");
         setAvatar(data.avatar || "");
       } catch {
         setProfileError("Network error.");
@@ -143,6 +151,85 @@ export default function ProfilePage() {
 
     fetchProfile();
   }, [mounted, router]);
+
+  useEffect(() => {
+    if (!mounted || typeof window === "undefined") return;
+    const token = localStorage.getItem("dmews_token");
+    if (!token || profileLoading || !profile) return;
+    let cancelled = false;
+    (async () => {
+      setLocationsLoading(true);
+      setLocationsError(null);
+      try {
+        const res = await fetch(`${API_BASE}/locations/sri-lanka/districts`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.message || "Failed to load districts.");
+        const list = Array.isArray(data?.districts) ? data.districts : [];
+        const sorted = [...list].sort((a, b) =>
+          String(a.name_en || "").localeCompare(String(b.name_en || ""))
+        );
+        if (!cancelled) setDistrictsList(sorted);
+      } catch (e) {
+        if (!cancelled) setLocationsError(e?.message || "Failed to load districts.");
+      } finally {
+        if (!cancelled) setLocationsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, profile, profileLoading]);
+
+  useEffect(() => {
+    if (!districtId) {
+      setCitiesList([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLocationsLoading(true);
+      setLocationsError(null);
+      try {
+        const res = await fetch(
+          `${API_BASE}/locations/sri-lanka/cities?district=${encodeURIComponent(districtId)}`
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.message || "Failed to load cities.");
+        const list = Array.isArray(data?.cities) ? data.cities : [];
+        const sorted = [...list].sort((a, b) =>
+          String(a.name_en || "").localeCompare(String(b.name_en || ""))
+        );
+        if (!cancelled) setCitiesList(sorted);
+      } catch (e) {
+        if (!cancelled) {
+          setLocationsError(e?.message || "Failed to load cities.");
+          setCitiesList([]);
+        }
+      } finally {
+        if (!cancelled) setLocationsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [districtId]);
+
+  useEffect(() => {
+    if (!districtsList.length || !district || districtId) return;
+    const match = districtsList.find((d) => d.name_en === district);
+    if (match) setDistrictId(String(match.id));
+  }, [districtsList, district, districtId]);
+
+  useEffect(() => {
+    if (!citiesList.length || !city || cityLatitude == null) return;
+    const match = citiesList.find(
+      (c) =>
+        formatLkCityLabel(c) === city &&
+        typeof c.latitude === "number" &&
+        Math.abs(c.latitude - cityLatitude) < 1e-5
+    );
+    if (match) setCityRowId(String(match.id));
+  }, [citiesList, city, cityLatitude]);
 
   async function handleProfileSubmit(e) {
     e.preventDefault();
@@ -161,7 +248,16 @@ export default function ProfilePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name, email, mobile, district, avatar }),
+        body: JSON.stringify({
+          name,
+          email,
+          mobile,
+          district,
+          city,
+          cityLatitude,
+          cityLongitude,
+          avatar,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -173,6 +269,13 @@ export default function ProfilePage() {
         localStorage.setItem("dmews_user", JSON.stringify(data.user));
         if (data.user.district) localStorage.setItem("dmews_user_district", data.user.district);
         setProfile(data.user);
+        setCity(data.user.city || "");
+        setCityLatitude(
+          typeof data.user.cityLatitude === "number" ? data.user.cityLatitude : null
+        );
+        setCityLongitude(
+          typeof data.user.cityLongitude === "number" ? data.user.cityLongitude : null
+        );
       }
       setProfileSuccess("Profile updated successfully.");
       window.dispatchEvent(new Event("dmews-auth-changed"));
@@ -376,10 +479,12 @@ export default function ProfilePage() {
                     {profile.mobile}
                   </span>
                 )}
-                {profile?.district && (
+                {(profile?.city || profile?.district) && (
                   <span className="flex items-center gap-1.5">
                     <MapPin className="h-4 w-4" />
-                    {profile.district}
+                    {profile?.city
+                      ? `${profile.city}${profile.district ? ` · ${profile.district}` : ""}`
+                      : profile.district}
                   </span>
                 )}
               </div>
@@ -468,8 +573,100 @@ export default function ProfilePage() {
           <form onSubmit={handleProfileSubmit} className="space-y-4">
             <InputWithIcon icon={User} label="Full Name" value={name} onChange={setName} placeholder="Your name" />
             <InputWithIcon icon={Mail} label="Email Address" type="email" required value={email} onChange={setEmail} placeholder="you@example.com" />
-            <InputWithIcon icon={Phone} label="Mobile Number" type="tel" value={mobile} onChange={setMobile} placeholder="e.g., 0771234567" />
-            <InputWithIcon icon={MapPin} label="District" value={district} onChange={setDistrict} as="select" options={DISTRICTS} />
+            <InputWithIcon
+              icon={Phone}
+              label="Mobile Number"
+              type="tel"
+              value={mobile}
+              onChange={(v) => setMobile(v.replace(/\D/g, "").slice(0, 10))}
+              placeholder="e.g., 0771234567"
+            />
+            <div className="relative">
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                District
+              </label>
+              <div className="group relative">
+                <span className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-slate-400 transition group-focus-within:text-sky-500">
+                  <MapPin className="h-4 w-4" />
+                </span>
+                <select
+                  value={districtId}
+                  disabled={locationsLoading || !!locationsError}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setDistrictId(id);
+                    setCityRowId("");
+                    setCity("");
+                    setCityLatitude(null);
+                    setCityLongitude(null);
+                    if (!id) {
+                      setDistrict("");
+                      return;
+                    }
+                    const d = districtsList.find((x) => String(x.id) === String(id));
+                    setDistrict(d?.name_en || "");
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-slate-800 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-200 disabled:opacity-60"
+                >
+                  <option value="">Select district</option>
+                  {districtsList.map((d) => (
+                    <option key={d.id} value={String(d.id)}>
+                      {d.name_en}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="relative">
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                City / area
+              </label>
+              <div className="group relative">
+                <span className="pointer-events-none absolute left-3.5 top-1/2 z-10 -translate-y-1/2 text-slate-400 transition group-focus-within:text-sky-500">
+                  <MapPin className="h-4 w-4" />
+                </span>
+                <select
+                  value={cityRowId}
+                  disabled={
+                    !districtId ||
+                    locationsLoading ||
+                    !!locationsError ||
+                    citiesList.length === 0
+                  }
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setCityRowId(id);
+                    if (!id) {
+                      setCity("");
+                      setCityLatitude(null);
+                      setCityLongitude(null);
+                      return;
+                    }
+                    const c = citiesList.find((x) => String(x.id) === String(id));
+                    if (!c) return;
+                    setCity(formatLkCityLabel(c));
+                    setCityLatitude(typeof c.latitude === "number" ? c.latitude : null);
+                    setCityLongitude(typeof c.longitude === "number" ? c.longitude : null);
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-slate-800 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-200 disabled:opacity-60"
+                >
+                  <option value="">Select city or area</option>
+                  {citiesList.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {formatLkCityLabel(c)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {locationsLoading && (
+              <p className="text-xs text-slate-500">Loading locations…</p>
+            )}
+            {locationsError && (
+              <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+                {locationsError}
+              </div>
+            )}
             {profileMsg && (
               <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -484,7 +681,7 @@ export default function ProfilePage() {
             )}
             <button
               type="submit"
-              disabled={profileSaving}
+              disabled={profileSaving || locationsLoading}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-600 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 disabled:opacity-70"
             >
               {profileSaving ? <Loader size="sm" /> : <Save className="h-4 w-4" />}

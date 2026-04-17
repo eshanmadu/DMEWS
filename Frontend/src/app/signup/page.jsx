@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
@@ -8,38 +8,58 @@ import Loader from "@/components/Loader";
 import { AVATARS } from "@/lib/avatars";
 import { SignupLanguageModal } from "@/components/SignupLanguageModal";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { formatLkCityLabel } from "@/lib/lkLocations";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const PENDING_TOKEN_KEY = "dmews_pending_token";
 const PENDING_USER_KEY = "dmews_pending_user";
 
-const DISTRICTS = [
-  "Colombo",
-  "Gampaha",
-  "Kalutara",
-  "Kandy",
-  "Matale",
-  "Nuwara Eliya",
-  "Galle",
-  "Matara",
-  "Hambantota",
-  "Jaffna",
-  "Kilinochchi",
-  "Mannar",
-  "Vavuniya",
-  "Mullaitivu",
-  "Batticaloa",
-  "Ampara",
-  "Trincomalee",
-  "Kurunegala",
-  "Puttalam",
-  "Anuradhapura",
-  "Polonnaruwa",
-  "Badulla",
-  "Monaragala",
-  "Ratnapura",
-  "Kegalle",
-];
+const BASIC_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Modern validation indicator — subtle, animated, integrated
+function ValidIndicator() {
+  return (
+    <span
+      className="pointer-events-none absolute right-3 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center text-emerald-500 animate-in fade-in slide-in-from-right-1 duration-200"
+      aria-hidden="true"
+    >
+      <svg
+        viewBox="0 0 16 16"
+        className="h-4 w-4 drop-shadow-sm"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+      >
+        <path
+          d="M3 8L6.5 11.5L13 5"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
+function FieldWrap({ children, valid }) {
+  // Clone child to add valid-specific styling
+  const enhancedChild = valid
+    ? React.cloneElement(children, {
+        className: `${children.props.className || ""} 
+          border-emerald-300 bg-emerald-50/30 
+          focus:border-emerald-400 focus:ring-emerald-300/60 
+          transition-all duration-200`,
+      })
+    : children;
+
+  return (
+    <div className="relative">
+      {enhancedChild}
+      {valid ? <ValidIndicator /> : null}
+    </div>
+  );
+}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -55,14 +75,23 @@ export default function SignupPage() {
   // Method: null | "email" | "google"
   const [method, setMethod] = useState(null);
   // Google flow: step 0 = sign-in, step 1 = profile completion
-  const [googleStep, setGoogleStep] = useState(0); // 0: signin, 1: profile
+  const [googleStep, setGoogleStep] = useState(0);
   const [googleUser, setGoogleUser] = useState(null);
   const [googleAvatarMode, setGoogleAvatarMode] = useState("google");
   const [preferredLanguage, setPreferredLanguage] = useState("en");
 
-  // Email flow fields (unchanged)
+  // Email flow fields
   const [name, setName] = useState("");
+  const [districtsList, setDistrictsList] = useState([]);
+  const [citiesList, setCitiesList] = useState([]);
+  const [districtId, setDistrictId] = useState("");
   const [district, setDistrict] = useState("");
+  const [cityRowId, setCityRowId] = useState("");
+  const [city, setCity] = useState("");
+  const [cityLatitude, setCityLatitude] = useState(null);
+  const [cityLongitude, setCityLongitude] = useState(null);
+  const [locationsLoading, setLocationsLoading] = useState(false);
+  const [locationsError, setLocationsError] = useState(null);
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
@@ -79,6 +108,24 @@ export default function SignupPage() {
     return a?.src;
   }, [avatars, avatar]);
 
+  const mobileDigits = mobile.replace(/\D/g, "");
+  const emailValid = {
+    name: ((name || "").match(/\S/g) || []).length >= 2,
+    email: BASIC_EMAIL_RE.test((email || "").trim()),
+    mobile: mobileDigits.length >= 9,
+    password: (password || "").length >= 6,
+    confirmPassword:
+      (confirmPassword || "").length >= 6 && confirmPassword === password,
+    district: Boolean(districtId),
+    city: Boolean(cityRowId),
+  };
+  const googleValid = {
+    district: Boolean(districtId),
+    city: Boolean(cityRowId),
+    mobile: mobileDigits.length >= 9,
+    language: preferredLanguage === "en" || preferredLanguage === "si",
+  };
+
   // Restore pending Google profile (when returning from OAuth redirect)
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -94,14 +141,102 @@ export default function SignupPage() {
     }
 
     setMethod("google");
-    setGoogleStep(1); // already signed in, go to profile step
+    setGoogleStep(1);
     setGoogleUser(pendingUser);
     setName(pendingUser?.name || "");
     setEmail(pendingUser?.email || "");
     setMobile(pendingUser?.mobile || "");
     setDistrict(pendingUser?.district || "");
     setPreferredLanguage(window.localStorage.getItem("dmews_lang") || "en");
+    setCity(pendingUser?.city || "");
+    setCityLatitude(
+      typeof pendingUser?.cityLatitude === "number" ? pendingUser.cityLatitude : null
+    );
+    setCityLongitude(
+      typeof pendingUser?.cityLongitude === "number" ? pendingUser.cityLongitude : null
+    );
+    setCityRowId("");
   }, [searchParams]);
+
+  useEffect(() => {
+    const need = method === "email" || (method === "google" && googleStep === 1);
+    if (!need) return;
+    let cancelled = false;
+    (async () => {
+      setLocationsLoading(true);
+      setLocationsError(null);
+      try {
+        const res = await fetch(`${API_BASE}/locations/sri-lanka/districts`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data?.message || "Failed to load districts.");
+        }
+        const list = Array.isArray(data?.districts) ? data.districts : [];
+        const sorted = [...list].sort((a, b) =>
+          String(a.name_en || "").localeCompare(String(b.name_en || ""))
+        );
+        if (!cancelled) setDistrictsList(sorted);
+      } catch (e) {
+        if (!cancelled) setLocationsError(e?.message || "Failed to load districts.");
+      } finally {
+        if (!cancelled) setLocationsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [method, googleStep]);
+
+  useEffect(() => {
+    if (!districtId) {
+      setCitiesList([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLocationsLoading(true);
+      setLocationsError(null);
+      try {
+        const res = await fetch(
+          `${API_BASE}/locations/sri-lanka/cities?district=${encodeURIComponent(districtId)}`
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data?.message || "Failed to load cities.");
+        }
+        const list = Array.isArray(data?.cities) ? data.cities : [];
+        const sorted = [...list].sort((a, b) =>
+          String(a.name_en || "").localeCompare(String(b.name_en || ""))
+        );
+        if (!cancelled) setCitiesList(sorted);
+      } catch (e) {
+        if (!cancelled) setLocationsError(e?.message || "Failed to load cities.");
+        if (!cancelled) setCitiesList([]);
+      } finally {
+        if (!cancelled) setLocationsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [districtId]);
+
+  useEffect(() => {
+    if (!districtsList.length || !district || districtId) return;
+    const match = districtsList.find((d) => d.name_en === district);
+    if (match) setDistrictId(String(match.id));
+  }, [districtsList, district, districtId]);
+
+  useEffect(() => {
+    if (!citiesList.length || !city || cityLatitude == null) return;
+    const match = citiesList.find(
+      (c) =>
+        formatLkCityLabel(c) === city &&
+        typeof c.latitude === "number" &&
+        Math.abs(c.latitude - cityLatitude) < 1e-5
+    );
+    if (match) setCityRowId(String(match.id));
+  }, [citiesList, city, cityLatitude]);
 
   function resetAll() {
     setError(null);
@@ -113,7 +248,13 @@ export default function SignupPage() {
     setGoogleAvatarMode("google");
     setPreferredLanguage("en");
     setName("");
+    setDistrictId("");
     setDistrict("");
+    setCityRowId("");
+    setCity("");
+    setCityLatitude(null);
+    setCityLongitude(null);
+    setLocationsError(null);
     setEmail("");
     setMobile("");
     setPassword("");
@@ -156,12 +297,20 @@ export default function SignupPage() {
         }
       }
 
-      // Profile not complete → go to step 2 (profile completion)
       setGoogleUser(data?.user || null);
       setName(data?.user?.name || "");
       setEmail(data?.user?.email || "");
       setMobile(data?.user?.mobile || "");
       setDistrict(data?.user?.district || "");
+      setCity(data?.user?.city || "");
+      setCityLatitude(
+        typeof data?.user?.cityLatitude === "number" ? data.user.cityLatitude : null
+      );
+      setCityLongitude(
+        typeof data?.user?.cityLongitude === "number" ? data.user.cityLongitude : null
+      );
+      setCityRowId("");
+      setDistrictId("");
       setPreferredLanguage(
         (typeof window !== "undefined" && window.localStorage.getItem("dmews_lang")) || "en"
       );
@@ -194,6 +343,9 @@ export default function SignupPage() {
       const payload = {
         mobile: String(mobile || "").replace(/\D/g, "").slice(0, 10),
         district,
+        city,
+        cityLatitude,
+        cityLongitude,
         preferredLanguage,
         avatar:
           googleAvatarMode === "google"
@@ -252,6 +404,9 @@ export default function SignupPage() {
         body: JSON.stringify({
           name,
           district,
+          city,
+          cityLatitude,
+          cityLongitude,
           email,
           mobile: mobile.trim() || undefined,
           password,
@@ -441,7 +596,7 @@ export default function SignupPage() {
               </div>
             )}
 
-            {/* Google Step 1: Complete profile (single page) */}
+            {/* Google Step 1: Complete profile */}
             {method === "google" && googleStep === 1 && (
               <form onSubmit={submitGoogleProfile} className="mt-6 space-y-4">
                 {/* Avatar selector */}
@@ -544,55 +699,122 @@ export default function SignupPage() {
                   )}
                 </div>
 
-                {/* District */}
+                {/* District & city */}
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                     {t("signupPage.district")}
                   </label>
-                  <select
-                    required
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                  >
-                    <option value="">{t("signupPage.selectDistrict")}</option>
-                    {DISTRICTS.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
+                  <FieldWrap valid={googleValid.district}>
+                    <select
+                      required
+                      value={districtId}
+                      disabled={locationsLoading || !!locationsError}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setDistrictId(id);
+                        setCityRowId("");
+                        setCity("");
+                        setCityLatitude(null);
+                        setCityLongitude(null);
+                        if (!id) {
+                          setDistrict("");
+                          return;
+                        }
+                        const d = districtsList.find((x) => String(x.id) === String(id));
+                        setDistrict(d?.name_en || "");
+                      }}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60 disabled:opacity-60"
+                    >
+                      <option value="">{t("signupPage.selectDistrict")}</option>
+                      {districtsList.map((d) => (
+                        <option key={d.id} value={String(d.id)}>
+                          {d.name_en}
+                        </option>
+                      ))}
+                    </select>
+                  </FieldWrap>
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    {t("signupPage.city")}
+                  </label>
+                  <FieldWrap valid={googleValid.city}>
+                    <select
+                      required
+                      value={cityRowId}
+                      disabled={
+                        !districtId || locationsLoading || !!locationsError || citiesList.length === 0
+                      }
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setCityRowId(id);
+                        if (!id) {
+                          setCity("");
+                          setCityLatitude(null);
+                          setCityLongitude(null);
+                          return;
+                        }
+                        const c = citiesList.find((x) => String(x.id) === String(id));
+                        if (!c) return;
+                        setCity(formatLkCityLabel(c));
+                        setCityLatitude(
+                          typeof c.latitude === "number" ? c.latitude : null
+                        );
+                        setCityLongitude(
+                          typeof c.longitude === "number" ? c.longitude : null
+                        );
+                      }}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60 disabled:opacity-60"
+                    >
+                      <option value="">{t("signupPage.selectCity")}</option>
+                      {citiesList.map((c) => (
+                        <option key={c.id} value={String(c.id)}>
+                          {formatLkCityLabel(c)}
+                        </option>
+                      ))}
+                    </select>
+                  </FieldWrap>
+                </div>
+                {locationsLoading && (
+                  <p className="text-xs text-slate-500">{t("signupPage.loadingLocations")}</p>
+                )}
+                {locationsError && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    {locationsError}
+                  </div>
+                )}
 
                 {/* Language */}
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Language
                   </label>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => setPreferredLanguage("en")}
-                      className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
-                        preferredLanguage === "en"
-                          ? "border-sky-500 bg-sky-50 text-sky-900"
-                          : "border-slate-200 bg-white text-slate-800 hover:border-sky-300 hover:bg-sky-50/60"
-                      }`}
-                    >
-                      English
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreferredLanguage("si")}
-                      className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
-                        preferredLanguage === "si"
-                          ? "border-sky-500 bg-sky-50 text-sky-900"
-                          : "border-slate-200 bg-white text-slate-800 hover:border-sky-300 hover:bg-sky-50/60"
-                      }`}
-                    >
-                      සිංහල
-                    </button>
-                  </div>
+                  <FieldWrap valid={googleValid.language}>
+                    <div className="mt-2 grid gap-2 pr-10 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => setPreferredLanguage("en")}
+                        className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                          preferredLanguage === "en"
+                            ? "border-sky-500 bg-sky-50 text-sky-900"
+                            : "border-slate-200 bg-white text-slate-800 hover:border-sky-300 hover:bg-sky-50/60"
+                        }`}
+                      >
+                        English
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreferredLanguage("si")}
+                        className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                          preferredLanguage === "si"
+                            ? "border-sky-500 bg-sky-50 text-sky-900"
+                            : "border-slate-200 bg-white text-slate-800 hover:border-sky-300 hover:bg-sky-50/60"
+                        }`}
+                      >
+                        සිංහල
+                      </button>
+                    </div>
+                  </FieldWrap>
                 </div>
 
                 {/* Phone number */}
@@ -600,16 +822,18 @@ export default function SignupPage() {
                   <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                     {t("signupPage.mobile")}
                   </label>
-                  <input
-                    type="tel"
-                    required
-                    value={mobile}
-                    onChange={(e) =>
-                      setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
-                    }
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                    placeholder={t("signupPage.mobilePlaceholder")}
-                  />
+                  <FieldWrap valid={googleValid.mobile}>
+                    <input
+                      type="tel"
+                      required
+                      value={mobile}
+                      onChange={(e) =>
+                        setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                      placeholder={t("signupPage.mobilePlaceholder")}
+                    />
+                  </FieldWrap>
                 </div>
 
                 {error && (
@@ -620,7 +844,7 @@ export default function SignupPage() {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || locationsLoading || !!locationsError}
                   className="btn-primary flex w-full items-center justify-center rounded-full disabled:opacity-70"
                 >
                   {loading && <Loader size="sm" className="mr-2" />}
@@ -637,7 +861,7 @@ export default function SignupPage() {
               </form>
             )}
 
-            {/* Email & Password flow (unchanged) */}
+            {/* Email & Password flow */}
             {method === "email" && (
               <>
                 <div className="mt-5 flex items-center justify-between">
@@ -654,7 +878,7 @@ export default function SignupPage() {
                 </div>
 
                 <form onSubmit={handleEmailSubmit} className="mt-6 space-y-4">
-                  {/* Avatar Selection (unchanged) */}
+                  {/* Avatar Selection */}
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                       {t("signupPage.profilePicture")}
@@ -697,48 +921,120 @@ export default function SignupPage() {
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                       {t("signupPage.name")}
                     </label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                      placeholder={t("signupPage.namePlaceholder")}
-                    />
+                    <FieldWrap valid={emailValid.name}>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                        placeholder={t("signupPage.namePlaceholder")}
+                      />
+                    </FieldWrap>
                   </div>
 
-                  {/* District */}
+                  {/* District & city */}
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                       {t("signupPage.district")}
                     </label>
-                    <select
-                      required
-                      value={district}
-                      onChange={(e) => setDistrict(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                    >
-                      <option value="">{t("signupPage.selectDistrict")}</option>
-                      {DISTRICTS.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
+                    <FieldWrap valid={emailValid.district}>
+                      <select
+                        required
+                        value={districtId}
+                        disabled={locationsLoading || !!locationsError}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setDistrictId(id);
+                          setCityRowId("");
+                          setCity("");
+                          setCityLatitude(null);
+                          setCityLongitude(null);
+                          if (!id) {
+                            setDistrict("");
+                            return;
+                          }
+                          const d = districtsList.find((x) => String(x.id) === String(id));
+                          setDistrict(d?.name_en || "");
+                        }}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60 disabled:opacity-60"
+                      >
+                        <option value="">{t("signupPage.selectDistrict")}</option>
+                        {districtsList.map((d) => (
+                          <option key={d.id} value={String(d.id)}>
+                            {d.name_en}
+                          </option>
+                        ))}
+                      </select>
+                    </FieldWrap>
                   </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {t("signupPage.city")}
+                    </label>
+                    <FieldWrap valid={emailValid.city}>
+                      <select
+                        required
+                        value={cityRowId}
+                        disabled={
+                          !districtId ||
+                          locationsLoading ||
+                          !!locationsError ||
+                          citiesList.length === 0
+                        }
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setCityRowId(id);
+                          if (!id) {
+                            setCity("");
+                            setCityLatitude(null);
+                            setCityLongitude(null);
+                            return;
+                          }
+                          const c = citiesList.find((x) => String(x.id) === String(id));
+                          if (!c) return;
+                          setCity(formatLkCityLabel(c));
+                          setCityLatitude(
+                            typeof c.latitude === "number" ? c.latitude : null
+                          );
+                          setCityLongitude(
+                            typeof c.longitude === "number" ? c.longitude : null
+                          );
+                        }}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60 disabled:opacity-60"
+                      >
+                        <option value="">{t("signupPage.selectCity")}</option>
+                        {citiesList.map((c) => (
+                          <option key={c.id} value={String(c.id)}>
+                            {formatLkCityLabel(c)}
+                          </option>
+                        ))}
+                      </select>
+                    </FieldWrap>
+                  </div>
+                  {locationsLoading && (
+                    <p className="text-xs text-slate-500">{t("signupPage.loadingLocations")}</p>
+                  )}
+                  {locationsError && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      {locationsError}
+                    </div>
+                  )}
 
                   {/* Email */}
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                       {t("signupPage.email")}
                     </label>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                      placeholder={t("loginPage.emailPlaceholder")}
-                    />
+                    <FieldWrap valid={emailValid.email}>
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                        placeholder={t("loginPage.emailPlaceholder")}
+                      />
+                    </FieldWrap>
                   </div>
 
                   {/* Mobile */}
@@ -746,13 +1042,17 @@ export default function SignupPage() {
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                       {t("signupPage.mobile")}
                     </label>
-                    <input
-                      type="tel"
-                      value={mobile}
-                      onChange={(e) => setMobile(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                      placeholder={t("signupPage.mobilePlaceholder")}
-                    />
+                    <FieldWrap valid={emailValid.mobile}>
+                      <input
+                        type="tel"
+                        value={mobile}
+                        onChange={(e) =>
+                          setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+                        }
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                        placeholder={t("signupPage.mobilePlaceholder")}
+                      />
+                    </FieldWrap>
                   </div>
 
                   {/* Password */}
@@ -760,15 +1060,17 @@ export default function SignupPage() {
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                       {t("signupPage.password")}
                     </label>
-                    <input
-                      type="password"
-                      required
-                      minLength={6}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                      placeholder={t("signupPage.passwordPlaceholder")}
-                    />
+                    <FieldWrap valid={emailValid.password}>
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                        placeholder={t("signupPage.passwordPlaceholder")}
+                      />
+                    </FieldWrap>
                   </div>
 
                   {/* Confirm Password */}
@@ -776,15 +1078,17 @@ export default function SignupPage() {
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                       {t("signupPage.confirmPassword")}
                     </label>
-                    <input
-                      type="password"
-                      required
-                      minLength={6}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
-                      placeholder={t("signupPage.confirmPlaceholder")}
-                    />
+                    <FieldWrap valid={emailValid.confirmPassword}>
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
+                        placeholder={t("signupPage.confirmPlaceholder")}
+                      />
+                    </FieldWrap>
                   </div>
 
                   {error && (
@@ -795,7 +1099,7 @@ export default function SignupPage() {
 
                   <button
                     type="submit"
-                    disabled={loading || langModalOpen}
+                    disabled={loading || langModalOpen || locationsLoading || !!locationsError}
                     className="btn-primary flex w-full items-center justify-center rounded-full disabled:opacity-70"
                   >
                     {loading && <Loader size="sm" className="mr-2" />}

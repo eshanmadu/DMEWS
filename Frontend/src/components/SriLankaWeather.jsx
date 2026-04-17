@@ -43,18 +43,35 @@ function pickDaily(daily, idx, key) {
   return typeof v === "number" ? v : null;
 }
 
-function getUserDistrictFromStorage() {
-  if (typeof window === "undefined") return "";
+const WEATHER_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+function getUserLocationFromStorage() {
+  if (typeof window === "undefined") {
+    return {
+      district: "",
+      city: "",
+      cityLatitude: null,
+      cityLongitude: null,
+    };
+  }
   const saved = (window.localStorage.getItem("dmews_user_district") || "").trim();
   let fromUser = "";
+  let city = "";
+  let cityLatitude = null;
+  let cityLongitude = null;
   try {
     const raw = window.localStorage.getItem("dmews_user");
     const parsed = raw ? JSON.parse(raw) : null;
     fromUser = (parsed?.district || "").trim();
+    city = (parsed?.city || "").trim();
+    if (typeof parsed?.cityLatitude === "number") cityLatitude = parsed.cityLatitude;
+    if (typeof parsed?.cityLongitude === "number") cityLongitude = parsed.cityLongitude;
   } catch {
     fromUser = "";
   }
-  return saved || fromUser || "";
+  const district = saved || fromUser || "";
+  return { district, city, cityLatitude, cityLongitude };
 }
 
 function codeToEmoji(code, isDay = true) {
@@ -102,6 +119,8 @@ export function SriLankaWeather() {
   const [selectedName, setSelectedName] = useState("");
   const [hovered, setHovered] = useState(null);
   const [userDistrict, setUserDistrict] = useState("");
+  const [userCityLabel, setUserCityLabel] = useState("");
+  const [userCityWeather, setUserCityWeather] = useState(null);
   const [lockToUserDistrict, setLockToUserDistrict] = useState(true);
   const [showAllDistricts, setShowAllDistricts] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -109,14 +128,54 @@ export function SriLankaWeather() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const resolved = getUserDistrictFromStorage();
-    if (resolved) {
-      setUserDistrict(resolved);
-      setShowAllDistricts(false);
+    function refreshUserLocation() {
+      const loc = getUserLocationFromStorage();
+      if (loc.district) {
+        setUserDistrict(loc.district);
+        setShowAllDistricts(false);
+      } else {
+        setUserDistrict("");
+      }
+      setUserCityLabel(loc.city || "");
+      const token = window.localStorage.getItem("dmews_token");
+      setIsLoggedIn(Boolean(token));
     }
-    const token = window.localStorage.getItem("dmews_token");
-    setIsLoggedIn(Boolean(token));
+    refreshUserLocation();
+    window.addEventListener("dmews-auth-changed", refreshUserLocation);
+    return () => window.removeEventListener("dmews-auth-changed", refreshUserLocation);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const loc = getUserLocationFromStorage();
+    const lat = loc.cityLatitude;
+    const lon = loc.cityLongitude;
+    const token = window.localStorage.getItem("dmews_token");
+    if (!token || lat == null || lon == null) {
+      setUserCityWeather(null);
+      return;
+    }
+    let cancelled = false;
+    const name = loc.city || "My location";
+    (async () => {
+      try {
+        const res = await fetch(
+          `${WEATHER_API_BASE}/weather/point?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&name=${encodeURIComponent(name)}`
+        );
+        const row = await res.json().catch(() => null);
+        if (!res.ok || !row || cancelled) {
+          if (!cancelled) setUserCityWeather(null);
+          return;
+        }
+        if (!cancelled) setUserCityWeather(row);
+      } catch {
+        if (!cancelled) setUserCityWeather(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userCityLabel, userDistrict]);
 
   useEffect(() => {
     if (!lockToUserDistrict) return;
@@ -187,26 +246,41 @@ export function SriLankaWeather() {
     return districts.find((d) => d.name?.trim().toLowerCase() === target) || null;
   }, [districts, selectedName]);
 
-  const primaryName = (isLoggedIn ? userDistrict : "") || "";
-  const day0 = selected?.daily?.time?.[0] || districts?.[0]?.daily?.time?.[0];
-  const day1 = selected?.daily?.time?.[1] || districts?.[0]?.daily?.time?.[1];
+  const effectiveSelected = useMemo(() => {
+    const locked =
+      lockToUserDistrict &&
+      userDistrict &&
+      selectedName?.trim().toLowerCase() === userDistrict.trim().toLowerCase();
+    if (
+      locked &&
+      userCityWeather &&
+      userCityWeather.weather?.provider === "weatherapi"
+    ) {
+      return userCityWeather;
+    }
+    return selected;
+  }, [lockToUserDistrict, userDistrict, selectedName, selected, userCityWeather]);
 
-  const liveCode = typeof selected?.weather?.weathercode === "number"
-    ? selected.weather.weathercode
+  const primaryName = (isLoggedIn ? userDistrict : "") || "";
+  const day0 = effectiveSelected?.daily?.time?.[0] || districts?.[0]?.daily?.time?.[0];
+  const day1 = effectiveSelected?.daily?.time?.[1] || districts?.[0]?.daily?.time?.[1];
+
+  const liveCode = typeof effectiveSelected?.weather?.weathercode === "number"
+    ? effectiveSelected.weather.weathercode
     : typeof nationwide.currentCode === "number"
     ? nationwide.currentCode
     : null;
 
-  const todayCode = typeof selected?.daily?.weathercode?.[0] === "number" ? selected.daily.weathercode[0] : liveCode;
-  const tomorrowCode = typeof selected?.daily?.weathercode?.[1] === "number" ? selected.daily.weathercode[1] : liveCode;
+  const todayCode = typeof effectiveSelected?.daily?.weathercode?.[0] === "number" ? effectiveSelected.daily.weathercode[0] : liveCode;
+  const tomorrowCode = typeof effectiveSelected?.daily?.weathercode?.[1] === "number" ? effectiveSelected.daily.weathercode[1] : liveCode;
 
-  const today = selected
+  const today = effectiveSelected
     ? {
-        tMax: pickDaily(selected.daily, 0, "temperature_2m_max"),
-        tMin: pickDaily(selected.daily, 0, "temperature_2m_min"),
-        rain: pickDaily(selected.daily, 0, "precipitation_sum"),
-        rainProb: pickDaily(selected.daily, 0, "precipitation_probability_max"),
-        windMax: pickDaily(selected.daily, 0, "windspeed_10m_max"),
+        tMax: pickDaily(effectiveSelected.daily, 0, "temperature_2m_max"),
+        tMin: pickDaily(effectiveSelected.daily, 0, "temperature_2m_min"),
+        rain: pickDaily(effectiveSelected.daily, 0, "precipitation_sum"),
+        rainProb: pickDaily(effectiveSelected.daily, 0, "precipitation_probability_max"),
+        windMax: pickDaily(effectiveSelected.daily, 0, "windspeed_10m_max"),
         condition: describeWeatherCode(todayCode),
       }
     : {
@@ -214,13 +288,13 @@ export function SriLankaWeather() {
         condition: describeWeatherCode(nationwide.currentCode),
       };
 
-  const tomorrow = selected
+  const tomorrow = effectiveSelected
     ? {
-        tMax: pickDaily(selected.daily, 1, "temperature_2m_max"),
-        tMin: pickDaily(selected.daily, 1, "temperature_2m_min"),
-        rain: pickDaily(selected.daily, 1, "precipitation_sum"),
-        rainProb: pickDaily(selected.daily, 1, "precipitation_probability_max"),
-        windMax: pickDaily(selected.daily, 1, "windspeed_10m_max"),
+        tMax: pickDaily(effectiveSelected.daily, 1, "temperature_2m_max"),
+        tMin: pickDaily(effectiveSelected.daily, 1, "temperature_2m_min"),
+        rain: pickDaily(effectiveSelected.daily, 1, "precipitation_sum"),
+        rainProb: pickDaily(effectiveSelected.daily, 1, "precipitation_probability_max"),
+        windMax: pickDaily(effectiveSelected.daily, 1, "windspeed_10m_max"),
         condition: describeWeatherCode(tomorrowCode),
       }
     : {
@@ -229,7 +303,7 @@ export function SriLankaWeather() {
       };
 
   const metrics = useMemo(() => {
-    if (selected) return pickWeatherMetrics(selected);
+    if (effectiveSelected) return pickWeatherMetrics(effectiveSelected);
     const wa = nationwide.wa;
     if (!wa) return null;
     return {
@@ -244,13 +318,13 @@ export function SriLankaWeather() {
       windDir: null,
       icon: null,
     };
-  }, [selected, nationwide]);
+  }, [effectiveSelected, nationwide]);
 
-  const isWeatherApi = selected?.weather?.provider === "weatherapi" ||
-    (!selected && districts.length > 0 && districts.every((d) => d?.weather?.provider === "weatherapi"));
+  const isWeatherApi = effectiveSelected?.weather?.provider === "weatherapi" ||
+    (!effectiveSelected && districts.length > 0 && districts.every((d) => d?.weather?.provider === "weatherapi"));
 
   const hourly = useMemo(() => {
-    const src = selected || districts[0];
+    const src = effectiveSelected || districts[0];
     const base = src?.hourly || [];
     return base
       .slice(0, 12)
@@ -270,18 +344,25 @@ export function SriLankaWeather() {
           isDay: getIsDayInSriLanka(h.time),
         };
       });
-  }, [districts, selected]);
+  }, [districts, effectiveSelected]);
 
-  const currentTempVal = typeof selected?.weather?.temperature === "number"
-    ? selected.weather.temperature
+  const currentTempVal = typeof effectiveSelected?.weather?.temperature === "number"
+    ? effectiveSelected.weather.temperature
     : typeof nationwide.currentTemp === "number"
     ? nationwide.currentTemp
     : null;
-  const currentWindVal = typeof selected?.weather?.windspeed === "number"
-    ? selected.weather.windspeed
+  const currentWindVal = typeof effectiveSelected?.weather?.windspeed === "number"
+    ? effectiveSelected.weather.windspeed
     : typeof nationwide.currentWind === "number"
     ? nationwide.currentWind
     : null;
+
+  const showCityHeading =
+    Boolean(userCityLabel) &&
+    lockToUserDistrict &&
+    userDistrict &&
+    selectedName?.trim().toLowerCase() === userDistrict.trim().toLowerCase() &&
+    Boolean(userCityWeather);
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -301,11 +382,12 @@ export function SriLankaWeather() {
                 setDistricts(arr);
                 setSourceNotice("WeatherAPI district data unavailable right now.");
               }
-              const currentUserDistrict = getUserDistrictFromStorage();
-              if (currentUserDistrict) {
-                setUserDistrict(currentUserDistrict);
+              const loc = getUserLocationFromStorage();
+              if (loc.district) {
+                setUserDistrict(loc.district);
+                setUserCityLabel(loc.city || "");
                 if (lockToUserDistrict) {
-                  setSelectedName(currentUserDistrict);
+                  setSelectedName(loc.district);
                   setShowAllDistricts(false);
                 }
               }
@@ -328,7 +410,9 @@ export function SriLankaWeather() {
                 {isWeatherApi
                   ? "Current conditions and forecast from WeatherAPI."
                   : isLoggedIn && userDistrict
-                  ? "Overview for your district and nationwide summary."
+                  ? userCityLabel
+                    ? "Overview for your city (when your district is selected) and nationwide summary."
+                    : "Overview for your district and nationwide summary."
                   : "Nationwide conditions for Sri Lanka."}
               </p>
             </div>
@@ -353,10 +437,14 @@ export function SriLankaWeather() {
                 )}
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-700">
-                    {selected
-                      ? `${selected.name} · district`
+                    {effectiveSelected
+                      ? showCityHeading
+                        ? `${userCityLabel} · city`
+                        : `${effectiveSelected.name} · district`
                       : isLoggedIn && userDistrict
-                      ? `${userDistrict} · your district`
+                      ? userCityLabel
+                        ? `${userCityLabel} · your city`
+                        : `${userDistrict} · your district`
                       : "Sri Lanka · nationwide average"}
                   </p>
                   <div className="mt-1 flex flex-wrap items-baseline gap-2">
@@ -368,7 +456,7 @@ export function SriLankaWeather() {
                     )}
                   </div>
                   <p className="mt-1 text-sm leading-snug text-slate-800">
-                    {selected?.weather?.text || (liveCode != null ? describeWeatherCode(liveCode) : "—")}
+                    {effectiveSelected?.weather?.text || (liveCode != null ? describeWeatherCode(liveCode) : "—")}
                   </p>
                   <p className="mt-1 text-[11px] text-slate-600">
                     Wind {currentWindVal != null ? `${currentWindVal.toFixed(1)} km/h` : "—"}

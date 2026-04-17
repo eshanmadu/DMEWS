@@ -16,6 +16,7 @@ const missingPersonsRoutes = require("./routes/missingPersons.routes");
 const riskPredictionsRoutes = require("./routes/riskPredictions.routes");
 const adminUsersRoutes = require("./routes/adminUsers.routes");
 const sensorRoutes = require("./routes/sensorRoutes");
+const locationsRoutes = require("./routes/locations.routes");
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use("/alerts", alertRoutes);
 app.use("/incidents", incidentsRoutes);
 app.use("/health", healthRoutes);
 app.use("/weather", weatherRoutes);
+app.use("/locations", locationsRoutes);
 app.use("/", publicForecastRoutes);
 app.use("/risk-levels", riskLevelsRoutes);
 app.use("/shelters", sheltersRoutes);

@@ -897,7 +897,81 @@ async function getDistrictWeather() {
   return out;
 }
 
+/**
+ * Weather for a single lat/lon (e.g. user's city). Same row shape as getDistrictWeather items.
+ */
+async function getPointWeatherRow(d) {
+  if (!WEATHERAPI_KEY) {
+    const err = new Error("WeatherAPI key is not configured.");
+    err.status = 500;
+    throw err;
+  }
+  const wa = await getWeatherApiForecastForDistrict(d);
+
+  let precipitation_sum_last3days = null;
+  let time_last3days = null;
+  try {
+    const omUrl = `https://api.open-meteo.com/v1/forecast?latitude=${d.lat}&longitude=${d.lon}&daily=precipitation_sum&timezone=Asia/Colombo&past_days=2`;
+    const om = await fetch(omUrl).then((r) => r.json());
+    const omRain = om?.daily?.precipitation_sum;
+    const omTime = om?.daily?.time;
+    if (
+      Array.isArray(omRain) &&
+      Array.isArray(omTime) &&
+      omRain.length >= 3 &&
+      omTime.length >= 3
+    ) {
+      precipitation_sum_last3days = omRain.slice(0, 3);
+      time_last3days = omTime.slice(0, 3);
+    }
+  } catch {
+    // optional
+  }
+
+  const temp = wa.temp;
+  const windMs = wa.windMs;
+  const weatherCode = wa.weatherCode;
+  const code =
+    typeof weatherCode === "number" ? weatherCode : null;
+  const waExtra = wa.extra;
+  const dailyTimeArr =
+    Array.isArray(wa.dailyDates) && wa.dailyDates.length >= 2
+      ? wa.dailyDates
+      : [null, null];
+
+  return {
+    ...d,
+    weather: {
+      temperature: typeof temp === "number" ? temp : null,
+      windspeed: typeof windMs === "number" ? windMs * 3.6 : null,
+      weathercode: typeof code === "number" ? code : null,
+      is_day: wa.isDay ? 1 : 0,
+      provider: "weatherapi",
+      text: wa.conditionText,
+      ...(waExtra && typeof waExtra === "object" ? waExtra : {}),
+      google_rain_last_hour_mm: null,
+      google_rain_last_24h_mm: null,
+      google_rain_probability_percent: null,
+      google_rain_source: null,
+    },
+    daily: {
+      temperature_2m_max: wa.maxArr,
+      temperature_2m_min: wa.minArr,
+      precipitation_sum: wa.rainArr,
+      precipitation_provider: "weatherapi",
+      precipitation_sum_last3days,
+      time_last3days,
+      precipitation_probability_max: wa.probArr,
+      windspeed_10m_max: wa.windMaxArr,
+      weathercode: wa.codeArr,
+      time: dailyTimeArr,
+    },
+    hourly: wa.hourlyArr || [],
+  };
+}
+
 module.exports = {
   getDistrictWeather,
+  getPointWeatherRow,
 };
 

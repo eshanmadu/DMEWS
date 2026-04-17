@@ -47,6 +47,11 @@ async function attachVolunteerStatus(userDoc) {
     id: userDoc._id.toString(),
     name: userDoc.name || "",
     district: userDoc.district || "",
+    city: userDoc.city || "",
+    cityLatitude:
+      typeof userDoc.cityLatitude === "number" ? userDoc.cityLatitude : null,
+    cityLongitude:
+      typeof userDoc.cityLongitude === "number" ? userDoc.cityLongitude : null,
     email: userDoc.email,
     mobile: userDoc.mobile || "",
     avatar: userDoc.avatar || "",
@@ -65,8 +70,18 @@ function normalizePreferredLanguage(raw) {
 function profileIsComplete(user) {
   const mobile = String(user.mobile || "").trim();
   const district = String(user.district || "").trim();
+  const city = String(user.city || "").trim();
+  const hasCoords =
+    typeof user.cityLatitude === "number" &&
+    typeof user.cityLongitude === "number";
   const preferredLanguage = normalizePreferredLanguage(user.preferredLanguage);
-  return Boolean(/^\d{10}$/.test(mobile) && district && preferredLanguage);
+  return Boolean(
+    /^\d{10}$/.test(mobile) &&
+      district &&
+      city &&
+      hasCoords &&
+      preferredLanguage
+  );
 }
 
 function signUserJwt(user) {
@@ -75,6 +90,7 @@ function signUserJwt(user) {
       sub: user._id.toString(),
       email: user.email,
       district: user.district || "",
+      city: user.city || "",
       name: user.name || "",
       mobile: user.mobile || "",
       avatar: user.avatar || "",
@@ -87,12 +103,31 @@ function signUserJwt(user) {
 
 async function signup(req, res) {
   try {
-    const { name, district, email, mobile, password, avatar } = req.body || {};
+    const {
+      name,
+      district,
+      city,
+      cityLatitude,
+      cityLongitude,
+      email,
+      mobile,
+      password,
+      avatar,
+    } = req.body || {};
 
     if (!district || !email || !password || !mobile) {
       return res
         .status(400)
         .json({ message: "District, email, password and mobile are required." });
+    }
+
+    const trimmedCity = String(city || "").trim();
+    const lat = Number(cityLatitude);
+    const lon = Number(cityLongitude);
+    if (!trimmedCity || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.status(400).json({
+        message: "City and valid coordinates (cityLatitude, cityLongitude) are required.",
+      });
     }
 
     if (!/^\d{10}$/.test(String(mobile).trim())) {
@@ -110,9 +145,13 @@ async function signup(req, res) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
+    const trimmedDistrict = String(district || "").trim();
     const user = await User.create({
       name: name || "",
-      district,
+      district: trimmedDistrict,
+      city: trimmedCity,
+      cityLatitude: lat,
+      cityLongitude: lon,
       email,
       mobile: (mobile && String(mobile).trim()) || "",
       avatar: (avatar && String(avatar).trim()) || "",
@@ -185,6 +224,11 @@ async function login(req, res) {
         id: user._id.toString(),
         name: user.name,
         district: user.district,
+        city: user.city || "",
+        cityLatitude:
+          typeof user.cityLatitude === "number" ? user.cityLatitude : null,
+        cityLongitude:
+          typeof user.cityLongitude === "number" ? user.cityLongitude : null,
         email: user.email,
         mobile: user.mobile || "",
         avatar: user.avatar || "",
@@ -285,6 +329,9 @@ async function me(req, res) {
         name: "Admin",
         email: req.authEmail || "admin@admin.com",
         district: "Colombo",
+        city: "",
+        cityLatitude: null,
+        cityLongitude: null,
         mobile: "",
         avatar: "",
         volunteerStatus: null,
@@ -294,7 +341,9 @@ async function me(req, res) {
 
     await connectDb();
     const user = await User.findById(req.userId)
-      .select("name email district mobile avatar preferredLanguage passwordHash")
+      .select(
+        "name email district city cityLatitude cityLongitude mobile avatar preferredLanguage passwordHash"
+      )
       .lean()
       .exec();
 
@@ -307,6 +356,9 @@ async function me(req, res) {
       name: user.name,
       email: user.email,
       district: user.district,
+      city: user.city,
+      cityLatitude: user.cityLatitude,
+      cityLongitude: user.cityLongitude,
       mobile: user.mobile,
       avatar: user.avatar,
       preferredLanguage: user.preferredLanguage,
@@ -330,10 +382,14 @@ async function completeProfile(req, res) {
       });
     }
 
-    const { mobile, district, preferredLanguage, avatar } = req.body || {};
+    const { mobile, district, city, cityLatitude, cityLongitude, preferredLanguage, avatar } =
+      req.body || {};
 
     const trimmedMobile = String(mobile || "").trim();
     const trimmedDistrict = String(district || "").trim();
+    const trimmedCity = String(city || "").trim();
+    const lat = Number(cityLatitude);
+    const lon = Number(cityLongitude);
     const lang = normalizePreferredLanguage(preferredLanguage);
     const trimmedAvatar = avatar !== undefined ? String(avatar || "").trim() : undefined;
 
@@ -344,6 +400,11 @@ async function completeProfile(req, res) {
     }
     if (!trimmedDistrict) {
       return res.status(400).json({ message: "District is required." });
+    }
+    if (!trimmedCity || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.status(400).json({
+        message: "City and valid coordinates (cityLatitude, cityLongitude) are required.",
+      });
     }
     if (!lang) {
       return res.status(400).json({ message: "Language is required." });
@@ -357,6 +418,9 @@ async function completeProfile(req, res) {
 
     user.mobile = trimmedMobile;
     user.district = trimmedDistrict;
+    user.city = trimmedCity;
+    user.cityLatitude = lat;
+    user.cityLongitude = lon;
     user.preferredLanguage = lang;
     if (trimmedAvatar !== undefined) {
       user.avatar = trimmedAvatar;
@@ -384,7 +448,8 @@ async function updateProfile(req, res) {
       });
     }
 
-    const { name, email, mobile, district, avatar } = req.body || {};
+    const { name, email, mobile, district, city, cityLatitude, cityLongitude, avatar } =
+      req.body || {};
     await connectDb();
 
     const user = await User.findById(req.userId).exec();
@@ -420,6 +485,28 @@ async function updateProfile(req, res) {
     if (name !== undefined) user.name = String(name).trim();
     if (avatar !== undefined) user.avatar = String(avatar).trim();
     if (district !== undefined) user.district = String(district).trim();
+    if (city !== undefined) {
+      const tc = String(city).trim();
+      user.city = tc;
+      if (!tc) {
+        user.cityLatitude = undefined;
+        user.cityLongitude = undefined;
+      }
+    }
+    if (cityLatitude !== undefined) {
+      const tc = String(user.city || "").trim();
+      if (tc) {
+        const v = Number(cityLatitude);
+        user.cityLatitude = Number.isFinite(v) ? v : undefined;
+      }
+    }
+    if (cityLongitude !== undefined) {
+      const tc = String(user.city || "").trim();
+      if (tc) {
+        const v = Number(cityLongitude);
+        user.cityLongitude = Number.isFinite(v) ? v : undefined;
+      }
+    }
 
     await user.save();
 
@@ -735,6 +822,9 @@ function devAdminToken(req, res) {
       name: "Admin",
       email,
       district: "Colombo",
+      city: "",
+      cityLatitude: null,
+      cityLongitude: null,
       mobile: "",
       avatar: "",
     },
