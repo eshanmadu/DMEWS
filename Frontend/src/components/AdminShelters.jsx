@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import Loader from "@/components/Loader";
 import { Building2, Plus, MapPin, Pencil, Trash2, Save, X, RefreshCw, CheckCircle } from "lucide-react";
+import { formatLkCityLabel } from "@/lib/lkLocations";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-const DISTRICTS = [
+const DISTRICTS_FALLBACK = [
   "Colombo", "Gampaha", "Kalutara", "Kandy", "Matale", "Nuwara Eliya",
   "Galle", "Matara", "Hambantota", "Jaffna", "Kilinochchi", "Mannar",
   "Vavuniya", "Mullaitivu", "Batticaloa", "Ampara", "Trincomalee",
@@ -18,6 +19,11 @@ const initialForm = {
   name: "",
   location: "",
   district: "",
+  districtId: "",
+  city: "",
+  cityRowId: "",
+  cityLatitude: null,
+  cityLongitude: null,
   capacity: "",
   contact: "",
   notes: "",
@@ -35,9 +41,20 @@ export function AdminShelters() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [newShelterName, setNewShelterName] = useState("");
 
+  const [districtsList, setDistrictsList] = useState([]);
+  const [formCitiesList, setFormCitiesList] = useState([]);
+  const [editCitiesList, setEditCitiesList] = useState([]);
+  const [formCitiesLoading, setFormCitiesLoading] = useState(false);
+  const [editCitiesLoading, setEditCitiesLoading] = useState(false);
+
   // New states for filter and pagination
   const [districtFilter, setDistrictFilter] = useState("");
   const [visibleCount, setVisibleCount] = useState(5);
+
+  const districtFilterOptions =
+    districtsList.length > 0
+      ? [...districtsList].map((d) => d.name_en).sort((a, b) => a.localeCompare(b))
+      : DISTRICTS_FALLBACK;
 
   // Compute filtered shelters
   const filteredShelters = districtFilter
@@ -71,6 +88,96 @@ export function AdminShelters() {
     loadShelters();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/locations/sri-lanka/districts`)
+      .then((res) => res.json().catch(() => ({})))
+      .then((data) => {
+        const list = Array.isArray(data?.districts) ? data.districts : [];
+        if (!cancelled) setDistrictsList(list);
+      })
+      .catch(() => {
+        if (!cancelled) setDistrictsList([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!form.districtId) {
+      setFormCitiesList([]);
+      return;
+    }
+    let cancelled = false;
+    setFormCitiesLoading(true);
+    fetch(
+      `${API_BASE}/locations/sri-lanka/cities?district=${encodeURIComponent(form.districtId)}`
+    )
+      .then((res) => res.json().catch(() => ({})))
+      .then((data) => {
+        const list = data?.success && Array.isArray(data.cities) ? data.cities : [];
+        if (!cancelled) setFormCitiesList(list);
+      })
+      .catch(() => {
+        if (!cancelled) setFormCitiesList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setFormCitiesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.districtId]);
+
+  useEffect(() => {
+    if (!editingId || !editForm.districtId) {
+      setEditCitiesList([]);
+      return;
+    }
+    let cancelled = false;
+    setEditCitiesLoading(true);
+    fetch(
+      `${API_BASE}/locations/sri-lanka/cities?district=${encodeURIComponent(editForm.districtId)}`
+    )
+      .then((res) => res.json().catch(() => ({})))
+      .then((data) => {
+        const list = data?.success && Array.isArray(data.cities) ? data.cities : [];
+        if (!cancelled) setEditCitiesList(list);
+      })
+      .catch(() => {
+        if (!cancelled) setEditCitiesList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setEditCitiesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editingId, editForm.districtId]);
+
+  useEffect(() => {
+    if (!editingId || !districtsList.length) return;
+    setEditForm((prev) => {
+      if (!prev.district || prev.districtId) return prev;
+      const m = districtsList.find((x) => x.name_en === prev.district);
+      return m ? { ...prev, districtId: String(m.id) } : prev;
+    });
+  }, [editingId, districtsList]);
+
+  useEffect(() => {
+    if (!editingId || !editCitiesList.length || !editForm.city || editForm.cityRowId) return;
+    const match = editCitiesList.find((c) => {
+      const label = formatLkCityLabel(c);
+      const latOk =
+        typeof editForm.cityLatitude === "number" &&
+        typeof c.latitude === "number" &&
+        Math.abs(c.latitude - editForm.cityLatitude) < 1e-5;
+      return label === editForm.city && latOk;
+    });
+    if (match) setEditForm((p) => ({ ...p, cityRowId: String(match.id) }));
+  }, [editingId, editCitiesList, editForm.city, editForm.cityLatitude, editForm.cityRowId]);
+
   function handleChange(e) {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -93,17 +200,23 @@ export function AdminShelters() {
     }
     setSaving(true);
     setError(null);
+    const payload = {
+      name: form.name.trim(),
+      location: form.location.trim(),
+      district: form.district,
+      capacity: cap,
+      contact: (form.contact || "").trim(),
+      notes: (form.notes || "").trim(),
+      city: (form.city || "").trim(),
+    };
+    if (form.city && form.cityLatitude != null && form.cityLongitude != null) {
+      payload.cityLatitude = form.cityLatitude;
+      payload.cityLongitude = form.cityLongitude;
+    }
     fetch(`${API_BASE}/shelters`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.name.trim(),
-        location: form.location.trim(),
-        district: form.district,
-        capacity: cap,
-        contact: (form.contact || "").trim(),
-        notes: (form.notes || "").trim(),
-      }),
+      body: JSON.stringify(payload),
     })
       .then((res) => res.json())
       .then((data) => {
@@ -122,10 +235,16 @@ export function AdminShelters() {
 
   function startEdit(s) {
     setEditingId(s.id);
+    const dMatch = districtsList.find((x) => x.name_en === s.district);
     setEditForm({
       name: s.name || "",
       location: s.location || "",
       district: s.district || "",
+      districtId: dMatch ? String(dMatch.id) : "",
+      city: s.city || "",
+      cityRowId: "",
+      cityLatitude: typeof s.cityLatitude === "number" ? s.cityLatitude : null,
+      cityLongitude: typeof s.cityLongitude === "number" ? s.cityLongitude : null,
       capacity: String(s.capacity ?? ""),
       contact: s.contact || "",
       notes: s.notes || "",
@@ -159,17 +278,23 @@ export function AdminShelters() {
     setRowBusyId(id);
     setError(null);
     try {
+      const putBody = {
+        name: editForm.name.trim(),
+        location: editForm.location.trim(),
+        district: editForm.district,
+        capacity: cap,
+        contact: (editForm.contact || "").trim(),
+        notes: (editForm.notes || "").trim(),
+        city: (editForm.city || "").trim(),
+      };
+      if (editForm.city && editForm.cityLatitude != null && editForm.cityLongitude != null) {
+        putBody.cityLatitude = editForm.cityLatitude;
+        putBody.cityLongitude = editForm.cityLongitude;
+      }
       const res = await fetch(`${API_BASE}/shelters/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: editForm.name.trim(),
-          location: editForm.location.trim(),
-          district: editForm.district,
-          capacity: cap,
-          contact: (editForm.contact || "").trim(),
-          notes: (editForm.notes || "").trim(),
-        }),
+        body: JSON.stringify(putBody),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -264,14 +389,79 @@ export function AdminShelters() {
                 <select
                   name="district"
                   value={form.district}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    const d = districtsList.find((x) => x.name_en === name);
+                    setForm((prev) => ({
+                      ...prev,
+                      district: name,
+                      districtId: d ? String(d.id) : "",
+                      city: "",
+                      cityRowId: "",
+                      cityLatitude: null,
+                      cityLongitude: null,
+                    }));
+                  }}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
                 >
                   <option value="">Select district</option>
-                  {DISTRICTS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
+                  {(districtsList.length
+                    ? districtsList
+                    : DISTRICTS_FALLBACK.map((n) => ({ id: null, name_en: n }))
+                  ).map((d, idx) => (
+                    <option key={String(d.id ?? `fb-${idx}`)} value={d.name_en}>
+                      {d.name_en}
+                    </option>
                   ))}
                 </select>
+                {!districtsList.length && (
+                  <p className="mt-1 text-xs text-amber-800/90">Loading official district list…</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  City <span className="text-slate-400">(optional)</span>
+                </label>
+                <select
+                  value={form.cityRowId}
+                  disabled={!form.districtId || formCitiesLoading || formCitiesList.length === 0}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id) {
+                      setForm((p) => ({
+                        ...p,
+                        cityRowId: "",
+                        city: "",
+                        cityLatitude: null,
+                        cityLongitude: null,
+                      }));
+                      return;
+                    }
+                    const c = formCitiesList.find((x) => String(x.id) === id);
+                    if (!c) return;
+                    setForm((p) => ({
+                      ...p,
+                      cityRowId: id,
+                      city: formatLkCityLabel(c),
+                      cityLatitude: typeof c.latitude === "number" ? c.latitude : null,
+                      cityLongitude: typeof c.longitude === "number" ? c.longitude : null,
+                    }));
+                  }}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-slate-50"
+                >
+                  <option value="">Select city after district</option>
+                  {formCitiesList.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {formatLkCityLabel(c)}
+                    </option>
+                  ))}
+                </select>
+                {form.districtId && formCitiesLoading && (
+                  <p className="mt-1 text-xs text-slate-500">Loading cities…</p>
+                )}
+                {form.districtId && !formCitiesLoading && formCitiesList.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-800/90">No cities returned for this district.</p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -347,7 +537,7 @@ export function AdminShelters() {
                 className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
               >
                 <option value="">All districts</option>
-                {DISTRICTS.map((d) => (
+                {districtFilterOptions.map((d) => (
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
@@ -375,6 +565,7 @@ export function AdminShelters() {
                     <th className="py-3 pl-5 pr-3 font-semibold text-slate-700">Name</th>
                     <th className="py-3 px-3 font-medium text-slate-600">Location</th>
                     <th className="py-3 px-3 font-medium text-slate-600">District</th>
+                    <th className="py-3 px-3 font-medium text-slate-600">City</th>
                     <th className="py-3 px-3 font-medium text-slate-600">Capacity</th>
                     <th className="py-3 px-3 font-medium text-slate-600">Contact</th>
                     <th className="py-3 px-3 font-medium text-slate-600">Notes</th>
@@ -384,7 +575,7 @@ export function AdminShelters() {
                 <tbody>
                   {filteredShelters.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-500">
+                      <td colSpan={8} className="py-12 text-center text-slate-500">
                         <MapPin className="mx-auto mb-2 h-10 w-10 text-slate-300" />
                         {districtFilter ? `No shelters in ${districtFilter} district.` : "No shelters yet. Add one above."}
                       </td>
@@ -425,16 +616,73 @@ export function AdminShelters() {
                               <select
                                 name="district"
                                 value={editForm.district}
-                                onChange={handleEditChange}
+                                onChange={(e) => {
+                                  const name = e.target.value;
+                                  const d = districtsList.find((x) => x.name_en === name);
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    district: name,
+                                    districtId: d ? String(d.id) : "",
+                                    city: "",
+                                    cityRowId: "",
+                                    cityLatitude: null,
+                                    cityLongitude: null,
+                                  }));
+                                }}
                                 className="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm"
                               >
                                 <option value="">Select</option>
-                                {DISTRICTS.map((d) => (
-                                  <option key={d} value={d}>{d}</option>
+                                {(districtsList.length
+                                  ? districtsList
+                                  : DISTRICTS_FALLBACK.map((n) => ({ id: null, name_en: n }))
+                                ).map((d, idx) => (
+                                  <option key={String(d.id ?? `fb-${idx}`)} value={d.name_en}>
+                                    {d.name_en}
+                                  </option>
                                 ))}
                               </select>
                             ) : (
                               s.district
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-slate-600">
+                            {editingId === s.id ? (
+                              <select
+                                value={editForm.cityRowId}
+                                disabled={!editForm.districtId || editCitiesLoading || editCitiesList.length === 0}
+                                onChange={(e) => {
+                                  const id = e.target.value;
+                                  if (!id) {
+                                    setEditForm((p) => ({
+                                      ...p,
+                                      cityRowId: "",
+                                      city: "",
+                                      cityLatitude: null,
+                                      cityLongitude: null,
+                                    }));
+                                    return;
+                                  }
+                                  const c = editCitiesList.find((x) => String(x.id) === id);
+                                  if (!c) return;
+                                  setEditForm((p) => ({
+                                    ...p,
+                                    cityRowId: id,
+                                    city: formatLkCityLabel(c),
+                                    cityLatitude: typeof c.latitude === "number" ? c.latitude : null,
+                                    cityLongitude: typeof c.longitude === "number" ? c.longitude : null,
+                                  }));
+                                }}
+                                className="w-full min-w-[140px] rounded-lg border border-slate-200 px-2 py-1 text-sm disabled:bg-slate-50"
+                              >
+                                <option value="">City (optional)</option>
+                                {editCitiesList.map((c) => (
+                                  <option key={c.id} value={String(c.id)}>
+                                    {formatLkCityLabel(c)}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              s.city || "—"
                             )}
                           </td>
                           <td className="py-3 px-3 tabular-nums text-slate-600">
@@ -523,7 +771,7 @@ export function AdminShelters() {
                       ))}
                       {hasMore && (
                         <tr>
-                          <td colSpan={7} className="py-4 text-center">
+                          <td colSpan={8} className="py-4 text-center">
                             <button
                               onClick={loadMore}
                               className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-sky-600 shadow-sm transition hover:bg-sky-50"

@@ -19,6 +19,14 @@ const ShelterSchema = new Schema(
       required: true,
       trim: true,
     },
+    /** City / area within district (English label), from location API */
+    city: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    cityLatitude: { type: Number },
+    cityLongitude: { type: Number },
     capacity: {
       type: Number,
       required: true,

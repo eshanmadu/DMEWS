@@ -61,8 +61,8 @@ const SLIDES = [
   {
     key: "shelter",
     imageSrc: shelterSlide,
-    title: "Shelters",
-    subtitle: "Find evacuation shelters",
+    title: "Relief Camps",
+    subtitle: "Find Relief Camps",
     body: "See shelters near you when logged in, plus safety instructions.",
     ctaHref: "/shelters",
     ctaLabel: "Find shelters",

@@ -7,6 +7,9 @@ function toApiShelter(s) {
     name: s.name,
     location: s.location,
     district: s.district,
+    city: s.city || "",
+    cityLatitude: typeof s.cityLatitude === "number" ? s.cityLatitude : undefined,
+    cityLongitude: typeof s.cityLongitude === "number" ? s.cityLongitude : undefined,
     capacity: s.capacity,
     contact: s.contact || "",
     notes: s.notes || "",
@@ -16,13 +19,15 @@ function toApiShelter(s) {
 }
 
 function validateShelterPayload(payload) {
-  const { name, location, district, capacity, contact, notes } = payload || {};
+  const { name, location, district, capacity, contact, notes, city, cityLatitude, cityLongitude } =
+    payload || {};
 
   const cleanName = String(name || "").trim();
   const cleanLocation = String(location || "").trim();
   const cleanDistrict = String(district || "").trim();
   const cleanContact = String(contact || "").trim();
   const cleanNotes = String(notes || "").trim();
+  const cleanCity = String(city || "").trim();
 
   if (!cleanName || !cleanLocation || !cleanDistrict || capacity == null) {
     return { error: "Name, location, district, and capacity are required." };
@@ -37,16 +42,37 @@ function validateShelterPayload(payload) {
     return { error: "Contact must be exactly 10 digits." };
   }
 
-  return {
-    value: {
-      name: cleanName,
-      location: cleanLocation,
-      district: cleanDistrict,
-      capacity: cap,
-      contact: cleanContact,
-      notes: cleanNotes,
-    },
+  let lat;
+  let lon;
+  if (cityLatitude != null && cityLongitude != null) {
+    lat = Number(cityLatitude);
+    lon = Number(cityLongitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return { error: "City coordinates must be valid numbers." };
+    }
+  }
+
+  const value = {
+    name: cleanName,
+    location: cleanLocation,
+    district: cleanDistrict,
+    capacity: cap,
+    contact: cleanContact,
+    notes: cleanNotes,
+    city: cleanCity,
   };
+
+  if (!cleanCity) {
+    value.cityLatitude = null;
+    value.cityLongitude = null;
+  } else if (lat != null && lon != null) {
+    value.cityLatitude = lat;
+    value.cityLongitude = lon;
+  } else {
+    return { error: "City coordinates are required when a city is set." };
+  }
+
+  return { value };
 }
 
 async function getShelters(_req, res) {
