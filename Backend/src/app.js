@@ -14,6 +14,7 @@ const sosRoutes = require("./routes/sos.routes");
 const missionsRoutes = require("./routes/missions.routes");
 const missingPersonsRoutes = require("./routes/missingPersons.routes");
 const riskPredictionsRoutes = require("./routes/riskPredictions.routes");
+const predictRoutes = require("./routes/predict.routes");
 const adminUsersRoutes = require("./routes/adminUsers.routes");
 const sensorRoutes = require("./routes/sensorRoutes");
 const locationsRoutes = require("./routes/locations.routes");
@@ -37,6 +38,7 @@ app.use("/sos", sosRoutes);
 app.use("/missions", missionsRoutes);
 app.use("/missing-persons", missingPersonsRoutes);
 app.use("/risk-predictions", riskPredictionsRoutes);
+app.use("/api/predict", predictRoutes);
 app.use("/admin/users", adminUsersRoutes);
 app.use("/sensors", sensorRoutes);
 

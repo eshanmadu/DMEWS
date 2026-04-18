@@ -16,6 +16,7 @@ import {
   Boxes,
   UserSearch,
   FileBarChart,
+  Sparkles,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/admin/create", label: "Create Alert", icon: TriangleAlert },
   { href: "/admin/list", label: "Alert List", icon: FileText },
   { href: "/admin/risk", label: "Risk management", icon: ShieldAlert },
+  { href: "/admin/risk-prediction", label: "Risk prediction", icon: Sparkles },
   { href: "/admin/shelters", label: "Shelters", icon: Building2 },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/volunteers", label: "Volunteers", icon: Heart },
@@ -88,7 +90,9 @@ export function AdminSidebar() {
             const isActive =
               item.href === "/admin"
                 ? pathname === "/admin"
-                : pathname.startsWith(item.href);
+                : item.href === "/admin/risk"
+                  ? pathname === "/admin/risk"
+                  : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}

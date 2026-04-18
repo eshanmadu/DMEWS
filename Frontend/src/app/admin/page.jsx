@@ -13,6 +13,7 @@ import {
   Bell,
   Flame,
   Zap,
+  Sparkles,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -193,6 +194,13 @@ export default async function AdminDashboardPage() {
               <ShieldAlert className="h-4 w-4 transition-transform group-hover:rotate-3" />
               Risk management
               <span className="absolute inset-0 -z-10 bg-gradient-to-r from-indigo-500 to-indigo-600 opacity-0 transition-opacity group-hover:opacity-100" />
+            </Link>
+            <Link
+              href="/admin/risk-prediction"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-violet-400"
+            >
+              <Sparkles className="h-4 w-4" />
+              Risk prediction
             </Link>
             <Link
               href="/admin/shelters"

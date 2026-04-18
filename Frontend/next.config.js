@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    return [
+      {
+        source: "/risk-prediction",
+        destination: "/admin/risk-prediction",
+        permanent: false,
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {

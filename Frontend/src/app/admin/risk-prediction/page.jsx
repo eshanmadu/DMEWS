@@ -233,10 +233,10 @@ export default function RiskPredictionPage() {
         {/* Header bar */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <Link
-            href="/"
+            href="/admin"
             className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-sky-600 dark:bg-slate-800/70 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-sky-400"
           >
-            ← Back to dashboard
+            ← Admin dashboard
           </Link>
           <button
             type="button"
@@ -263,10 +263,24 @@ export default function RiskPredictionPage() {
               </p>
             </div>
             <div className="rounded-2xl bg-white/20 px-4 py-2 backdrop-blur-sm">
-              <div className="text-xs font-medium uppercase tracking-wider">Live Demo</div>
+              <div className="text-xs font-medium uppercase tracking-wider">District</div>
               <div className="text-lg font-bold">{district}</div>
             </div>
           </div>
+        </div>
+
+        <div className="mb-8 rounded-2xl border border-indigo-200/80 bg-indigo-50/90 p-4 shadow-sm dark:border-indigo-900/50 dark:bg-indigo-950/40">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">
+            Power BI and REST
+          </p>
+          <p className="mt-1 text-xs text-indigo-800/90 dark:text-indigo-300/90">
+            Each URL returns exactly 25 rows (one per district): peak risk within the time window; if levels tie, the latest hour is used.
+          </p>
+          <ul className="mt-3 space-y-1.5 font-mono text-[11px] text-slate-800 break-all dark:text-slate-200">
+            <li>{`GET ${API_BASE}/api/predict?range=6h`}</li>
+            <li>{`GET ${API_BASE}/api/predict?range=24h`}</li>
+            <li>{`GET ${API_BASE}/api/predict?range=7d`}</li>
+          </ul>
         </div>
 
         {/* Two column layout */}
