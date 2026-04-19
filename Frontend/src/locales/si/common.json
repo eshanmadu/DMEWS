@@ -3,13 +3,23 @@
     "dashboard": "පුවරුව",
     "alerts": "අනතුරු ඇඟවීම්",
     "incidents": "සිදුවීම්",
-    "shelters": "මධ්‍යස්ථාන",
+    "shelters": "සහන කඳවුරු",
     "login": "පිවිසෙන්න",
     "signup": "ලියාපදිංචි වන්න",
     "logout": "ඉවත් වන්න",
     "profile": "පැතිකඩ",
     "volunteer": "ස්වේච්ඡා",
-    "helpSupport": "උදව් සහ සහාය"
+    "helpSupport": "උදව් සහ සහාය",
+    "findPeople": "පුද්ගලයන් සොයන්න",
+    "reports": "වාර්තා"
+  },
+  "slideshow": {
+    "slide1Title": "DisasterWatch වෙත සාදරයෙන් පිළිගනිමු",
+    "slide1Desc": "ශ්‍රී ලංකාවේ කාලීන ආපදා අනතුරු ඇඟවීම් සහ තොරතුරු සඳහා ඔබේ විශ්වාසනීය මූලාශ්‍රය.",
+    "slide2Title": "දැනුවත්ව සිටින්න, ආරක්ෂිතව සිටින්න",
+    "slide2Desc": "ඔබේ දිස්ත්‍රික්කයට සකස් කර ඇති ගංවතුර අවදානම්, කාලගුණ තත්ත්වයන් සහ හදිසි සම්පත පිළිබඳ සජීවී යාවත්කාලීන ලබාගන්න.",
+    "slide3Title": "අපගේ සමාජයට එක්වන්න",
+    "slide3Desc": "පුද්ගලිකරණය කරන ලද අනතුරු ඇඟවීම් ලැබීමට ලියාපදිංචි වන්න, හදිසි සම්බන්ධතා ප්‍රවේශ වන්න සහ අපගේ ස්වේච්ඡා ජාලයට දායක වන්න."
   },
   "flood": {
     "high": "⚠ ගංවතුර අනතුරු ඇඟවීම — ඉහළ අවදානම: {{districts}}. ආරක්ෂිතව සිටින්න. නිල උපදෙස් අනුගමනය කරන්න.",
@@ -181,7 +191,91 @@
     "applyIntro": "එක වරක් ඉදිරිපත් කරන්න. නිල් සත්‍යාපන badge ලබාගැනීමට පෙර පරිපාලකයන් ඔබගේ අයදුම සමාලෝචනය කරයි.",
     "loginToApply": "අයදුමට පිවිසෙන්න",
     "signupToApply": "ගිණුමක් සාදන්න",
-    "needLoginApply": "ස්වේච්ඡා අයදුම ඉදිරිපත් කිරීමට පිවිසෙන්න."
+    "needLoginApply": "ස්වේච්ඡා අයදුම ඉදිරිපත් කිරීමට පිවිසෙන්න.",
+    "skillFlood": "ගංවතුර පිළිතුර",
+    "skillLandslide": "පාෂාණ ලාංඡන පිළිතුර",
+    "skillFire": "ගිනි පිළිතුර",
+    "skillDefault": "පොදු සහාය"
+  },
+  "profilePage": {
+    "userFallback": "පරිශීලකයා",
+    "quickAccess": "ඉක්මන් ප්‍රවේශය",
+    "myIncidents": "මගේ සිදුවීම්",
+    "myMissions": "මගේ මෙහෙයුම්",
+    "tabs": {
+      "profile": "පැතිකඩ",
+      "security": "ආරක්ෂාව",
+      "danger": "අවදානම් කලාපය"
+    },
+    "personalInfo": "පුද්ගලික තොරතුරු",
+    "fields": {
+      "fullName": "සම්පූර්ණ නම",
+      "fullNamePlaceholder": "ඔබගේ නම",
+      "emailAddress": "විද්‍යුත් තැපෑල",
+      "mobileNumber": "ජංගම දුරකථන අංකය",
+      "mobilePlaceholder": "උදා: 0771234567",
+      "district": "දිස්ත්‍රික්කය",
+      "selectDistrict": "දිස්ත්‍රික්කය තෝරන්න",
+      "cityArea": "නගරය / ප්‍රදේශය",
+      "selectCity": "නගරය හෝ ප්‍රදේශය තෝරන්න"
+    },
+    "loadingLocations": "ස්ථාන පූරණය වෙමින්…",
+    "security": {
+      "title": "ආරක්ෂක සැකසුම්",
+      "passwordProtected": "මුරපදය මගින් ආරක්ෂිතයි",
+      "googleSignIn": "Google පිවිසුම",
+      "currentPassword": "වත්මන් මුරපදය",
+      "currentPasswordPlaceholder": "වත්මන් මුරපදය ඇතුළත් කරන්න",
+      "newPassword": "නව මුරපදය",
+      "newPasswordPlaceholder": "අවම වශයෙන් අකුරු 6ක්",
+      "confirmNewPassword": "නව මුරපදය තහවුරු කරන්න",
+      "confirmNewPasswordPlaceholder": "නව මුරපදය නැවත ඇතුළත් කරන්න",
+      "googleNoPassword": "Google ගිණුම් සඳහා වෙනස් කළ හැකි ස්ථානීය මුරපදයක් නැත."
+    },
+    "volunteerProgram": {
+      "title": "ස්වේච්ඡා වැඩසටහන",
+      "status": "තත්ත්වය",
+      "leaveProgram": "වැඩසටහනෙන් ඉවත් වන්න",
+      "leaving": "ඉවත් වෙමින්...",
+      "leaveConfirmTitle": "ස්වේච්ඡා වැඩසටහනෙන් ඉවත් වන්නද?",
+      "leaveConfirmText": "මෙතැන් සිට ඔබට මෙහෙයුම් භාර ගත නොහැකි අතර ස්වේච්ඡා දැනුම්දීම්ද නොලැබේ.",
+      "leaveYes": "ඔව්, ඉවත් වන්න"
+    },
+    "danger": {
+      "title": "අවදානම් කලාපය",
+      "deleteAccount": "ගිණුම මකන්න",
+      "deleteDescription": "ඔබගේ ගිණුම සහ සම්බන්ධිත දත්ත සියල්ල ස්ථිරව මකා දමනු ඇත. මෙම ක්‍රියාව ආපසු හැරවිය නොහැක.",
+      "deletePermanently": "ගිණුම ස්ථිරව මකන්නද?",
+      "enterPasswordConfirm": "තහවුරු කිරීමට වත්මන් මුරපදය ඇතුළත් කරන්න.",
+      "confirmDeletion": "මකාදැමීම තහවුරු කරන්න.",
+      "deleteForever": "ස්ථිරව මකන්න"
+    },
+    "actions": {
+      "saveChanges": "වෙනස්කම් සුරකින්න",
+      "saving": "සුරකිමින්...",
+      "changePassword": "මුරපදය වෙනස් කරන්න",
+      "updating": "යාවත්කාලීන වෙමින්...",
+      "cancel": "අවලංගු කරන්න",
+      "deleting": "මකාදමමින්…"
+    },
+    "chooseAvatar": "පැතිකඩ රූපයක් තෝරන්න",
+    "errors": {
+      "network": "ජාල දෝෂයකි.",
+      "loadProfile": "පැතිකඩ පූරණය කිරීමට අසමත් විය.",
+      "loadDistricts": "දිස්ත්‍රික්ක පූරණය කිරීමට අසමත් විය.",
+      "loadCities": "නගර පූරණය කිරීමට අසමත් විය.",
+      "updateProfile": "පැතිකඩ යාවත්කාලීන කිරීමට අසමත් විය.",
+      "changePassword": "මුරපදය වෙනස් කිරීමට අසමත් විය.",
+      "leaveVolunteer": "ස්වේච්ඡා වැඩසටහනෙන් ඉවත් වීමට අසමත් විය.",
+      "deleteAccount": "ගිණුම මකා දැමිය නොහැක.",
+      "passwordMismatch": "නව මුරපද එකිනෙකට නොගැලපේ.",
+      "passwordTooShort": "නව මුරපදය අවම වශයෙන් අකුරු 6ක් විය යුතුය."
+    },
+    "success": {
+      "profileUpdated": "පැතිකඩ සාර්ථකව යාවත්කාලීන විය.",
+      "passwordUpdated": "මුරපදය සාර්ථකව යාවත්කාලීන විය.",
+      "leftVolunteer": "ඔබ ස්වේච්ඡා වැඩසටහනෙන් ඉවත් විය."
+    }
   },
 
   "helpSupport": {

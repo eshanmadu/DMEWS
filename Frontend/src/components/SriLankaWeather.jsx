@@ -439,11 +439,11 @@ export function SriLankaWeather() {
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-700">
                     {effectiveSelected
                       ? showCityHeading
-                        ? `${userCityLabel} · city`
+                        ? `${userCityLabel}`
                         : `${effectiveSelected.name} · district`
                       : isLoggedIn && userDistrict
                       ? userCityLabel
-                        ? `${userCityLabel} · your city`
+                        ? `${userCityLabel}`
                         : `${userDistrict} · your district`
                       : "Sri Lanka · nationwide average"}
                   </p>

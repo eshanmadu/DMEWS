@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PublicAlertsMap } from "@/components/PublicAlertsMap";
 import Loader from "@/components/Loader";
 import Link from "next/link";
+import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   MapPin,
@@ -50,6 +51,8 @@ function formatDateTime(value) {
 }
 
 function AlertCard({ alert, featured = false }) {
+  const { i18n } = useTranslation();
+  const si = String(i18n.language || "").startsWith("si");
   const style = severityStyles[alert?.severity] || severityStyles.Medium;
 
   return (
@@ -66,14 +69,14 @@ function AlertCard({ alert, featured = false }) {
         <div className="flex items-center gap-2">
           <TriangleAlert className={`h-5 w-5 ${style.icon}`} />
           <h3 className="text-base font-semibold text-slate-900">
-            {alert?.disasterType || "Disaster alert"}
+            {alert?.disasterType || (si ? "ආපදා අනතුරු ඇඟවීම" : "Disaster alert")}
           </h3>
         </div>
 
         <span
           className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${style.badge}`}
         >
-          {alert?.severity || "—"} severity
+          {alert?.severity || "—"} {si ? "බරපතළත්වය" : "severity"}
         </span>
       </div>
 
@@ -93,22 +96,22 @@ function AlertCard({ alert, featured = false }) {
         </div>
 
         <p className="text-sm leading-6 text-slate-700">
-          {alert?.description || "No description available."}
+          {alert?.description || (si ? "විස්තරයක් නොමැත." : "No description available.")}
         </p>
 
         <div className="rounded-xl border border-slate-200/80 bg-white/70 p-4">
           <div className="mb-2 flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-amber-700" />
-            <p className="text-sm font-semibold text-slate-900">Safety instructions</p>
+            <p className="text-sm font-semibold text-slate-900">{si ? "ආරක්ෂක උපදෙස්" : "Safety instructions"}</p>
           </div>
           <p className="text-sm leading-6 text-slate-700">
-            {alert?.safetyInstructions || "Follow official instructions carefully."}
+            {alert?.safetyInstructions || (si ? "නිල උපදෙස් සැලකිල්ලෙන් අනුගමනය කරන්න." : "Follow official instructions carefully.")}
           </p>
         </div>
 
         {featured && (
           <div className="rounded-xl border border-red-200 bg-red-100/70 px-3 py-2 text-sm font-medium text-red-800">
-            Immediate attention recommended for this area.
+            {si ? "මෙම ප්‍රදේශය සඳහා වහාම අවධානය අවශ්‍යයි." : "Immediate attention recommended for this area."}
           </div>
         )}
       </div>
@@ -116,7 +119,7 @@ function AlertCard({ alert, featured = false }) {
         href={`/alerts/${alert?._id}`}
         className="inline-flex w-center items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
       >
-        View Live Details
+        {si ? "සජීවී විස්තර බලන්න" : "View Live Details"}
       </Link>
     </article>
     
@@ -124,6 +127,8 @@ function AlertCard({ alert, featured = false }) {
 }
 
 export default function AlertsPage() {
+  const { i18n } = useTranslation();
+  const si = String(i18n.language || "").startsWith("si");
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -151,18 +156,18 @@ export default function AlertsPage() {
       try {
         data = text ? JSON.parse(text) : [];
       } catch {
-        throw new Error("Expected JSON from backend.");
+        throw new Error(si ? "පසුබිම් සේවයෙන් JSON දත්ත බලාපොරොත්තු විය." : "Expected JSON from backend.");
       }
 
       if (!res.ok) {
-        setError(data?.message || "Failed to load alerts.");
+        setError(data?.message || (si ? "අනතුරු ඇඟවීම් පූරණය කිරීමට අසමත් විය." : "Failed to load alerts."));
         return;
       }
 
       setAlerts(Array.isArray(data) ? data : []);
       setLastUpdated(new Date().toISOString());
     } catch (err) {
-      setError(err?.message || "Failed to load alerts.");
+      setError(err?.message || (si ? "අනතුරු ඇඟවීම් පූරණය කිරීමට අසමත් විය." : "Failed to load alerts."));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -195,11 +200,11 @@ export default function AlertsPage() {
   }, [activeAlerts]);
 
   const districtOptions = useMemo(() => {
-    return ["All", ...affectedAreas];
+    return [si ? "සියල්ල" : "All", ...affectedAreas];
   }, [affectedAreas]);
 
   const visibleAlerts = useMemo(() => {
-    if (districtFilter === "All") return activeAlerts;
+    if (districtFilter === "All" || districtFilter === "සියල්ල") return activeAlerts;
     return activeAlerts.filter((alert) => alert?.affectedArea === districtFilter);
   }, [activeAlerts, districtFilter]);
 
@@ -223,20 +228,20 @@ export default function AlertsPage() {
           <div className="max-w-3xl">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-sm font-medium">
               <Siren className="h-4 w-4" />
-              Live public safety updates
+              {si ? "සජීවී මහජන ආරක්ෂක යාවත්කාලීන" : "Live public safety updates"}
             </div>
 
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Active Disaster Alerts
+              {si ? "සක්‍රීය ආපදා අනතුරු ඇඟවීම්" : "Active Disaster Alerts"}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/90 sm:text-base">
-              Stay informed about current public warnings, affected areas, and official safety instructions.
+              {si ? "දැනට පවතින අනතුරු ඇඟවීම්, බලපෑමට ලක් වූ ප්‍රදේශ සහ නිල ආරක්ෂක උපදෙස් පිළිබඳව දැනුවත් වන්න." : "Stay informed about current public warnings, affected areas, and official safety instructions."}
             </p>
 
             <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-sm text-white/95">
               <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
               <span>
-                Last updated: {lastUpdated ? formatDateTime(lastUpdated) : "—"}
+                {si ? "අවසන් යාවත්කාලීන කිරීම:" : "Last updated:"} {lastUpdated ? formatDateTime(lastUpdated) : "—"}
               </span>
             </div>
           </div>
@@ -244,21 +249,21 @@ export default function AlertsPage() {
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-white/15 px-4 py-4 backdrop-blur-sm">
               <p className="text-xs font-medium uppercase tracking-wide text-white/80">
-                Active alerts
+                {si ? "සක්‍රීය අනතුරු ඇඟවීම්" : "Active alerts"}
               </p>
               <p className="mt-2 text-3xl font-bold">{visibleAlerts.length}</p>
             </div>
 
             <div className="rounded-2xl bg-white/15 px-4 py-4 backdrop-blur-sm">
               <p className="text-xs font-medium uppercase tracking-wide text-white/80">
-                High severity
+                {si ? "ඉහළ බරපතළත්වය" : "High severity"}
               </p>
               <p className="mt-2 text-3xl font-bold">{highAlerts.length}</p>
             </div>
 
             <div className="rounded-2xl bg-white/15 px-4 py-4 backdrop-blur-sm">
               <p className="text-xs font-medium uppercase tracking-wide text-white/80">
-                Areas affected
+                {si ? "බලපෑමට ලක් වූ ප්‍රදේශ" : "Areas affected"}
               </p>
               <p className="mt-2 text-3xl font-bold">{affectedAreas.length}</p>
             </div>
@@ -275,7 +280,7 @@ export default function AlertsPage() {
       <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-3">
           <MapPin className="h-4 w-4 text-slate-500" />
-          <h2 className="text-sm font-semibold text-slate-800">District filter</h2>
+          <h2 className="text-sm font-semibold text-slate-800">{si ? "දිස්ත්‍රික් පෙරණය" : "District filter"}</h2>
         </div>
 
         <div className="p-4">
@@ -302,14 +307,14 @@ export default function AlertsPage() {
       <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-3">
           <MapPin className="h-4 w-4 text-slate-500" />
-          <h2 className="text-sm font-semibold text-slate-800">Affected areas</h2>
-          <p className="text-xs text-slate-500">Currently impacted districts</p>
+          <h2 className="text-sm font-semibold text-slate-800">{si ? "බලපෑමට ලක් වූ ප්‍රදේශ" : "Affected areas"}</h2>
+          <p className="text-xs text-slate-500">{si ? "දැනට බලපෑමට ලක් වූ දිස්ත්‍රික්ක" : "Currently impacted districts"}</p>
         </div>
 
         <div className="p-4">
           {affectedAreas.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-sm text-slate-500">
-              No affected areas to show.
+              {si ? "පෙන්වීමට බලපෑමට ලක් වූ ප්‍රදේශ නොමැත." : "No affected areas to show."}
             </div>
           ) : (
             <div className="flex flex-wrap gap-3">
@@ -339,10 +344,10 @@ export default function AlertsPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
           <AlertTriangle className="mx-auto h-10 w-10 text-emerald-600" />
           <h2 className="mt-4 text-xl font-semibold text-slate-900">
-            No active alerts right now
+            {si ? "දැනට සක්‍රීය අනතුරු ඇඟවීම් නොමැත" : "No active alerts right now"}
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            There are currently no active public disaster warnings for the selected district.
+            {si ? "තෝරාගත් දිස්ත්‍රික්කය සඳහා දැනට සක්‍රීය මහජන ආපදා අනතුරු ඇඟවීම් නොමැත." : "There are currently no active public disaster warnings for the selected district."}
           </p>
         </section>
       ) : (
@@ -351,7 +356,7 @@ export default function AlertsPage() {
             <section className="space-y-4">
               <div className="flex items-center gap-2">
                 <Siren className="h-5 w-5 text-red-600" />
-                <h2 className="text-xl font-bold text-slate-900">High Priority Alerts</h2>
+                <h2 className="text-xl font-bold text-slate-900">{si ? "ඉහළ ප්‍රමුඛතා අනතුරු ඇඟවීම්" : "High Priority Alerts"}</h2>
               </div>
 
               <div className="grid gap-5 lg:grid-cols-2">
@@ -366,7 +371,7 @@ export default function AlertsPage() {
             <section className="space-y-4">
               <div className="flex items-center gap-2">
                 <FileText className="h-5 w-5 text-slate-600" />
-                <h2 className="text-xl font-bold text-slate-900">Other Active Alerts</h2>
+                <h2 className="text-xl font-bold text-slate-900">{si ? "අනෙකුත් සක්‍රීය අනතුරු ඇඟවීම්" : "Other Active Alerts"}</h2>
               </div>
 
               <div className="grid gap-5 lg:grid-cols-2">

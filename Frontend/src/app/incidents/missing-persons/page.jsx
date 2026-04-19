@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   UserSearch,
   UserPlus,
@@ -122,6 +123,9 @@ function sanitizeAgeInput(value) {
 }
 
 export default function MissingPersonsPage() {
+  const { i18n } = useTranslation();
+  const si = String(i18n.language || "").startsWith("si");
+  const tr = (en, siText) => (si ? siText : en);
   const [missingPersons, setMissingPersons] = useState([]);
   const [foundPersons, setFoundPersons] = useState([]);
   const [listLoading, setListLoading] = useState(true);
@@ -186,12 +190,12 @@ export default function MissingPersonsPage() {
       const res = await fetch(`${API_BASE}/missing-persons`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.message || "Failed to load reports.");
+        throw new Error(data?.message || tr("Failed to load reports.", "වාර්තා පූරණය කිරීමට අසමත් විය."));
       }
       setMissingPersons(Array.isArray(data.missing) ? data.missing : []);
       setFoundPersons(Array.isArray(data.found) ? data.found : []);
     } catch (e) {
-      setListError(e?.message || "Failed to load reports.");
+      setListError(e?.message || tr("Failed to load reports.", "වාර්තා පූරණය කිරීමට අසමත් විය."));
       setMissingPersons([]);
       setFoundPersons([]);
     } finally {
@@ -271,23 +275,23 @@ export default function MissingPersonsPage() {
 
   const validateMissing = () => {
     const errors = {};
-    if (!missingForm.fullName.trim()) errors.fullName = "Full name is required";
-    else if (!isValidPersonName(missingForm.fullName)) errors.fullName = "Name can only contain letters";
-    if (!missingForm.age) errors.age = "Age is required";
+    if (!missingForm.fullName.trim()) errors.fullName = tr("Full name is required", "සම්පූර්ණ නම අනිවාර්යයි");
+    else if (!isValidPersonName(missingForm.fullName)) errors.fullName = tr("Name can only contain letters", "නමට අක්ෂර පමණක් භාවිතා කරන්න");
+    if (!missingForm.age) errors.age = tr("Age is required", "වයස අනිවාර්යයි");
     else if (
       isNaN(Number(missingForm.age)) ||
       Number(missingForm.age) < 0 ||
       Number(missingForm.age) > 120
     )
-      errors.age = "Age must be 0–120";
-    if (!missingForm.lastSeenLocation.trim()) errors.lastSeenLocation = "Last seen location is required";
-    if (!missingForm.dateMissing) errors.dateMissing = "Date missing is required";
-    else if (new Date(missingForm.dateMissing) > new Date()) errors.dateMissing = "Date cannot be in the future";
-    if (!missingForm.description.trim()) errors.description = "Description is required";
+      errors.age = tr("Age must be 0–120", "වයස 0–120 අතර විය යුතුය");
+    if (!missingForm.lastSeenLocation.trim()) errors.lastSeenLocation = tr("Last seen location is required", "අවසන් වරට දැකගත් ස්ථානය අනිවාර්යයි");
+    if (!missingForm.dateMissing) errors.dateMissing = tr("Date missing is required", "අතුරුදහන් වූ දිනය අනිවාර්යයි");
+    else if (new Date(missingForm.dateMissing) > new Date()) errors.dateMissing = tr("Date cannot be in the future", "ඉදිරි දිනයක් යෙදිය නොහැක");
+    if (!missingForm.description.trim()) errors.description = tr("Description is required", "විස්තරය අනිවාර්යයි");
     if (!isValidOptionalAdditionalPhone(missingForm.contactInfo))
-      errors.contactInfo = "Additional contact must be exactly 10 digits, or leave blank";
+      errors.contactInfo = tr("Additional contact must be exactly 10 digits, or leave blank", "අමතර දුරකථන අංකය ඉලක්කම් 10ක් විය යුතුය, නැතහොත් හිස්ව තබන්න");
     if (missingPhoto && !String(missingPhoto.type || "").toLowerCase().startsWith("image/")) {
-      errors.photo = "Please choose an image file.";
+      errors.photo = tr("Please choose an image file.", "කරුණාකර රූප ගොනුවක් තෝරන්න.");
     }
     setMissingErrors(errors);
     return Object.keys(errors).length === 0;
@@ -297,7 +301,7 @@ export default function MissingPersonsPage() {
     e.preventDefault();
     setSubmitError(null);
     if (!clientSignedIn) {
-      setSubmitError("Please log in before submitting a missing person report.");
+      setSubmitError(tr("Please log in before submitting a missing person report.", "අතුරුදහන් පුද්ගල වාර්තාවක් යැවීමට පෙර කරුණාකර පිවිසෙන්න."));
       return;
     }
     if (!validateMissing()) return;
@@ -321,7 +325,7 @@ export default function MissingPersonsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.message || "Submit failed.");
+        throw new Error(data?.message || tr("Submit failed.", "යැවීම අසාර්ථක විය."));
       }
 
       if (data.person) {
@@ -342,10 +346,10 @@ export default function MissingPersonsPage() {
       setMissingPhoto(null);
       setMissingPhotoPreview(null);
       if (missingPhotoInputRef.current) missingPhotoInputRef.current.value = "";
-      setSuccessMsg({ type: "missing", text: "✓ Missing person report submitted" });
+      setSuccessMsg({ type: "missing", text: tr("✓ Missing person report submitted", "✓ අතුරුදහන් පුද්ගල වාර්තාව යවන ලදී") });
       setShowMissingForm(false);
     } catch (err) {
-      setSubmitError(err?.message || "Submit failed.");
+      setSubmitError(err?.message || tr("Submit failed.", "යැවීම අසාර්ථක විය."));
     } finally {
       setSubmittingMissing(false);
     }
@@ -359,31 +363,31 @@ export default function MissingPersonsPage() {
         headers: { ...authHeaders() },
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || "Delete failed.");
+      if (!res.ok) throw new Error(data?.message || tr("Delete failed.", "මකා දැමීම අසාර්ථක විය."));
       setMissingPersons((prev) => prev.filter((p) => p.id !== id));
-      setSuccessMsg({ type: "missing", text: "Entry removed" });
+      setSuccessMsg({ type: "missing", text: tr("Entry removed", "ප්‍රවේශය ඉවත් කරන ලදී") });
     } catch (err) {
-      setSubmitError(err?.message || "Delete failed.");
+      setSubmitError(err?.message || tr("Delete failed.", "මකා දැමීම අසාර්ථක විය."));
     }
   };
 
   const validateFound = () => {
     const errors = {};
     if (foundForm.name.trim() && !isValidPersonName(foundForm.name))
-      errors.name = "Name can only contain letters";
-    if (!foundForm.locationFound.trim()) errors.locationFound = "Location found is required";
-    if (!foundForm.dateFound) errors.dateFound = "Date found is required";
-    else if (new Date(foundForm.dateFound) > new Date()) errors.dateFound = "Date cannot be in the future";
-    if (!foundForm.description.trim()) errors.description = "Description is required";
+      errors.name = tr("Name can only contain letters", "නමට අක්ෂර පමණක් භාවිතා කරන්න");
+    if (!foundForm.locationFound.trim()) errors.locationFound = tr("Location found is required", "හමු වූ ස්ථානය අනිවාර්යයි");
+    if (!foundForm.dateFound) errors.dateFound = tr("Date found is required", "හමු වූ දිනය අනිවාර්යයි");
+    else if (new Date(foundForm.dateFound) > new Date()) errors.dateFound = tr("Date cannot be in the future", "ඉදිරි දිනයක් යෙදිය නොහැක");
+    if (!foundForm.description.trim()) errors.description = tr("Description is required", "විස්තරය අනිවාර්යයි");
     if (
       foundForm.age &&
       (isNaN(Number(foundForm.age)) || Number(foundForm.age) < 0 || Number(foundForm.age) > 120)
     )
-      errors.age = "Age must be 0–120";
+      errors.age = tr("Age must be 0–120", "වයස 0–120 අතර විය යුතුය");
     if (!isValidOptionalAdditionalPhone(foundForm.contactInfo))
-      errors.contactInfo = "Additional contact must be exactly 10 digits, or leave blank";
+      errors.contactInfo = tr("Additional contact must be exactly 10 digits, or leave blank", "අමතර දුරකථන අංකය ඉලක්කම් 10ක් විය යුතුය, නැතහොත් හිස්ව තබන්න");
     if (foundPhoto && !String(foundPhoto.type || "").toLowerCase().startsWith("image/")) {
-      errors.photo = "Please choose an image file.";
+      errors.photo = tr("Please choose an image file.", "කරුණාකර රූප ගොනුවක් තෝරන්න.");
     }
     setFoundErrors(errors);
     return Object.keys(errors).length === 0;
@@ -393,7 +397,7 @@ export default function MissingPersonsPage() {
     e.preventDefault();
     setSubmitError(null);
     if (!clientSignedIn) {
-      setSubmitError("Please log in before submitting a found person report.");
+      setSubmitError(tr("Please log in before submitting a found person report.", "හමු වූ පුද්ගල වාර්තාවක් යැවීමට පෙර කරුණාකර පිවිසෙන්න."));
       return;
     }
     if (!validateFound()) return;
@@ -417,7 +421,7 @@ export default function MissingPersonsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.message || "Submit failed.");
+        throw new Error(data?.message || tr("Submit failed.", "යැවීම අසාර්ථක විය."));
       }
 
       if (data.person) {
@@ -443,10 +447,10 @@ export default function MissingPersonsPage() {
       setFoundPhoto(null);
       setFoundPhotoPreview(null);
       if (foundPhotoInputRef.current) foundPhotoInputRef.current.value = "";
-      setSuccessMsg({ type: "found", text: "✓ Found person report submitted" });
+      setSuccessMsg({ type: "found", text: tr("✓ Found person report submitted", "✓ හමු වූ පුද්ගල වාර්තාව යවන ලදී") });
       setShowFoundForm(false);
     } catch (err) {
-      setSubmitError(err?.message || "Submit failed.");
+      setSubmitError(err?.message || tr("Submit failed.", "යැවීම අසාර්ථක විය."));
     } finally {
       setSubmittingFound(false);
     }
@@ -460,11 +464,11 @@ export default function MissingPersonsPage() {
         headers: { ...authHeaders() },
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || "Delete failed.");
+      if (!res.ok) throw new Error(data?.message || tr("Delete failed.", "මකා දැමීම අසාර්ථක විය."));
       setFoundPersons((prev) => prev.filter((p) => p.id !== id));
-      setSuccessMsg({ type: "found", text: "Entry removed" });
+      setSuccessMsg({ type: "found", text: tr("Entry removed", "ප්‍රවේශය ඉවත් කරන ලදී") });
     } catch (err) {
-      setSubmitError(err?.message || "Delete failed.");
+      setSubmitError(err?.message || tr("Delete failed.", "මකා දැමීම අසාර්ථක විය."));
     }
   };
 
@@ -719,10 +723,10 @@ export default function MissingPersonsPage() {
             </div>
             <div className="flex-1">
               <h1 className="font-oswald text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                Missing & Found Persons
+                {tr("Missing & Found Persons", "අතුරුදහන් සහ හමු වූ පුද්ගලයින්")}
               </h1>
               <p className="mt-2 max-w-2xl text-rose-100">
-                Report missing individuals or notify about found persons. Your report helps reunite families.
+                {tr("Report missing individuals or notify about found persons. Your report helps reunite families.", "අතුරුදහන් පුද්ගලයින් වාර්තා කරන්න හෝ හමු වූ පුද්ගලයින් ගැන දැනුම් දෙන්න. ඔබගේ වාර්තාව පවුල් නැවත එකතු කිරීමට උපකාරී වේ.")}
               </p>
             </div>
           </div>
@@ -736,7 +740,7 @@ export default function MissingPersonsPage() {
           href="/"
           className="inline-flex items-center text-sm font-medium text-sky-600 hover:text-sky-700"
         >
-          ← Back to Dashboard
+          ← {tr("Back to Dashboard", "පුවරුවට ආපසු")}
         </Link>
         <div className="flex justify-end gap-3">
           <button
@@ -744,14 +748,14 @@ export default function MissingPersonsPage() {
             className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-300"
           >
             <UserPlus className="h-5 w-5" />
-            {showMissingForm ? "Hide" : "Report Missing"}
+            {showMissingForm ? tr("Hide", "සඟවන්න") : tr("Report Missing", "අතුරුදහන් වාර්තා කරන්න")}
           </button>
           <button
             onClick={() => setShowFoundForm((prev) => !prev)}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-300"
           >
             <UserCheck className="h-5 w-5" />
-            {showFoundForm ? "Hide" : "Report Found"}
+            {showFoundForm ? tr("Hide", "සඟවන්න") : tr("Report Found", "හමුවූ පුද්ගලයා වාර්තා කරන්න")}
           </button>
         </div>
       </div>
@@ -785,16 +789,16 @@ export default function MissingPersonsPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
                 <UserPlus className="h-5 w-5 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-white">Report Missing Person</h2>
+              <h2 className="text-xl font-bold text-white">{tr("Report Missing Person", "අතුරුදහන් පුද්ගලයා වාර්තා කරන්න")}</h2>
             </div>
-            <p className="mt-1 text-sm text-rose-100">Help bring someone back home by sharing details</p>
+            <p className="mt-1 text-sm text-rose-100">{tr("Help bring someone back home by sharing details", "විස්තර බෙදාගෙන කෙනෙකු ආපසු ගෙදරට ගෙන ඒමට උපකාරී වන්න")}</p>
           </div>
 
           <form onSubmit={handleAddMissing} className="p-6">
             <div className="grid gap-5 sm:grid-cols-2">
               {/* Full Name */}
               <div className="relative">
-                <label className="mb-1 block text-sm font-medium text-slate-700">Full name *</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">{tr("Full name *", "සම්පූර්ණ නම *")}</label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
@@ -804,7 +808,7 @@ export default function MissingPersonsPage() {
                       setMissingForm({ ...missingForm, fullName: sanitizeNameInput(e.target.value) })
                     }
                     className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
-                    placeholder="e.g., John Doe"
+                    placeholder={tr("e.g., John Doe", "උදා: නම")}
                   />
                 </div>
                 {missingErrors.fullName && <p className="mt-1 text-xs text-rose-600">{missingErrors.fullName}</p>}
@@ -812,7 +816,7 @@ export default function MissingPersonsPage() {
 
               {/* Age */}
               <div className="relative">
-                <label className="mb-1 block text-sm font-medium text-slate-700">Age *</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">{tr("Age *", "වයස *")}</label>
                 <div className="relative">
                   <CalendarDays className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
@@ -822,7 +826,7 @@ export default function MissingPersonsPage() {
                     min={0}
                     max={120}
                     className="h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
-                    placeholder="e.g., 28"
+                    placeholder={tr("e.g., 28", "උදා: 28")}
                   />
                 </div>
                 {missingErrors.age && <p className="mt-1 text-xs text-rose-600">{missingErrors.age}</p>}
@@ -830,13 +834,13 @@ export default function MissingPersonsPage() {
 
               {/* Gender */}
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Gender</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">{tr("Gender", "ස්ත්‍රී/පුරුෂභාවය")}</label>
                 <select
                   value={missingForm.gender}
                   onChange={(e) => setMissingForm({ ...missingForm, gender: e.target.value })}
                   className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
                 >
-                  <option value="">Prefer not to say</option>
+                  <option value="">{tr("Prefer not to say", "පැවසීමට කැමති නැත")}</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                   <option value="Non-binary">Non-binary</option>
@@ -845,7 +849,7 @@ export default function MissingPersonsPage() {
 
               {/* Last Seen Location */}
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Last seen location *</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">{tr("Last seen location *", "අවසන් වරට දැකගත් ස්ථානය *")}</label>
                 <LocationSuggestInput
                   label=""
                   value={missingForm.lastSeenLocation}
@@ -856,7 +860,7 @@ export default function MissingPersonsPage() {
 
               {/* Date Missing */}
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Date missing *</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">{tr("Date missing *", "අතුරුදහන් වූ දිනය *")}</label>
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
@@ -872,7 +876,7 @@ export default function MissingPersonsPage() {
 
               {/* Description */}
               <div className="sm:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700">Description (clothing, features) *</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">{tr("Description (clothing, features) *", "විස්තරය (ඇඳුම්, ලක්ෂණ) *")}</label>
                 <div className="relative">
                   <FileText className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <textarea
@@ -880,7 +884,7 @@ export default function MissingPersonsPage() {
                     value={missingForm.description}
                     onChange={(e) => setMissingForm({ ...missingForm, description: e.target.value })}
                     className="w-full rounded-xl border border-slate-200 pl-9 pr-3 pt-2 text-sm transition-all focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
-                    placeholder="Describe appearance, clothing, distinguishing features..."
+                    placeholder={tr("Describe appearance, clothing, distinguishing features...", "පෙනුම, ඇඳුම්, විශේෂ ලක්ෂණ සඳහන් කරන්න...")}
                   />
                 </div>
                 {missingErrors.description && <p className="mt-1 text-xs text-rose-600">{missingErrors.description}</p>}
@@ -890,19 +894,19 @@ export default function MissingPersonsPage() {
             {/* Reporter Section */}
             {clientSignedIn ? (
               <div className="mt-6 rounded-xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white p-5 shadow-sm">
-                <p className="font-semibold text-slate-800">📢 If you see — reporter (from your account)</p>
+                <p className="font-semibold text-slate-800">{tr("📢 If you see — reporter (from your account)", "📢 දැක්කොත් — වාර්තාකරු (ඔබගේ ගිණුමෙන්)")}</p>
                 <p className="mt-1 text-xs text-slate-600">
                   Your name and phone are taken from your profile when you submit.
                 </p>
                 <div className="mt-3 space-y-2 rounded-lg border border-rose-100 bg-white/80 px-4 py-3">
                   <p className="flex items-center gap-2 text-sm text-slate-800">
                     <UserCircle className="h-4 w-4 shrink-0 text-rose-600" />
-                    <span className="text-slate-500">Reporter name:</span>{" "}
+                    <span className="text-slate-500">{tr("Reporter name:", "වාර්තාකරු නම:")}</span>{" "}
                     <span className="font-medium">{profileHint.name || "—"}</span>
                   </p>
                   <p className="flex items-center gap-2 text-sm text-slate-800">
                     <Phone className="h-4 w-4 shrink-0 text-rose-600" />
-                    <span className="text-slate-500">Phone:</span>{" "}
+                    <span className="text-slate-500">{tr("Phone:", "දුරකථනය:")}</span>{" "}
                     <span className="font-medium">{profileHint.mobile || "—"}</span>
                   </p>
                 </div>
@@ -924,7 +928,7 @@ export default function MissingPersonsPage() {
                           contactInfo: sanitizeAdditionalPhoneInput(e.target.value),
                         })
                       }
-                      placeholder="10-digit number (optional)"
+                      placeholder={tr("10-digit number (optional)", "ඉලක්කම් 10 අංකය (විකල්ප)")}
                       inputMode="numeric"
                       maxLength={10}
                       autoComplete="tel"
@@ -938,7 +942,7 @@ export default function MissingPersonsPage() {
               </div>
             ) : (
               <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
-                <p className="font-medium">Sign in is required to submit a report</p>
+                <p className="font-medium">{tr("Sign in is required to submit a report", "වාර්තාවක් යැවීමට පිවිසීම අනිවාර්යයි")}</p>
                 <p className="mt-1 text-xs opacity-90">
                   Missing person reports require a logged-in account so your reporter details appear.
                 </p>
@@ -949,12 +953,12 @@ export default function MissingPersonsPage() {
             <div className="mt-6">
               <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700">
                 <Camera className="h-4 w-4 text-slate-500" />
-                Photo (optional, max 10MB)
+                {tr("Photo (optional, max 10MB)", "ඡායාරූපය (විකල්ප, උපරිම 10MB)")}
               </label>
               <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">
                   <ImageIcon className="h-4 w-4" />
-                  Choose image
+                  {tr("Choose image", "රූපය තෝරන්න")}
                   <input
                     ref={missingPhotoInputRef}
                     type="file"
@@ -989,7 +993,7 @@ export default function MissingPersonsPage() {
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition-all hover:from-rose-700 hover:to-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-400 disabled:opacity-60"
             >
               {submittingMissing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              {submittingMissing ? "Submitting..." : "Submit missing person report"}
+              {submittingMissing ? tr("Submitting...", "යවමින්...") : tr("Submit missing person report", "අතුරුදහන් පුද්ගල වාර්තාව යවන්න")}
             </button>
           </form>
         </div>
@@ -1003,7 +1007,7 @@ export default function MissingPersonsPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
                 <UserCheck className="h-5 w-5 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-white">Report Found Person</h2>
+              <h2 className="text-xl font-bold text-white">{tr("Report Found Person", "හමු වූ පුද්ගලයා වාර්තා කරන්න")}</h2>
             </div>
             <p className="mt-1 text-sm text-emerald-100">Help reunite someone with their family</p>
           </div>
@@ -1221,7 +1225,7 @@ export default function MissingPersonsPage() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-xl font-semibold text-slate-800">
               <UserSearch className="h-5 w-5 text-rose-600" />
-              Missing people ({missingPersons.length})
+              {tr("Missing people", "අතුරුදහන් පුද්ගලයින්")} ({missingPersons.length})
             </h2>
           </div>
           {listLoading ? (
@@ -1232,7 +1236,7 @@ export default function MissingPersonsPage() {
             </div>
           ) : missingPersons.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
-              No missing person reports yet. Click "Report Missing Person" to add one.
+              {tr('No missing person reports yet. Click "Report Missing Person" to add one.', 'තවම අතුරුදහන් පුද්ගල වාර්තා නොමැත. එක් කිරීමට "අතුරුදහන් වාර්තා කරන්න" ඔබන්න.')}
             </div>
           ) : (
             <div className="space-y-4">
@@ -1251,10 +1255,10 @@ export default function MissingPersonsPage() {
                         </div>
                         <div className="mt-2 space-y-1 text-sm text-slate-600">
                           <p className="flex items-center gap-1">
-                            <MapPin className="h-3.5 w-3.5 shrink-0" /> Last seen: {person.lastSeenLocation}
+                            <MapPin className="h-3.5 w-3.5 shrink-0" /> {tr("Last seen:", "අවසන් වරට දැක්කා:")} {person.lastSeenLocation}
                           </p>
                           <p className="flex items-center gap-1">
-                            <Calendar className="h-3.5 w-3.5 shrink-0" /> Missing since:{" "}
+                            <Calendar className="h-3.5 w-3.5 shrink-0" /> {tr("Missing since:", "අතුරුදහන් වූ දින සිට:")}{" "}
                             {formatDate(person.dateMissing)}
                           </p>
                           <p className="text-slate-700">{person.description}</p>
@@ -1314,7 +1318,7 @@ export default function MissingPersonsPage() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-xl font-semibold text-slate-800">
               <UserCheck className="h-5 w-5 text-emerald-600" />
-              Found people ({foundPersons.length})
+              {tr("Found people", "හමුවූ පුද්ගලයින්")} ({foundPersons.length})
             </h2>
           </div>
           {listLoading ? (
@@ -1325,7 +1329,7 @@ export default function MissingPersonsPage() {
             </div>
           ) : foundPersons.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
-              No found person reports yet. Click "Report Found Person" to add one.
+              {tr('No found person reports yet. Click "Report Found Person" to add one.', 'තවම හමුවූ පුද්ගල වාර්තා නොමැත. එක් කිරීමට "හමු වූ පුද්ගලයා වාර්තා කරන්න" ඔබන්න.')}
             </div>
           ) : (
             <div className="space-y-4">

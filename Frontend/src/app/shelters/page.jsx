@@ -25,6 +25,7 @@ import {
   AlertCircle,
   ArrowRight,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -245,6 +246,8 @@ const groupByProvince = (contacts) => {
 };
 
 export default function SheltersPage() {
+  const { i18n } = useTranslation();
+  const si = String(i18n.language || "").startsWith("si");
   const [shelters, setShelters] = useState([]);
   const [sheltersLoading, setSheltersLoading] = useState(true);
   const [sheltersError, setSheltersError] = useState(null);
@@ -295,7 +298,7 @@ export default function SheltersPage() {
           setShelters([]);
           setDistricts([]);
           setSheltersError(
-            data?.message || `Could not load shelters (HTTP ${res.status})`
+            data?.message || (si ? `සහන කඳවුරු පූරණය කළ නොහැක (HTTP ${res.status})` : `Could not load shelters (HTTP ${res.status})`)
           );
           return;
         }
@@ -308,13 +311,13 @@ export default function SheltersPage() {
         } else {
           setShelters([]);
           setDistricts([]);
-          setSheltersError("Shelter list was not in the expected format.");
+          setSheltersError(si ? "සහන කඳවුරු ලැයිස්තුව බලාපොරොත්තු වූ ආකෘතියේ නොමැත." : "Shelter list was not in the expected format.");
         }
       })
       .catch(() => {
         setShelters([]);
         setDistricts([]);
-        setSheltersError("Network error while loading shelters.");
+        setSheltersError(si ? "සහන කඳවුරු පූරණය කිරීමේදී ජාල දෝෂයකි." : "Network error while loading shelters.");
       })
       .finally(() => setSheltersLoading(false));
   }, []);
@@ -486,12 +489,12 @@ export default function SheltersPage() {
               id="shelters-hero-title"
               className="mt-5 font-oswald text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl"
             >
-              Relief Camps
+              {si ? "සහන කඳවුරු" : "Relief Camps"}
             </h1>
             <p className="mt-4 text-lg text-indigo-100/95 sm:text-xl">
-              Nearby shelters ranked by distance from your location for faster,
-              safer access. Find official evacuation centres and emergency
-              contacts.
+              {si
+                ? "ඔබගේ ස්ථානයට ආසන්න සහන කඳවුරු දුර අනුව පෙළගස්වා පෙන්වයි. නිල ඉවතලන මධ්‍යස්ථාන සහ හදිසි සම්බන්ධතා සොයාගන්න."
+                : "Nearby shelters ranked by distance from your location for faster, safer access. Find official evacuation centres and emergency contacts."}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <button
@@ -499,7 +502,7 @@ export default function SheltersPage() {
                 onClick={scrollToShelters}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3.5 text-sm font-bold text-indigo-950 shadow-lg shadow-black/20 transition hover:bg-amber-300"
               >
-                View Relief Camp List
+                {si ? "සහන කඳවුරු ලැයිස්තුව බලන්න" : "View Relief Camp List"}
                 <ArrowRight className="h-4 w-4" />
               </button>
               <button
@@ -507,7 +510,7 @@ export default function SheltersPage() {
                 onClick={scrollToContacts}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-white/40 bg-white/10 px-5 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15"
               >
-                Emergency Contacts
+                {si ? "හදිසි සම්බන්ධතා" : "Emergency Contacts"}
               </button>
             </div>
           </div>
@@ -525,12 +528,13 @@ export default function SheltersPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <Building2 className="h-5 w-5 text-indigo-600" />
                 <h2 className="text-lg font-semibold text-slate-800">
-                  Relief Camp List
+                  {si ? "සහන කඳවුරු ලැයිස්තුව" : "Relief Camp List"}
                 </h2>
               </div>
               <p className="mt-1 text-xs text-slate-600">
-                Loaded from the DMEWS shelter database. If this fails, district
-                contacts below are still available.
+                {si
+                  ? "DMEWS සහන කඳවුරු දත්ත ගබඩාවෙන් පූරණය කර ඇත. මෙය අසමත් වුවද පහත දිස්ත්‍රික් සම්බන්ධතා භාවිතා කළ හැක."
+                  : "Loaded from the DMEWS shelter database. If this fails, district contacts below are still available."}
               </p>
             </div>
 
@@ -540,13 +544,15 @@ export default function SheltersPage() {
                   <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
                   <div>
                     <p className="font-semibold text-amber-900">
-                      Could not load shelters
+                      {si ? "සහන කඳවුරු පූරණය කළ නොහැක" : "Could not load shelters"}
                     </p>
                     <p className="mt-1 text-amber-900/90">{sheltersError}</p>
                     <p className="mt-2 text-xs text-amber-800/80">
-                      Use <strong>District Disaster Management Contacts</strong>{" "}
-                      below or call <strong>117</strong> / <strong>119</strong>{" "}
-                      for official shelter information.
+                      {si ? "නිල සහන කඳවුරු තොරතුරු සඳහා පහත " : "Use "}
+                      <strong>{si ? "දිස්ත්‍රික් ආපදා කළමනාකරණ සම්බන්ධතා" : "District Disaster Management Contacts"}</strong>{" "}
+                      {si ? "භාවිතා කරන්න හෝ " : "below or call "}
+                      <strong>117</strong> / <strong>119</strong>
+                      {si ? " අමතන්න." : " for official shelter information."}
                     </p>
                   </div>
                 </div>
@@ -563,7 +569,7 @@ export default function SheltersPage() {
                       <div className="flex items-center gap-2">
                         <Filter className="h-5 w-5 text-slate-500" />
                         <span className="text-sm font-medium text-slate-700">
-                          Filter by district:
+                          {si ? "දිස්ත්‍රික් අනුව පෙරණය:" : "Filter by district:"}
                         </span>
                       </div>
                       <div className="flex flex-1 flex-wrap items-center gap-3">
@@ -572,7 +578,7 @@ export default function SheltersPage() {
                           onChange={(e) => setSelectedDistrict(e.target.value)}
                           className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                         >
-                          <option value="">All districts</option>
+                          <option value="">{si ? "සියලු දිස්ත්‍රික්ක" : "All districts"}</option>
                           {districts.map((d) => (
                             <option key={d} value={d}>
                               {d}
@@ -585,7 +591,7 @@ export default function SheltersPage() {
                             className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-100"
                           >
                             <X className="h-4 w-4" />
-                            Clear
+                            {si ? "ඉවත් කරන්න" : "Clear"}
                           </button>
                         )}
                       </div>
@@ -593,17 +599,17 @@ export default function SheltersPage() {
                         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
                           {userDistrict && (
                             <span className="rounded-full bg-indigo-50 px-3 py-1.5 font-medium">
-                              Your district: {userDistrict}
+                              {si ? "ඔබගේ දිස්ත්‍රික්කය:" : "Your district:"} {userDistrict}
                             </span>
                           )}
                           {userHasCoords && (
                             <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
-                              Distance from your city (approx.)
+                              {si ? "ඔබගේ නගරයෙන් දුර (ආසන්න)" : "Distance from your city (approx.)"}
                             </span>
                           )}
                           {userDistrict && !userHasCoords && (
                             <span className="rounded-full bg-amber-50 px-3 py-1.5 font-medium text-amber-900">
-                              Add your city in profile to see distances
+                              {si ? "දුර පෙන්වීමට පැතිකඩේ නගරය එක් කරන්න" : "Add your city in profile to see distances"}
                             </span>
                           )}
                         </div>
@@ -616,11 +622,11 @@ export default function SheltersPage() {
                       <Building2 className="mb-4 h-12 w-12 text-slate-300" />
                       <p className="text-slate-600">
                         {selectedDistrict
-                          ? `No shelters found in ${selectedDistrict}. Try a different district.`
-                          : "No shelters listed yet. Check back later or contact your local disaster management centre."}
+                          ? (si ? `${selectedDistrict} දිස්ත්‍රික්කයේ සහන කඳවුරු හමු නොවීය. වෙනත් දිස්ත්‍රික්කයක් උත්සාහ කරන්න.` : `No shelters found in ${selectedDistrict}. Try a different district.`)
+                          : (si ? "තවම සහන කඳවුරු ලැයිස්තුගත කර නොමැත. පසුව නැවත පරීක්ෂා කරන්න හෝ ප්‍රදේශීය ආපදා කළමනාකරණ මධ්‍යස්ථානය අමතන්න." : "No shelters listed yet. Check back later or contact your local disaster management centre.")}
                       </p>
                       <p className="mt-2 text-sm font-medium text-slate-500">
-                        Emergency: 117
+                        {si ? "හදිසි: 117" : "Emergency: 117"}
                       </p>
                     </div>
                   ) : (
@@ -652,15 +658,15 @@ export default function SheltersPage() {
                                   <ChevronRight className="h-5 w-5 text-slate-500" />
                                 )}
                                 <h3 className="font-semibold text-slate-800">
-                                  {district} District
+                                  {district} {si ? "දිස්ත්‍රික්කය" : "District"}
                                 </h3>
                                 {isUserDistrict && !selectedDistrict && (
                                   <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                                    Your district
+                                    {si ? "ඔබගේ දිස්ත්‍රික්කය" : "Your district"}
                                   </span>
                                 )}
                                 <span className="text-xs text-slate-500">
-                                  ({sheltersList.length} Camps)
+                                  ({sheltersList.length} {si ? "කඳවුරු" : "Camps"})
                                 </span>
                               </div>
                             </button>
@@ -700,11 +706,11 @@ export default function SheltersPage() {
                 <div className="flex items-center gap-2">
                   <Headphones className="h-5 w-5 text-red-600" />
                   <h2 className="text-lg font-semibold text-slate-800">
-                    District Disaster Management Contacts
+                    {si ? "දිස්ත්‍රික් ආපදා කළමනාකරණ සම්බන්ධතා" : "District Disaster Management Contacts"}
                   </h2>
                 </div>
                 <div className="text-xs text-slate-500 bg-white/60 px-3 py-1 rounded-full">
-                  Call for official instructions & help
+                  {si ? "නිල උපදෙස් සහ සහාය සඳහා අමතන්න" : "Call for official instructions & help"}
                 </div>
               </div>
             </div>
@@ -715,7 +721,7 @@ export default function SheltersPage() {
                   <Search className="h-4 w-4 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Search by district or province..."
+                    placeholder={si ? "දිස්ත්‍රික්කය හෝ පළාත අනුව සොයන්න..." : "Search by district or province..."}
                     value={contactsSearchQuery}
                     onChange={(e) => {
                       setContactsSearchQuery(e.target.value);
@@ -750,8 +756,8 @@ export default function SheltersPage() {
                       <Eye className="h-3.5 w-3.5" />
                     )}
                     {showOnlyMyDistrict
-                      ? "Showing only your district"
-                      : "Show only my district"}
+                      ? (si ? "ඔබගේ දිස්ත්‍රික්කය පමණක් පෙන්වයි" : "Showing only your district")
+                      : (si ? "මගේ දිස්ත්‍රික්කය පමණක් පෙන්වන්න" : "Show only my district")}
                   </button>
                 )}
               </div>
@@ -766,12 +772,12 @@ export default function SheltersPage() {
                       ? `No directory entry for ${
                           userDistrict || "your district"
                         }`
-                      : "No matching districts"}
+                      : (si ? "ගැලපෙන දිස්ත්‍රික්ක නොමැත" : "No matching districts")}
                   </p>
                   <p className="mt-2 max-w-md text-sm text-amber-900/90">
                     {showOnlyMyDistrict
-                      ? "This district may not be listed in the directory yet. Call national emergency 117 or 119, or clear the filter."
-                      : "Try another search term, or clear filters to see all provinces."}
+                      ? (si ? "මෙම දිස්ත්‍රික්කය තවම නාමාවලියේ නොතිබිය හැක. 117 හෝ 119 ජාතික හදිසි අංක අමතන්න, නැතහොත් පෙරණය ඉවත් කරන්න." : "This district may not be listed in the directory yet. Call national emergency 117 or 119, or clear the filter.")
+                      : (si ? "වෙනත් සෙවුම් පදයක් උත්සාහ කරන්න, නැතහොත් සියලු පළාත් දැකීමට පෙරණ ඉවත් කරන්න." : "Try another search term, or clear filters to see all provinces.")}
                   </p>
                   {(showOnlyMyDistrict || contactsSearchQuery) && (
                     <button
@@ -781,7 +787,7 @@ export default function SheltersPage() {
                       }}
                       className="mt-4 text-sm font-semibold text-red-700 hover:underline"
                     >
-                      Clear filters
+                      {si ? "පෙරණ ඉවත් කරන්න" : "Clear filters"}
                     </button>
                   )}
                 </div>
@@ -820,13 +826,13 @@ export default function SheltersPage() {
                                   <ChevronRight className="h-5 w-5 text-slate-500" />
                                 )}
                                 <h3 className="font-semibold text-slate-800">
-                                  {province} Province
+                                  {province} {si ? "පළාත" : "Province"}
                                 </h3>
                                 {isUserProvince &&
                                   !showOnlyMyDistrict &&
                                   !contactsSearchQuery && (
                                     <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-                                      Your district
+                                      {si ? "ඔබගේ දිස්ත්‍රික්කය" : "Your district"}
                                     </span>
                                   )}
                                 <span className="text-xs text-slate-500">
@@ -921,13 +927,13 @@ export default function SheltersPage() {
                                   <ChevronRight className="h-5 w-5 text-slate-500" />
                                 )}
                                 <h3 className="font-semibold text-slate-800">
-                                  {province} Province
+                                  {province} {si ? "පළාත" : "Province"}
                                 </h3>
                                 {isUserProvince &&
                                   !showOnlyMyDistrict &&
                                   !contactsSearchQuery && (
                                     <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-                                      Your district
+                                      {si ? "ඔබගේ දිස්ත්‍රික්කය" : "Your district"}
                                     </span>
                                   )}
                                 <span className="text-xs text-slate-500">
@@ -992,9 +998,10 @@ export default function SheltersPage() {
                 </div>
               )}
               <div className="mt-6 rounded-lg bg-slate-50 p-3 text-center text-xs text-slate-500 border border-slate-100">
-                📢 If you cannot reach your district contact, call national
-                emergency hotline <strong className="text-red-600">117</strong>{" "}
-                or <strong className="text-red-600">119</strong>.
+                {si ? "📢 ඔබගේ දිස්ත්‍රික් සම්බන්ධතාව වෙත ළඟා විය නොහැකි නම් ජාතික හදිසි අංක " : "📢 If you cannot reach your district contact, call national emergency hotline "}
+                <strong className="text-red-600">117</strong>{" "}
+                {si ? "හෝ " : "or "}
+                <strong className="text-red-600">119</strong>.
               </div>
             </div>
           </section>
@@ -1005,18 +1012,18 @@ export default function SheltersPage() {
               <div className="flex items-center gap-2">
                 <ShieldAlert className="h-5 w-5 text-amber-600" />
                 <h2 className="text-lg font-semibold text-slate-800">
-                  Safety Instructions
+                  {si ? "ආරක්ෂක උපදෙස්" : "Safety Instructions"}
                 </h2>
               </div>
               <p className="mt-1 text-sm text-slate-600">
-                Important guidelines for your safety during an evacuation.
+                {si ? "ඉවතලන අවස්ථාවේ ඔබගේ ආරක්ෂාව සඳහා වැදගත් උපදෙස්." : "Important guidelines for your safety during an evacuation."}
               </p>
             </div>
             <div className="grid gap-6 p-5 sm:grid-cols-2">
               <div className="space-y-3 rounded-xl bg-emerald-50/60 p-4 border border-emerald-100">
                 <div className="flex items-center gap-2 text-emerald-800 border-b border-emerald-200 pb-2">
                   <CheckCircle2 className="h-5 w-5" />
-                  <h3 className="font-semibold text-base">Do's</h3>
+                  <h3 className="font-semibold text-base">{si ? "කළ යුතු දේ" : "Do's"}</h3>
                 </div>
                 <ul className="space-y-2.5">
                   {DOS.map((item, i) => (
@@ -1030,7 +1037,7 @@ export default function SheltersPage() {
               <div className="space-y-3 rounded-xl bg-rose-50/60 p-4 border border-rose-100">
                 <div className="flex items-center gap-2 text-rose-800 border-b border-rose-200 pb-2">
                   <XCircle className="h-5 w-5" />
-                  <h3 className="font-semibold text-base">Don'ts</h3>
+                  <h3 className="font-semibold text-base">{si ? "නොකළ යුතු දේ" : "Don'ts"}</h3>
                 </div>
                 <ul className="space-y-2.5">
                   {DONTS.map((item, i) => (
@@ -1046,14 +1053,14 @@ export default function SheltersPage() {
         </div>
 
         <p className="mt-10 text-center text-sm text-slate-500">
-          For the latest shelter availability, call{" "}
+          {si ? "නවතම සහන කඳවුරු තොරතුරු සඳහා " : "For the latest shelter availability, call "}
           <strong className="text-indigo-600">117</strong> or contact your
-          district disaster management centre.
+          {si ? " දිස්ත්‍රික් ආපදා කළමනාකරණ මධ්‍යස්ථානය අමතන්න." : " district disaster management centre."}
           <Link
             href="/"
             className="ml-2 text-indigo-600 hover:underline font-medium"
           >
-            Back to dashboard
+            {si ? "පුවරුවට ආපසු" : "Back to dashboard"}
           </Link>
           .
         </p>

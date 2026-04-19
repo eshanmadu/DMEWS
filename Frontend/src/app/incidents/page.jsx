@@ -19,6 +19,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import Loader from "@/components/Loader";
+import { useTranslation } from "react-i18next";
 
 function StatusBadge({ status }) {
   const c =
@@ -89,6 +90,8 @@ function getIncidentDateBounds() {
 }
 
 export default function IncidentsPage() {
+  const { i18n } = useTranslation();
+  const si = String(i18n.language || "").startsWith("si");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -154,13 +157,13 @@ export default function IncidentsPage() {
       const res = await fetch(`${API_BASE}/incidents${qs}`, { cache: "no-store" });
       const data = await res.json().catch(() => []);
       if (!res.ok) {
-        setError(data?.message || "Failed to load incidents.");
+        setError(data?.message || (si ? "සිදුවීම් පූරණය කිරීමට අසමත් විය." : "Failed to load incidents."));
         setRows([]);
       } else {
         setRows(Array.isArray(data) ? data : []);
       }
     } catch {
-      setError("Network error.");
+      setError(si ? "ජාල දෝෂයකි." : "Network error.");
       setRows([]);
     } finally {
       setLoading(false);
@@ -213,23 +216,23 @@ export default function IncidentsPage() {
     e.preventDefault();
     setNotice("");
     if (!token) {
-      setNotice("Please log in to report an incident.");
+      setNotice(si ? "සිදුවීමක් වාර්තා කිරීමට කරුණාකර පිවිසෙන්න." : "Please log in to report an incident.");
       return;
     }
     if (!district || !area.trim() || !title.trim() || !description.trim()) {
-      setNotice("District, area, title and description are required.");
+      setNotice(si ? "දිස්ත්‍රික්කය, ප්‍රදේශය, මාතෘකාව සහ විස්තරය අනිවාර්යයි." : "District, area, title and description are required.");
       return;
     }
     if (!reportedAt) {
-      setNotice("Incident date is required.");
+      setNotice(si ? "සිදුවීම් දිනය අනිවාර්යයි." : "Incident date is required.");
       return;
     }
     if (reportedAt > maxDate) {
-      setNotice("You can't choose an upcoming date.");
+      setNotice(si ? "ඉදිරි දිනයක් තෝරාගත නොහැක." : "You can't choose an upcoming date.");
       return;
     }
     if (reportedAt < minDate) {
-      setNotice("You can only choose a date up to 7 days ago.");
+      setNotice(si ? "උපරිම පසුගිය දින 7 තුළ දිනයක් පමණක් තෝරාගත හැක." : "You can only choose a date up to 7 days ago.");
       return;
     }
     setSubmitting(true);
@@ -249,7 +252,7 @@ export default function IncidentsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setNotice(data?.message || "Failed to report incident.");
+        setNotice(data?.message || (si ? "සිදුවීම වාර්තා කිරීමට අසමත් විය." : "Failed to report incident."));
       } else {
         setTitle("");
         setDescription("");
@@ -261,7 +264,7 @@ export default function IncidentsPage() {
         await load();
       }
     } catch {
-      setNotice("Network error.");
+      setNotice(si ? "ජාල දෝෂයකි." : "Network error.");
     } finally {
       setSubmitting(false);
     }
@@ -269,7 +272,7 @@ export default function IncidentsPage() {
 
   async function doDelete(id) {
     if (!token) {
-      setNotice("Please log in.");
+      setNotice(si ? "කරුණාකර පිවිසෙන්න." : "Please log in.");
       return;
     }
     setDeleting(true);
@@ -280,14 +283,14 @@ export default function IncidentsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setNotice(data?.message || "Failed to delete incident.");
+        setNotice(data?.message || (si ? "සිදුවීම මකා දැමීමට අසමත් විය." : "Failed to delete incident."));
       } else {
-        setNotice(data?.message || "Incident deleted.");
+        setNotice(data?.message || (si ? "සිදුවීම මකා දමන ලදී." : "Incident deleted."));
         setConfirmDelete(null);
         await load();
       }
     } catch {
-      setNotice("Network error.");
+      setNotice(si ? "ජාල දෝෂයකි." : "Network error.");
     } finally {
       setDeleting(false);
     }
@@ -307,11 +310,11 @@ export default function IncidentsPage() {
   async function doUpdate(e) {
     e.preventDefault();
     if (!token) {
-      setNotice("Please log in.");
+      setNotice(si ? "කරුණාකර පිවිසෙන්න." : "Please log in.");
       return;
     }
     if (!editForm.title.trim() || !editForm.description.trim()) {
-      setNotice("Title and description are required.");
+      setNotice(si ? "මාතෘකාව සහ විස්තරය අනිවාර්යයි." : "Title and description are required.");
       return;
     }
     setUpdating(true);
@@ -329,14 +332,14 @@ export default function IncidentsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setNotice(data?.message || "Failed to update incident.");
+        setNotice(data?.message || (si ? "සිදුවීම යාවත්කාලීන කිරීමට අසමත් විය." : "Failed to update incident."));
       } else {
-        setNotice("Incident updated.");
+        setNotice(si ? "සිදුවීම යාවත්කාලීන විය." : "Incident updated.");
         setEditingIncident(null);
         await load();
       }
     } catch {
-      setNotice("Network error.");
+      setNotice(si ? "ජාල දෝෂයකි." : "Network error.");
     } finally {
       setUpdating(false);
     }
@@ -353,10 +356,10 @@ export default function IncidentsPage() {
             </div>
             <div className="flex-1">
               <h1 className="font-oswald text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                Incident Reports
+                {si ? "සිදුවීම් වාර්තා" : "Incident Reports"}
               </h1>
               <p className="mt-2 max-w-2xl text-sky-100">
-              Capture incidents. Share updates. Track what’s happening near you.
+              {si ? "සිදුවීම් සටහන් කරන්න. යාවත්කාලීන බෙදාගන්න. ඔබ අසල සිදුවන දේ අනුගමනය කරන්න." : "Capture incidents. Share updates. Track what’s happening near you."}
               </p>
             </div>
           </div>
@@ -367,14 +370,14 @@ export default function IncidentsPage() {
       <div className="mb-6 flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div className="flex items-center gap-3">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Filter by district
+            {si ? "දිස්ත්‍රික් අනුව පෙරණය" : "Filter by district"}
           </label>
           <select
             value={districtFilter}
             onChange={(e) => setDistrictFilter(e.target.value)}
             className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
           >
-            <option value="">All districts</option>
+            <option value="">{si ? "සියලු දිස්ත්‍රික්ක" : "All districts"}</option>
             {DISTRICTS.map((d) => (
               <option key={d} value={d}>
                 {d}
@@ -389,7 +392,7 @@ export default function IncidentsPage() {
             className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-300"
           >
             <UploadCloud className="h-5 w-5" />
-            Report Incident
+            {si ? "සිදුවීමක් වාර්තා කරන්න" : "Report Incident"}
           </button>
         </div>
       </div>
@@ -410,7 +413,7 @@ export default function IncidentsPage() {
           {rows.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
               <AlertTriangle className="mb-4 h-12 w-12 text-slate-300" />
-              <p className="text-slate-600">No reported incidents.</p>
+              <p className="text-slate-600">{si ? "වාර්තා කළ සිදුවීම් නොමැත." : "No reported incidents."}</p>
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -422,7 +425,7 @@ export default function IncidentsPage() {
                 const reporterName =
                   incident?.reporter?.name ||
                   incident?.reporter?.email ||
-                  "Anonymous";
+                  (si ? "අනන්‍ය නොවන" : "Anonymous");
                 const canDelete =
                   incident?.source === "user" &&
                   Boolean(currentUser?.id) &&
@@ -481,7 +484,7 @@ export default function IncidentsPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <StatusBadge status={incident.status} />
                           <span className="text-xs font-semibold text-slate-500 capitalize">
-                            {incident.source === "user" ? "Community" : incident.type}
+                            {incident.source === "user" ? (si ? "ප්‍රජා" : "Community") : incident.type}
                           </span>
                         </div>
                         <span className="text-xs text-slate-400">
@@ -494,7 +497,7 @@ export default function IncidentsPage() {
                       </h3>
                       {incident.source === "user" && (
                         <p className="mt-1 text-xs text-slate-500">
-                          Reported by{" "}
+                          {si ? "වාර්තා කළේ" : "Reported by"}{" "}
                           <span className="font-semibold text-slate-700">
                             {reporterName}
                           </span>
@@ -504,9 +507,9 @@ export default function IncidentsPage() {
                         {incident.description}
                       </p>
                       <p className="mt-3 text-xs text-slate-500">
-                        <strong>Area:</strong> {incident.area}
+                        <strong>{si ? "ප්‍රදේශය:" : "Area:"}</strong> {incident.area}
                         {incident.affectedPeople != null && (
-                          <> · Affected: {incident.affectedPeople}</>
+                          <> · {si ? "බලපෑමට ලක් වූ ගණන:" : "Affected:"} {incident.affectedPeople}</>
                         )}
                       </p>
 
@@ -518,7 +521,7 @@ export default function IncidentsPage() {
                             className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-100"
                           >
                             <Pencil className="h-4 w-4" />
-                            Edit
+                            {si ? "සංස්කරණය" : "Edit"}
                           </button>
                           <button
                             type="button"
@@ -531,7 +534,7 @@ export default function IncidentsPage() {
                             className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100"
                           >
                             <Trash2 className="h-4 w-4" />
-                            Delete
+                            {si ? "මකන්න" : "Delete"}
                           </button>
                         </div>
                       )}
@@ -547,17 +550,17 @@ export default function IncidentsPage() {
             <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50 to-amber-50/50 px-5 py-4">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="h-5 w-5 text-amber-600" />
-                <h2 className="text-lg font-semibold text-slate-800">Incident Reporting Tips</h2>
+                <h2 className="text-lg font-semibold text-slate-800">{si ? "සිදුවීම් වාර්තා කිරීමේ උපදෙස්" : "Incident Reporting Tips"}</h2>
               </div>
-              <p className="mt-1 text-sm text-slate-600">Help responders by providing accurate information.</p>
+              <p className="mt-1 text-sm text-slate-600">{si ? "නිවැරදි තොරතුරු ලබාදීමෙන් ප්‍රතිචාර කණ්ඩායම්ට සහය වන්න." : "Help responders by providing accurate information."}</p>
             </div>
             <div className="p-5">
               <ul className="space-y-2 text-sm text-slate-700">
-                <li>✓ Be specific about location (landmarks, street names).</li>
-                <li>✓ Mention any injuries or urgent needs.</li>
-                <li>✓ Include photos/videos if safe to do so.</li>
-                <li>✓ Avoid sharing unverified details that could cause panic.</li>
-                <li>✓ For emergencies, call <strong>117</strong> immediately.</li>
+                <li>{si ? "✓ ස්ථානය (සලකුණු, වීදි නාම) පැහැදිලිව සඳහන් කරන්න." : "✓ Be specific about location (landmarks, street names)."}</li>
+                <li>{si ? "✓ තුවාල හෝ හදිසි අවශ්‍යතා සඳහන් කරන්න." : "✓ Mention any injuries or urgent needs."}</li>
+                <li>{si ? "✓ ආරක්ෂිත නම් ඡායාරූප/වීඩියෝ එක් කරන්න." : "✓ Include photos/videos if safe to do so."}</li>
+                <li>{si ? "✓ භීතියට හේතු විය හැකි තහවුරු නොකළ තොරතුරු බෙදා නොහරින්න." : "✓ Avoid sharing unverified details that could cause panic."}</li>
+                <li>{si ? "✓ හදිසි අවස්ථාවකදී <strong>117</strong> වහාම අමතන්න." : "✓ For emergencies, call <strong>117</strong> immediately."}</li>
               </ul>
             </div>
           </div>
@@ -565,8 +568,8 @@ export default function IncidentsPage() {
       )}
 
       <p className="mt-10 text-center text-sm text-slate-500">
-        For emergencies, call <strong>117</strong> or your local police.
-        <Link href="/" className="ml-2 text-sky-600 hover:underline">Back to dashboard</Link>.
+        {si ? "හදිසි අවස්ථාවලදී " : "For emergencies, call "}<strong>117</strong>{si ? " හෝ ඔබගේ ප්‍රදේශීය පොලීසිය අමතන්න." : " or your local police."}
+        <Link href="/" className="ml-2 text-sky-600 hover:underline">{si ? "පුවරුවට ආපසු" : "Back to dashboard"}</Link>.
       </p>
 
       {/* Report Incident Modal */}

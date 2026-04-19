@@ -9,7 +9,9 @@
     "logout": "Logout",
     "profile": "Profile",
     "volunteer": "Volunteer",
-    "helpSupport": "Help & Support"
+    "helpSupport": "Help & Support",
+    "findPeople": "Find Peoples",
+    "reports": "Reports"
   },
 
   "slideshow": {
@@ -191,7 +193,91 @@
     "applyIntro": "Submit once. Team review every application before you receive the verified badge.",
     "loginToApply": "Log in to apply",
     "signupToApply": "Create an account",
-    "needLoginApply": "Sign in to submit your volunteer application."
+    "needLoginApply": "Sign in to submit your volunteer application.",
+    "skillFlood": "Flood response",
+    "skillLandslide": "Landslide response",
+    "skillFire": "Fire response",
+    "skillDefault": "General support"
+  },
+  "profilePage": {
+    "userFallback": "User",
+    "quickAccess": "Quick Access",
+    "myIncidents": "My Incidents",
+    "myMissions": "My Missions",
+    "tabs": {
+      "profile": "Profile",
+      "security": "Security",
+      "danger": "Danger Zone"
+    },
+    "personalInfo": "Personal Information",
+    "fields": {
+      "fullName": "Full Name",
+      "fullNamePlaceholder": "Your name",
+      "emailAddress": "Email Address",
+      "mobileNumber": "Mobile Number",
+      "mobilePlaceholder": "e.g., 0771234567",
+      "district": "District",
+      "selectDistrict": "Select district",
+      "cityArea": "City / Area",
+      "selectCity": "Select city or area"
+    },
+    "loadingLocations": "Loading locations…",
+    "security": {
+      "title": "Security Settings",
+      "passwordProtected": "Password protected",
+      "googleSignIn": "Google Sign-In",
+      "currentPassword": "Current password",
+      "currentPasswordPlaceholder": "Enter current password",
+      "newPassword": "New Password",
+      "newPasswordPlaceholder": "At least 6 characters",
+      "confirmNewPassword": "Confirm New Password",
+      "confirmNewPasswordPlaceholder": "Re-enter new password",
+      "googleNoPassword": "Google accounts do not have a local password to change."
+    },
+    "volunteerProgram": {
+      "title": "Volunteer Program",
+      "status": "Status",
+      "leaveProgram": "Leave Program",
+      "leaving": "Leaving...",
+      "leaveConfirmTitle": "Leave volunteer program?",
+      "leaveConfirmText": "You will no longer be able to accept missions or receive volunteer notifications.",
+      "leaveYes": "Yes, leave"
+    },
+    "danger": {
+      "title": "Danger Zone",
+      "deleteAccount": "Delete Account",
+      "deleteDescription": "Permanently delete your account and all associated data. This action cannot be undone.",
+      "deletePermanently": "Delete account permanently?",
+      "enterPasswordConfirm": "Enter your current password to confirm.",
+      "confirmDeletion": "Confirm deletion.",
+      "deleteForever": "Delete forever"
+    },
+    "actions": {
+      "saveChanges": "Save Changes",
+      "saving": "Saving...",
+      "changePassword": "Change Password",
+      "updating": "Updating...",
+      "cancel": "Cancel",
+      "deleting": "Deleting…"
+    },
+    "chooseAvatar": "Choose an avatar",
+    "errors": {
+      "network": "Network error.",
+      "loadProfile": "Failed to load profile.",
+      "loadDistricts": "Failed to load districts.",
+      "loadCities": "Failed to load cities.",
+      "updateProfile": "Failed to update profile.",
+      "changePassword": "Failed to change password.",
+      "leaveVolunteer": "Failed to leave volunteer program.",
+      "deleteAccount": "Could not delete account.",
+      "passwordMismatch": "New passwords do not match.",
+      "passwordTooShort": "New password must be at least 6 characters."
+    },
+    "success": {
+      "profileUpdated": "Profile updated successfully.",
+      "passwordUpdated": "Password updated successfully.",
+      "leftVolunteer": "You have left the volunteer program."
+    }
   },
 
   "helpSupport": {
@@ -237,4 +323,3 @@
     "backToHome": "Back to home"
   }
 }
-
