@@ -187,6 +187,218 @@ function getDangerStatus(distanceKm) {
   };
 }
 
+function DetectMeAnimationStyles() {
+  return (
+    <style jsx global>{`
+      @keyframes safePulse {
+        0% { transform: scale(1); opacity: 0.85; }
+        50% { transform: scale(1.08); opacity: 1; }
+        100% { transform: scale(1); opacity: 0.85; }
+      }
+
+      @keyframes rippleSafe {
+        0% { transform: scale(0.8); opacity: 0.45; }
+        100% { transform: scale(1.8); opacity: 0; }
+      }
+
+      @keyframes dangerPulse {
+        0% { transform: scale(1); opacity: 0.9; }
+        50% { transform: scale(1.12); opacity: 1; }
+        100% { transform: scale(1); opacity: 0.9; }
+      }
+
+      @keyframes dangerRing {
+        0% { transform: scale(0.85); opacity: 0.5; }
+        100% { transform: scale(1.7); opacity: 0; }
+      }
+
+      @keyframes modalIn {
+        0% { opacity: 0; transform: scale(0.96) translateY(8px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+      }
+
+      @keyframes warningBlink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.35; }
+      }
+    `}</style>
+  );
+}
+
+function SafeVisual() {
+  return (
+    <div className="relative mx-auto flex h-40 w-40 items-center justify-center">
+      <div className="absolute h-24 w-24 rounded-full bg-emerald-400/20 animate-[safePulse_2.4s_ease-in-out_infinite]" />
+      <div className="absolute h-32 w-32 rounded-full border-2 border-emerald-300/60 animate-[rippleSafe_2.2s_linear_infinite]" />
+      <div className="absolute h-40 w-40 rounded-full border-2 border-emerald-200/40 animate-[rippleSafe_2.8s_linear_infinite]" />
+      <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30">
+        <svg
+          viewBox="0 0 24 24"
+          className="h-12 w-12 text-white"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function DangerVisual({ warning = false }) {
+  return (
+    <div className="relative mx-auto flex h-40 w-40 items-center justify-center">
+      <div className="absolute h-24 w-24 rounded-full bg-red-500/20 animate-[dangerPulse_1.5s_ease-in-out_infinite]" />
+      <div className="absolute h-32 w-32 rounded-full border-2 border-red-300/60 animate-[dangerRing_1.8s_linear_infinite]" />
+      <div className="absolute h-40 w-40 rounded-full border-2 border-red-200/40 animate-[dangerRing_2.3s_linear_infinite]" />
+      <div className={`relative flex h-24 w-24 items-center justify-center rounded-full ${warning ? "bg-amber-500" : "bg-red-600"} shadow-lg ${warning ? "shadow-amber-500/30" : "shadow-red-600/30"}`}>
+        <svg
+          viewBox="0 0 24 24"
+          className={`h-12 w-12 text-white ${warning ? "animate-[warningBlink_1.2s_linear_infinite]" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 8v5" />
+          <path d="M12 16h.01" />
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function DetectResultModal({
+  open,
+  onClose,
+  dangerStatus,
+  distanceKm,
+  userCoords,
+  alertTitle,
+  alertArea,
+}) {
+  if (!open || !dangerStatus) return null;
+
+  const isSafe = dangerStatus.level === "safe";
+  const isWarning = dangerStatus.level === "warning";
+
+  const instructionList = isSafe
+    ? [
+        "Monitor official updates.",
+        "Avoid unnecessary travel toward the alert area.",
+        "Stay ready in case conditions change.",
+      ]
+    : isWarning
+    ? [
+        "Stay away from the affected area if possible.",
+        "Keep your phone charged and watch official alerts.",
+        "Prepare essentials and be ready to move.",
+      ]
+    : [
+        "Leave the danger area as soon as possible.",
+        "Follow official evacuation instructions immediately.",
+        "Avoid affected roads, floodwater, or unstable zones.",
+      ];
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+      <div
+        className="relative w-full max-w-lg rounded-[1.75rem] border border-white/20 bg-white shadow-2xl animate-[modalIn_0.22s_ease-out]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detect-me-result-title"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+        >
+          Close
+        </button>
+
+        <div className="p-5 sm:p-6">
+          <div className="flex flex-col items-center text-center">
+            <div className="scale-35 sm:scale-75">
+              {isSafe ? <SafeVisual /> : <DangerVisual warning={isWarning} />}
+            </div>
+
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Detect Me Result
+            </p>
+
+            <h2
+              id="detect-me-result-title"
+              className="mt-2 text-xl font-bold text-slate-900 sm:text-2xl"
+            >
+              {dangerStatus.title}
+            </h2>
+
+            <p className="mt-2 max-w-md text-sm leading-6 text-slate-600">
+              {dangerStatus.message}
+            </p>
+          </div>
+
+          <div className={`mt-5 rounded-2xl border p-4 ${dangerStatus.classes}`}>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-white/60 bg-white/70 p-3">
+                <p className="text-[11px] uppercase tracking-wide opacity-70">
+                  Distance
+                </p>
+                <p className="mt-1 text-xl font-bold">
+                  {distanceKm?.toFixed(2)} km
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/60 bg-white/70 p-3">
+                <p className="text-[11px] uppercase tracking-wide opacity-70">
+                  Alert Area
+                </p>
+                <p className="mt-1 text-sm font-semibold line-clamp-2">
+                  {alertArea}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-xl border border-white/60 bg-white/70 p-3">
+              <p className="text-[11px] uppercase tracking-wide opacity-70">
+                Alert
+              </p>
+              <p className="mt-1 text-sm font-semibold">{alertTitle}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-900">
+              What you should do
+            </p>
+            <div className="mt-2 space-y-2">
+              {instructionList.map((item, index) => (
+                <div
+                  key={index}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700"
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {userCoords && (
+            <div className="mt-4 text-center text-xs text-slate-500">
+              Your location: {userCoords.lat?.toFixed(5)}, {userCoords.lng?.toFixed(5)}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AlertLiveDetailsPage() {
   const params = useParams();
   const id = params?.id;
@@ -202,6 +414,7 @@ export default function AlertLiveDetailsPage() {
   const [userCoords, setUserCoords] = useState(null);
   const [distanceKm, setDistanceKm] = useState(null);
   const [dangerStatus, setDangerStatus] = useState(null);
+  const [showDetectModal, setShowDetectModal] = useState(false);
 
   async function loadAlert() {
     const res = await fetch(`${API_BASE}/alerts/${id}`, { cache: "no-store" });
@@ -322,6 +535,7 @@ export default function AlertLiveDetailsPage() {
       setUserCoords({ lat: userLat, lng: userLng });
       setDistanceKm(distance);
       setDangerStatus(status);
+      setShowDetectModal(true);
       setDetectingLocation(false);
     },
     (error) => {
@@ -376,8 +590,17 @@ export default function AlertLiveDetailsPage() {
   }
 
   return (
-    <div className="relative min-h-screen">
-
+  <div className="relative min-h-screen">
+    <DetectMeAnimationStyles />
+    <DetectResultModal
+      open={showDetectModal}
+      onClose={() => setShowDetectModal(false)}
+      dangerStatus={dangerStatus}
+      distanceKm={distanceKm}
+      userCoords={userCoords}
+      alertTitle={title}
+      alertArea={alert?.affectedArea || "Affected area"}
+    />
 
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
