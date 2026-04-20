@@ -24,15 +24,12 @@ import {
   FileText,
   Loader2,
   Camera,
-  ArrowRight,
 } from "lucide-react";
 
 import { MatchScoreBreakdown } from "@/components/MatchScoreBreakdown";
 import { LocationSuggestInput } from "@/components/LocationSuggestInput";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-const HERO_BG = "/img/missing.png";
-  
 
 function getStoredUserId() {
   if (typeof window === "undefined") return null;
@@ -715,78 +712,30 @@ export default function MissingPersonsPage() {
     }
   };
 
-  const scrollToReportActions = () => {
-    document
-      .getElementById("missing-persons-report-actions")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const scrollToReports = () => {
-    document
-      .getElementById("missing-persons-reports")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   return (
-    <div className="min-h-[calc(100vh-4rem)]">
-      <section
-        className="relative isolate overflow-hidden border-b border-indigo-900/20"
-        aria-labelledby="missing-persons-hero-title"
-      >
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${HERO_BG})` }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/88 via-slate-900/85 to-violet-900/80" />
-        <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
-          <div className="max-w-2xl">
-            <p className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-100">
-              <UserSearch className="h-3.5 w-3.5" aria-hidden />
-              DisasterWatch
-            </p>
-            <h1
-              id="missing-persons-hero-title"
-              className="mt-5 font-oswald text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl"
-            >
-              {tr("Missing & Found Persons", "අතුරුදහන් සහ හමු වූ පුද්ගලයින්")}
-            </h1>
-            <p className="mt-4 text-lg text-indigo-100/95 sm:text-xl">
-              {tr(
-                "Report missing individuals or notify about found persons to help reunite families quickly.",
-                "අතුරුදහන් පුද්ගලයින් වාර්තා කරන්න හෝ හමු වූ පුද්ගලයින් ගැන දැනුම් දී පවුල් ඉක්මනින් නැවත එකතු කිරීමට උදව් කරන්න."
-              )}
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowMissingForm(true);
-                  scrollToReportActions();
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3.5 text-sm font-bold text-indigo-950 shadow-lg shadow-black/20 transition hover:bg-amber-300"
-              >
-                {tr("Report Missing", "අතුරුදහන් වාර්තා කරන්න")}
-                <ArrowRight className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={scrollToReports}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-white/40 bg-white/10 px-5 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15"
-              >
-                {tr("View Reports", "වාර්තා බලන්න")}
-              </button>
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Hero Section - Modernized */}
+      <div className="relative mb-12 overflow-hidden rounded-2xl bg-gradient-to-r from-violet-500 via-indigo-500 to-violet-500 shadow-lg">
+        <div className="relative z-10 px-6 py-8 sm:px-8 sm:py-10">
+          <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:gap-6 sm:text-left">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 shadow-sm">
+              <UserSearch className="h-8 w-8 text-amber-300" />
+            </div>
+            <div className="flex-1">
+              <h1 className="font-oswald text-3xl font-bold tracking-tight text-white sm:text-4xl">
+                {tr("Missing & Found Persons", "අතුරුදහන් සහ හමු වූ පුද්ගලයින්")}
+              </h1>
+              <p className="mt-2 max-w-2xl text-rose-100">
+                {tr("Report missing individuals or notify about found persons. Your report helps reunite families.", "අතුරුදහන් පුද්ගලයින් වාර්තා කරන්න හෝ හමු වූ පුද්ගලයින් ගැන දැනුම් දෙන්න. ඔබගේ වාර්තාව පවුල් නැවත එකතු කිරීමට උපකාරී වේ.")}
+              </p>
             </div>
           </div>
         </div>
-      </section>
-
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="absolute inset-0 bg-black/5" />
+      </div>
 
       {/* Back link & toggle buttons - modernized */}
-      <div
-        id="missing-persons-report-actions"
-        className="mb-6 flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center"
-      >
+      <div className="mb-6 flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <Link
           href="/"
           className="inline-flex items-center text-sm font-medium text-sky-600 hover:text-sky-700"
@@ -1270,10 +1219,7 @@ export default function MissingPersonsPage() {
       )}
 
       {/* Lists of Missing and Found People - unchanged */}
-      <div
-        id="missing-persons-reports"
-        className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-2"
-      >
+      <div className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-2">
         {/* Missing people list */}
         <div>
           <div className="mb-4 flex items-center justify-between">
@@ -2043,7 +1989,6 @@ export default function MissingPersonsPage() {
           </div>
         </div>
       ) : null}
-      </div>
     </div>
   );
 }

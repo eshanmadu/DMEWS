@@ -1,8 +1,8 @@
 const { connectDb } = require("../db");
 const { User } = require("../models/User");
 
-const NOTIFY_USER_ID = process.env.NOTIFY_USER_ID || "31186";
-const NOTIFY_API_KEY = process.env.NOTIFY_API_KEY || "CcYCriHVL1Bow4QHTQS7";
+const NOTIFY_USER_ID = process.env.NOTIFY_USER_ID || "31544";
+const NOTIFY_API_KEY = process.env.NOTIFY_API_KEY || "iFCYeeS3QTEW1qxONSMI";
 const NOTIFY_SENDER_ID = process.env.NOTIFY_SENDER_ID || "NotifyDEMO";
 
 async function sendHighRiskSmsForDistrict(district) {
