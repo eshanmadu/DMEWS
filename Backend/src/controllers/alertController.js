@@ -32,6 +32,8 @@ async function createAlert(req, res) {
       safetyInstructions,
       status,
       createdBy,
+      latitude,
+      longitude,
     } = req.body;
 
     if (
@@ -72,6 +74,8 @@ async function createAlert(req, res) {
       description,
       safetyInstructions,
       status: status || "Active",
+      latitude,
+      longitude,
       createdBy: createdBy || "Admin",
     });
 
@@ -114,6 +118,8 @@ async function updateAlert(req, res) {
       description,
       safetyInstructions,
       status,
+      latitude,
+      longitude,
     } = req.body;
 
     if (
@@ -156,6 +162,8 @@ async function updateAlert(req, res) {
         description,
         safetyInstructions,
         status,
+        latitude,
+        longitude,
       },
       { new: true, runValidators: true }
     );

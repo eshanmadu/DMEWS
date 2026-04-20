@@ -14,7 +14,7 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-const DISASTER_TYPES = ["Flood", "Landslide", "Cyclone", "Tsunami"];
+const DISASTER_TYPES = ["Flood","Landslide","Cyclone","Tsunami","Wildfire","Storm","Drought","Heatwave","Earthquake","Volcanic Activity","Blizzard"];
 const SEVERITY_LEVELS = ["Low", "Medium", "High"];
 const STATUS_LEVELS = ["Active", "Expired", "Cancelled", "Archived"];
 

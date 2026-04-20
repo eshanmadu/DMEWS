@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Loader from "@/components/Loader";
-import { TriangleAlert, ShieldAlert, Clock3, MapPin, FileText } from "lucide-react";
+import LocationAutocompleteInput from "@/app/admin/LocationAutocompleteInput";
+import { TriangleAlert, ShieldAlert, Clock3, FileText } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -11,6 +12,13 @@ const DISASTER_TYPES = [
   "Landslide",
   "Cyclone",
   "Tsunami",
+  "Wildfire",
+  "Storm",
+  "Drought",
+  "Heatwave",
+  "Earthquake",
+  "Volcanic Activity",
+  "Blizzard",
 ];
 
 const SEVERITY_LEVELS = [
@@ -23,6 +31,8 @@ const INITIAL_FORM = {
   disasterType: "",
   severity: "",
   affectedArea: "",
+  latitude: null,
+  longitude: null,
   startTime: "",
   expectedEndTime: "",
   description: "",
@@ -38,19 +48,53 @@ export function AdminCreateAlert() {
   const [fieldErrors, setFieldErrors] = useState({});
 
   function handleChange(e) {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-    setFieldErrors((prev) => ({ ...prev, [name]: "" }));
-    setError(null);
-    setSuccess(null);
-  }
+  const { name, value } = e.target;
+
+  setForm((prev) => {
+    if (name === "affectedArea") {
+      return {
+        ...prev,
+        [name]: value,
+        latitude: null,
+        longitude: null,
+      };
+    }
+
+    return { ...prev, [name]: value };
+  });
+
+  setFieldErrors((prev) => ({ ...prev, [name]: "" }));
+  setError(null);
+  setSuccess(null);
+}
+
+  function handleLocationSelect(location) {
+  setForm((prev) => ({
+    ...prev,
+    affectedArea: location.affectedArea,
+    latitude: location.latitude,
+    longitude: location.longitude,
+  }));
+
+  setFieldErrors((prev) => ({
+    ...prev,
+    affectedArea: "",
+  }));
+
+  setError(null);
+  setSuccess(null);
+}
 
   function validateForm() {
     const errors = {};
 
     if (!form.disasterType.trim()) errors.disasterType = "Disaster type is required.";
     if (!form.severity.trim()) errors.severity = "Severity level is required.";
-    if (!form.affectedArea.trim()) errors.affectedArea = "Affected area is required.";
+    if (!form.affectedArea.trim()) {
+    errors.affectedArea = "Affected area is required.";
+  } else if (typeof form.latitude !== "number" || typeof form.longitude !== "number") {
+    errors.affectedArea = "Please select the affected area from the suggestions.";
+  }
     if (!form.startTime) errors.startTime = "Start time is required.";
     if (!form.expectedEndTime) errors.expectedEndTime = "Expected end time is required.";
     if (!form.description.trim()) errors.description = "Description is required.";
@@ -184,21 +228,27 @@ export function AdminCreateAlert() {
             </div>
 
             {/* Affected area */}
-            <div className="space-y-1.5 md:col-span-2">
-              <label className="text-sm font-medium text-slate-700">Affected area</label>
-              <div className="relative">
-                <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  name="affectedArea"
-                  value={form.affectedArea}
-                  onChange={handleChange}
-                  placeholder="Enter district, city, or area name"
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
-                />
-              </div>
-              {fieldErrors.affectedArea && (
-                <p className="text-xs text-red-600">{fieldErrors.affectedArea}</p>
+            <div className="md:col-span-2">
+              <LocationAutocompleteInput
+                value={form.affectedArea}
+                onChange={(value) =>
+                  handleChange({
+                    target: { name: "affectedArea", value },
+                  })
+                }
+                onSelectLocation={handleLocationSelect}
+                label="Affected area"
+                placeholder="Start typing an area like Matara..."
+                error={fieldErrors.affectedArea}
+              />
+
+              {typeof form.latitude === "number" && typeof form.longitude === "number" && (
+                <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-800">
+                  Coordinates detected automatically:
+                  <div className="mt-1 font-medium">
+                    {form.latitude.toFixed(5)}, {form.longitude.toFixed(5)}
+                  </div>
+                </div>
               )}
             </div>
 

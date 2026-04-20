@@ -5,7 +5,6 @@ const alertSchema = new mongoose.Schema(
     disasterType: {
       type: String,
       required: true,
-      enum: ["Flood", "Landslide", "Cyclone", "Tsunami"],
       trim: true,
     },
     severity: {
@@ -41,6 +40,14 @@ const alertSchema = new mongoose.Schema(
       type: String,
       enum: ["Active", "Expired", "Cancelled", "Archived"],
       default: "Active",
+    },
+    latitude: {
+      type: Number,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      default: null,
     },
     createdBy: {
       type: String,

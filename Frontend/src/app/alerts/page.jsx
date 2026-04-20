@@ -15,6 +15,8 @@ import {
   TriangleAlert,
   FileText,
   RefreshCw,
+  ArrowRight,
+  BellRing,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -24,18 +26,21 @@ const HERO_BG = "/img/alert.png";
 
 const severityStyles = {
   Low: {
-    badge: "border-yellow-300/60 bg-yellow-300/20 text-yellow-900",
-    card: "border-yellow-200 bg-yellow-50/40",
+    badge: "border-yellow-300 bg-yellow-100 text-yellow-900",
+    card: "border-yellow-200 bg-white",
+    accent: "from-yellow-100 to-amber-50",
     icon: "text-yellow-700",
   },
   Medium: {
-    badge: "border-orange-400/60 bg-orange-400/20 text-orange-900",
-    card: "border-orange-200 bg-orange-50/40",
+    badge: "border-orange-300 bg-orange-100 text-orange-900",
+    card: "border-orange-200 bg-white",
+    accent: "from-orange-100 to-amber-50",
     icon: "text-orange-700",
   },
   High: {
-    badge: "border-red-500/60 bg-red-500/20 text-red-900",
-    card: "border-red-300 bg-red-50/60",
+    badge: "border-red-300 bg-red-100 text-red-900",
+    card: "border-red-200 bg-white",
+    accent: "from-red-100 to-rose-50",
     icon: "text-red-700",
   },
 };
@@ -53,79 +58,124 @@ function formatDateTime(value) {
   });
 }
 
+function AlertMetaPill({ icon: Icon, children }) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
+      <Icon className="h-3.5 w-3.5 text-slate-500" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
 function AlertCard({ alert, featured = false }) {
-  const { i18n } = useTranslation();
-  const si = String(i18n.language || "").startsWith("si");
   const style = severityStyles[alert?.severity] || severityStyles.Medium;
 
   return (
     <article
-      className={`overflow-hidden rounded-2xl border shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-        featured ? `${style.card} ring-1 ring-red-200/70 animate-pulse` : style.card
-      }`}
+      className={`group relative overflow-hidden rounded-3xl border ${style.card} shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl`}
     >
-      <div
-        className={`flex items-center justify-between gap-3 border-b px-4 py-3 ${
-          featured ? "bg-white/70" : "bg-white/60"
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          <TriangleAlert className={`h-5 w-5 ${style.icon}`} />
-          <h3 className="text-base font-semibold text-slate-900">
-            {alert?.disasterType || (si ? "ආපදා අනතුරු ඇඟවීම" : "Disaster alert")}
-          </h3>
+      <div className={`absolute inset-y-0 left-0 w-1.5 ${style.icon.replace("text", "bg")}`} />
+      <div className={`absolute inset-x-0 top-0 h-24 bg-gradient-to-r ${style.accent || "from-slate-100 to-slate-50"} opacity-70`} />
+
+      <div className="relative p-5 sm:p-6">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className={`mt-0.5 rounded-2xl p-3 ${featured ? "bg-white shadow-sm" : "bg-slate-50"} ${style.icon}`}>
+              <TriangleAlert className="h-5 w-5" />
+            </div>
+
+            <div className="min-w-0">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-bold text-slate-900 sm:text-xl">
+                  {alert?.disasterType || "Disaster alert"}
+                </h3>
+
+                {featured && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-red-700">
+                    <BellRing className="h-3.5 w-3.5" />
+                    High priority
+                  </span>
+                )}
+              </div>
+
+              <p className="text-sm text-slate-600">
+                {alert?.status === "Active" ? "Currently active" : alert?.status || "Status unavailable"}
+              </p>
+            </div>
+          </div>
+
+          <span
+            className={`inline-flex shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${style.badge}`}
+          >
+            {alert?.severity || "—"} severity
+          </span>
         </div>
 
-        <span
-          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${style.badge}`}
-        >
-          {alert?.severity || "—"} {si ? "බරපතළත්වය" : "severity"}
-        </span>
+        <div className="mb-5 flex flex-wrap gap-2">
+          <AlertMetaPill icon={MapPin}>
+            {alert?.affectedArea || "Unknown area"}
+          </AlertMetaPill>
+
+          <AlertMetaPill icon={Clock3}>
+            {formatDateTime(alert?.startTime)}
+          </AlertMetaPill>
+
+          <AlertMetaPill icon={Clock3}>
+            Until {formatDateTime(alert?.expectedEndTime)}
+          </AlertMetaPill>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[1.2fr,0.8fr]">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-white/95 p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Alert summary
+              </p>
+              <p className="text-sm leading-7 text-slate-700">
+                {alert?.description || "No description available."}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-emerald-700" />
+                <p className="text-sm font-semibold text-slate-900">
+                  Safety instructions
+                </p>
+              </div>
+              <p className="text-sm leading-7 text-slate-700">
+                {alert?.safetyInstructions || "Follow official instructions carefully."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col justify-between gap-4">
+            <div className={`rounded-2xl border p-4 ${featured ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50"}`}>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Public impact
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">
+                {featured
+                  ? "This alert requires immediate public attention. People in the affected area should monitor updates closely and prepare to act quickly if conditions worsen."
+                  : "This alert remains active for the affected area. People nearby should stay informed and follow official guidance."}
+              </p>
+            </div>
+
+            <Link
+              href={`/alerts/${alert?._id}`}
+              className={`inline-flex w-full items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition group-hover:shadow-md ${
+                featured
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-slate-900 hover:bg-slate-800"
+              }`}
+            >
+              <span>View Live Details</span>
+              <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+            </Link>
+          </div>
+        </div>
       </div>
-
-      <div className="space-y-4 p-4">
-        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
-          <div className="inline-flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-slate-400" />
-            <span className="font-medium">{alert?.affectedArea || "—"}</span>
-          </div>
-
-          <div className="inline-flex items-center gap-2">
-            <Clock3 className="h-4 w-4 text-slate-400" />
-            <span>
-              {formatDateTime(alert?.startTime)} — {formatDateTime(alert?.expectedEndTime)}
-            </span>
-          </div>
-        </div>
-
-        <p className="text-sm leading-6 text-slate-700">
-          {alert?.description || (si ? "විස්තරයක් නොමැත." : "No description available.")}
-        </p>
-
-        <div className="rounded-xl border border-slate-200/80 bg-white/70 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 text-amber-700" />
-            <p className="text-sm font-semibold text-slate-900">{si ? "ආරක්ෂක උපදෙස්" : "Safety instructions"}</p>
-          </div>
-          <p className="text-sm leading-6 text-slate-700">
-            {alert?.safetyInstructions || (si ? "නිල උපදෙස් සැලකිල්ලෙන් අනුගමනය කරන්න." : "Follow official instructions carefully.")}
-          </p>
-        </div>
-
-        {featured && (
-          <div className="rounded-xl border border-red-200 bg-red-100/70 px-3 py-2 text-sm font-medium text-red-800">
-            {si ? "මෙම ප්‍රදේශය සඳහා වහාම අවධානය අවශ්‍යයි." : "Immediate attention recommended for this area."}
-          </div>
-        )}
-      </div>
-      <Link
-        href={`/alerts/${alert?._id}`}
-        className="inline-flex w-center items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-      >
-        {si ? "සජීවී විස්තර බලන්න" : "View Live Details"}
-      </Link>
     </article>
-    
   );
 }
 
