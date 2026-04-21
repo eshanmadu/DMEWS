@@ -8,8 +8,6 @@ import {
   MapPin,
   Users,
   Phone,
-  CheckCircle2,
-  XCircle,
   ShieldAlert,
   Navigation,
   PhoneCall,
@@ -20,6 +18,9 @@ import {
   Search,
   Eye,
   EyeOff,
+  ThumbsUp,
+  ThumbsDown,
+  Check,
   ChevronDown,
   ChevronRight,
   AlertCircle,
@@ -30,8 +31,7 @@ import { useTranslation } from "react-i18next";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 /** Hero background image – evacuation / shelter context (Unsplash) */
-const HERO_BG  = "/img/shelter.png";
-
+const HERO_BG = "/img/shelter.png";
 
 /** Haversine formula for distance calculation */
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -298,7 +298,10 @@ export default function SheltersPage() {
           setShelters([]);
           setDistricts([]);
           setSheltersError(
-            data?.message || (si ? `සහන කඳවුරු පූරණය කළ නොහැක (HTTP ${res.status})` : `Could not load shelters (HTTP ${res.status})`)
+            data?.message ||
+              (si
+                ? `සහන කඳවුරු පූරණය කළ නොහැක (HTTP ${res.status})`
+                : `Could not load shelters (HTTP ${res.status})`)
           );
           return;
         }
@@ -311,13 +314,21 @@ export default function SheltersPage() {
         } else {
           setShelters([]);
           setDistricts([]);
-          setSheltersError(si ? "සහන කඳවුරු ලැයිස්තුව බලාපොරොත්තු වූ ආකෘතියේ නොමැත." : "Shelter list was not in the expected format.");
+          setSheltersError(
+            si
+              ? "සහන කඳවුරු ලැයිස්තුව බලාපොරොත්තු වූ ආකෘතියේ නොමැත."
+              : "Shelter list was not in the expected format."
+          );
         }
       })
       .catch(() => {
         setShelters([]);
         setDistricts([]);
-        setSheltersError(si ? "සහන කඳවුරු පූරණය කිරීමේදී ජාල දෝෂයකි." : "Network error while loading shelters.");
+        setSheltersError(
+          si
+            ? "සහන කඳවුරු පූරණය කිරීමේදී ජාල දෝෂයකි."
+            : "Network error while loading shelters."
+        );
       })
       .finally(() => setSheltersLoading(false));
   }, []);
@@ -544,15 +555,25 @@ export default function SheltersPage() {
                   <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
                   <div>
                     <p className="font-semibold text-amber-900">
-                      {si ? "සහන කඳවුරු පූරණය කළ නොහැක" : "Could not load shelters"}
+                      {si
+                        ? "සහන කඳවුරු පූරණය කළ නොහැක"
+                        : "Could not load shelters"}
                     </p>
                     <p className="mt-1 text-amber-900/90">{sheltersError}</p>
                     <p className="mt-2 text-xs text-amber-800/80">
-                      {si ? "නිල සහන කඳවුරු තොරතුරු සඳහා පහත " : "Use "}
-                      <strong>{si ? "දිස්ත්‍රික් ආපදා කළමනාකරණ සම්බන්ධතා" : "District Disaster Management Contacts"}</strong>{" "}
+                      {si
+                        ? "නිල සහන කඳවුරු තොරතුරු සඳහා පහත "
+                        : "Use "}
+                      <strong>
+                        {si
+                          ? "දිස්ත්‍රික් ආපදා කළමනාකරණ සම්බන්ධතා"
+                          : "District Disaster Management Contacts"}
+                      </strong>{" "}
                       {si ? "භාවිතා කරන්න හෝ " : "below or call "}
                       <strong>117</strong> / <strong>119</strong>
-                      {si ? " අමතන්න." : " for official shelter information."}
+                      {si
+                        ? " අමතන්න."
+                        : " for official shelter information."}
                     </p>
                   </div>
                 </div>
@@ -569,7 +590,9 @@ export default function SheltersPage() {
                       <div className="flex items-center gap-2">
                         <Filter className="h-5 w-5 text-slate-500" />
                         <span className="text-sm font-medium text-slate-700">
-                          {si ? "දිස්ත්‍රික් අනුව පෙරණය:" : "Filter by district:"}
+                          {si
+                            ? "දිස්ත්‍රික් අනුව පෙරණය:"
+                            : "Filter by district:"}
                         </span>
                       </div>
                       <div className="flex flex-1 flex-wrap items-center gap-3">
@@ -578,7 +601,9 @@ export default function SheltersPage() {
                           onChange={(e) => setSelectedDistrict(e.target.value)}
                           className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                         >
-                          <option value="">{si ? "සියලු දිස්ත්‍රික්ක" : "All districts"}</option>
+                          <option value="">
+                            {si ? "සියලු දිස්ත්‍රික්ක" : "All districts"}
+                          </option>
                           {districts.map((d) => (
                             <option key={d} value={d}>
                               {d}
@@ -599,17 +624,22 @@ export default function SheltersPage() {
                         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
                           {userDistrict && (
                             <span className="rounded-full bg-indigo-50 px-3 py-1.5 font-medium">
-                              {si ? "ඔබගේ දිස්ත්‍රික්කය:" : "Your district:"} {userDistrict}
+                              {si ? "ඔබගේ දිස්ත්‍රික්කය:" : "Your district:"}{" "}
+                              {userDistrict}
                             </span>
                           )}
                           {userHasCoords && (
                             <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
-                              {si ? "ඔබගේ නගරයෙන් දුර (ආසන්න)" : "Distance from your city (approx.)"}
+                              {si
+                                ? "ඔබගේ නගරයෙන් දුර (ආසන්න)"
+                                : "Distance from your city (approx.)"}
                             </span>
                           )}
                           {userDistrict && !userHasCoords && (
                             <span className="rounded-full bg-amber-50 px-3 py-1.5 font-medium text-amber-900">
-                              {si ? "දුර පෙන්වීමට පැතිකඩේ නගරය එක් කරන්න" : "Add your city in profile to see distances"}
+                              {si
+                                ? "දුර පෙන්වීමට පැතිකඩේ නගරය එක් කරන්න"
+                                : "Add your city in profile to see distances"}
                             </span>
                           )}
                         </div>
@@ -622,8 +652,12 @@ export default function SheltersPage() {
                       <Building2 className="mb-4 h-12 w-12 text-slate-300" />
                       <p className="text-slate-600">
                         {selectedDistrict
-                          ? (si ? `${selectedDistrict} දිස්ත්‍රික්කයේ සහන කඳවුරු හමු නොවීය. වෙනත් දිස්ත්‍රික්කයක් උත්සාහ කරන්න.` : `No shelters found in ${selectedDistrict}. Try a different district.`)
-                          : (si ? "තවම සහන කඳවුරු ලැයිස්තුගත කර නොමැත. පසුව නැවත පරීක්ෂා කරන්න හෝ ප්‍රදේශීය ආපදා කළමනාකරණ මධ්‍යස්ථානය අමතන්න." : "No shelters listed yet. Check back later or contact your local disaster management centre.")}
+                          ? si
+                            ? `${selectedDistrict} දිස්ත්‍රික්කයේ සහන කඳවුරු හමු නොවීය. වෙනත් දිස්ත්‍රික්කයක් උත්සාහ කරන්න.`
+                            : `No shelters found in ${selectedDistrict}. Try a different district.`
+                          : si
+                            ? "තවම සහන කඳවුරු ලැයිස්තුගත කර නොමැත. පසුව නැවත පරීක්ෂා කරන්න හෝ ප්‍රදේශීය ආපදා කළමනාකරණ මධ්‍යස්ථානය අමතන්න."
+                            : "No shelters listed yet. Check back later or contact your local disaster management centre."}
                       </p>
                       <p className="mt-2 text-sm font-medium text-slate-500">
                         {si ? "හදිසි: 117" : "Emergency: 117"}
@@ -658,15 +692,19 @@ export default function SheltersPage() {
                                   <ChevronRight className="h-5 w-5 text-slate-500" />
                                 )}
                                 <h3 className="font-semibold text-slate-800">
-                                  {district} {si ? "දිස්ත්‍රික්කය" : "District"}
+                                  {district}{" "}
+                                  {si ? "දිස්ත්‍රික්කය" : "District"}
                                 </h3>
                                 {isUserDistrict && !selectedDistrict && (
                                   <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                                    {si ? "ඔබගේ දිස්ත්‍රික්කය" : "Your district"}
+                                    {si
+                                      ? "ඔබගේ දිස්ත්‍රික්කය"
+                                      : "Your district"}
                                   </span>
                                 )}
                                 <span className="text-xs text-slate-500">
-                                  ({sheltersList.length} {si ? "කඳවුරු" : "Camps"})
+                                  ({sheltersList.length}{" "}
+                                  {si ? "කඳවුරු" : "Camps"})
                                 </span>
                               </div>
                             </button>
@@ -706,11 +744,15 @@ export default function SheltersPage() {
                 <div className="flex items-center gap-2">
                   <Headphones className="h-5 w-5 text-red-600" />
                   <h2 className="text-lg font-semibold text-slate-800">
-                    {si ? "දිස්ත්‍රික් ආපදා කළමනාකරණ සම්බන්ධතා" : "District Disaster Management Contacts"}
+                    {si
+                      ? "දිස්ත්‍රික් ආපදා කළමනාකරණ සම්බන්ධතා"
+                      : "District Disaster Management Contacts"}
                   </h2>
                 </div>
                 <div className="text-xs text-slate-500 bg-white/60 px-3 py-1 rounded-full">
-                  {si ? "නිල උපදෙස් සහ සහාය සඳහා අමතන්න" : "Call for official instructions & help"}
+                  {si
+                    ? "නිල උපදෙස් සහ සහාය සඳහා අමතන්න"
+                    : "Call for official instructions & help"}
                 </div>
               </div>
             </div>
@@ -721,7 +763,11 @@ export default function SheltersPage() {
                   <Search className="h-4 w-4 text-slate-400" />
                   <input
                     type="text"
-                    placeholder={si ? "දිස්ත්‍රික්කය හෝ පළාත අනුව සොයන්න..." : "Search by district or province..."}
+                    placeholder={
+                      si
+                        ? "දිස්ත්‍රික්කය හෝ පළාත අනුව සොයන්න..."
+                        : "Search by district or province..."
+                    }
                     value={contactsSearchQuery}
                     onChange={(e) => {
                       setContactsSearchQuery(e.target.value);
@@ -756,8 +802,12 @@ export default function SheltersPage() {
                       <Eye className="h-3.5 w-3.5" />
                     )}
                     {showOnlyMyDistrict
-                      ? (si ? "ඔබගේ දිස්ත්‍රික්කය පමණක් පෙන්වයි" : "Showing only your district")
-                      : (si ? "මගේ දිස්ත්‍රික්කය පමණක් පෙන්වන්න" : "Show only my district")}
+                      ? si
+                        ? "ඔබගේ දිස්ත්‍රික්කය පමණක් පෙන්වයි"
+                        : "Showing only your district"
+                      : si
+                        ? "මගේ දිස්ත්‍රික්කය පමණක් පෙන්වන්න"
+                        : "Show only my district"}
                   </button>
                 )}
               </div>
@@ -772,12 +822,18 @@ export default function SheltersPage() {
                       ? `No directory entry for ${
                           userDistrict || "your district"
                         }`
-                      : (si ? "ගැලපෙන දිස්ත්‍රික්ක නොමැත" : "No matching districts")}
+                      : si
+                        ? "ගැලපෙන දිස්ත්‍රික්ක නොමැත"
+                        : "No matching districts"}
                   </p>
                   <p className="mt-2 max-w-md text-sm text-amber-900/90">
                     {showOnlyMyDistrict
-                      ? (si ? "මෙම දිස්ත්‍රික්කය තවම නාමාවලියේ නොතිබිය හැක. 117 හෝ 119 ජාතික හදිසි අංක අමතන්න, නැතහොත් පෙරණය ඉවත් කරන්න." : "This district may not be listed in the directory yet. Call national emergency 117 or 119, or clear the filter.")
-                      : (si ? "වෙනත් සෙවුම් පදයක් උත්සාහ කරන්න, නැතහොත් සියලු පළාත් දැකීමට පෙරණ ඉවත් කරන්න." : "Try another search term, or clear filters to see all provinces.")}
+                      ? si
+                        ? "මෙම දිස්ත්‍රික්කය තවම නාමාවලියේ නොතිබිය හැක. 117 හෝ 119 ජාතික හදිසි අංක අමතන්න, නැතහොත් පෙරණය ඉවත් කරන්න."
+                        : "This district may not be listed in the directory yet. Call national emergency 117 or 119, or clear the filter."
+                      : si
+                        ? "වෙනත් සෙවුම් පදයක් උත්සාහ කරන්න, නැතහොත් සියලු පළාත් දැකීමට පෙරණ ඉවත් කරන්න."
+                        : "Try another search term, or clear filters to see all provinces."}
                   </p>
                   {(showOnlyMyDistrict || contactsSearchQuery) && (
                     <button
@@ -832,7 +888,9 @@ export default function SheltersPage() {
                                   !showOnlyMyDistrict &&
                                   !contactsSearchQuery && (
                                     <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-                                      {si ? "ඔබගේ දිස්ත්‍රික්කය" : "Your district"}
+                                      {si
+                                        ? "ඔබගේ දිස්ත්‍රික්කය"
+                                        : "Your district"}
                                     </span>
                                   )}
                                 <span className="text-xs text-slate-500">
@@ -933,7 +991,9 @@ export default function SheltersPage() {
                                   !showOnlyMyDistrict &&
                                   !contactsSearchQuery && (
                                     <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-                                      {si ? "ඔබගේ දිස්ත්‍රික්කය" : "Your district"}
+                                      {si
+                                        ? "ඔබගේ දිස්ත්‍රික්කය"
+                                        : "Your district"}
                                     </span>
                                   )}
                                 <span className="text-xs text-slate-500">
@@ -998,7 +1058,9 @@ export default function SheltersPage() {
                 </div>
               )}
               <div className="mt-6 rounded-lg bg-slate-50 p-3 text-center text-xs text-slate-500 border border-slate-100">
-                {si ? "📢 ඔබගේ දිස්ත්‍රික් සම්බන්ධතාව වෙත ළඟා විය නොහැකි නම් ජාතික හදිසි අංක " : "📢 If you cannot reach your district contact, call national emergency hotline "}
+                {si
+                  ? "📢 ඔබගේ දිස්ත්‍රික් සම්බන්ධතාව වෙත ළඟා විය නොහැකි නම් ජාතික හදිසි අංක "
+                  : "📢 If you cannot reach your district contact, call national emergency hotline "}
                 <strong className="text-red-600">117</strong>{" "}
                 {si ? "හෝ " : "or "}
                 <strong className="text-red-600">119</strong>.
@@ -1006,7 +1068,7 @@ export default function SheltersPage() {
             </div>
           </section>
 
-          {/* ========== SAFETY INSTRUCTIONS ========== */}
+          {/* ========== SAFETY INSTRUCTIONS – DO / DON'T INFOGRAPHIC ========== */}
           <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50 to-yellow-50/30 px-5 py-4">
               <div className="flex items-center gap-2">
@@ -1016,46 +1078,81 @@ export default function SheltersPage() {
                 </h2>
               </div>
               <p className="mt-1 text-sm text-slate-600">
-                {si ? "ඉවතලන අවස්ථාවේ ඔබගේ ආරක්ෂාව සඳහා වැදගත් උපදෙස්." : "Important guidelines for your safety during an evacuation."}
+                {si
+                  ? "ඉවතලන අවස්ථාවේ කළ යුතු හා නොකළ යුතු දේ පිළිබඳ මාර්ගෝපදේශ."
+                  : "A quick Do & Don't guide to stay safe during evacuation."}
               </p>
             </div>
-            <div className="grid gap-6 p-5 sm:grid-cols-2">
-              <div className="space-y-3 rounded-xl bg-emerald-50/60 p-4 border border-emerald-100">
-                <div className="flex items-center gap-2 text-emerald-800 border-b border-emerald-200 pb-2">
-                  <CheckCircle2 className="h-5 w-5" />
-                  <h3 className="font-semibold text-base">{si ? "කළ යුතු දේ" : "Do's"}</h3>
-                </div>
-                <ul className="space-y-2.5">
-                  {DOS.map((item, i) => (
-                    <li key={i} className="flex gap-3 text-sm text-slate-800">
-                      <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-600" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
+
+            <div className="bg-slate-50/60 p-5">
+              <div className="mb-6 text-center">
+                <h3 className="text-2xl font-extrabold text-slate-900">
+                  Do &amp; Don&apos;t
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  {si ? "ඉවතලන මාර්ගෝපදේශ" : "Evacuation Guide"}
+                </p>
               </div>
-              <div className="space-y-3 rounded-xl bg-rose-50/60 p-4 border border-rose-100">
-                <div className="flex items-center gap-2 text-rose-800 border-b border-rose-200 pb-2">
-                  <XCircle className="h-5 w-5" />
-                  <h3 className="font-semibold text-base">{si ? "නොකළ යුතු දේ" : "Don'ts"}</h3>
+
+              <div className="flex flex-wrap justify-center gap-8">
+                {/* DO Card */}
+                <div className="flex min-h-[480px] w-full max-w-[420px] overflow-hidden rounded-2xl bg-white shadow-[0_8px_40px_rgba(0,0,0,0.12)]">
+                  <div className="relative flex w-[72px] flex-shrink-0 flex-col items-center justify-between bg-gradient-to-b from-[#2ecc5a] to-[#1fa843] py-5">
+                    <ThumbsUp className="h-7 w-7 text-white" />
+                    <span className="rotate-180 text-xl font-extrabold tracking-[0.2em] text-white [writing-mode:vertical-rl]">
+                      DO
+                    </span>
+                    <span className="absolute right-[-18px] top-1/2 h-0 w-0 -translate-y-1/2 border-y-[22px] border-y-transparent border-l-[20px] border-l-[#1fa843]" />
+                  </div>
+                  <div className="flex-1 space-y-5 px-6 py-7">
+                    {DOS.map((item, i) => (
+                      <div key={i} className="flex items-start gap-3.5">
+                        <span className="mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#2ecc5a]">
+                          <Check className="h-4 w-4 text-white" />
+                        </span>
+                        <p className="text-[0.92rem] leading-relaxed text-slate-700">
+                          {item}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <ul className="space-y-2.5">
-                  {DONTS.map((item, i) => (
-                    <li key={i} className="flex gap-3 text-sm text-slate-800">
-                      <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-rose-600" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
+
+                {/* DON'T Card */}
+                <div className="flex min-h-[480px] w-full max-w-[420px] overflow-hidden rounded-2xl bg-white shadow-[0_8px_40px_rgba(0,0,0,0.12)]">
+                  <div className="relative flex w-[72px] flex-shrink-0 flex-col items-center justify-between bg-gradient-to-b from-[#ff4e6a] to-[#ff8c42] py-5">
+                    <ThumbsDown className="h-7 w-7 text-white" />
+                    <span className="rotate-180 text-xl font-extrabold tracking-[0.1em] text-white [writing-mode:vertical-rl]">
+                      DON&apos;T
+                    </span>
+                    <span className="absolute right-[-18px] top-1/2 h-0 w-0 -translate-y-1/2 border-y-[22px] border-y-transparent border-l-[20px] border-l-[#ff6b42]" />
+                  </div>
+                  <div className="flex-1 space-y-5 px-6 py-7">
+                    {DONTS.map((item, i) => (
+                      <div key={i} className="flex items-start gap-3.5">
+                        <span className="mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#ff4e6a]">
+                          <X className="h-4 w-4 text-white" />
+                        </span>
+                        <p className="text-[0.92rem] leading-relaxed text-slate-700">
+                          {item}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </section>
         </div>
 
         <p className="mt-10 text-center text-sm text-slate-500">
-          {si ? "නවතම සහන කඳවුරු තොරතුරු සඳහා " : "For the latest shelter availability, call "}
+          {si
+            ? "නවතම සහන කඳවුරු තොරතුරු සඳහා "
+            : "For the latest shelter availability, call "}
           <strong className="text-indigo-600">117</strong> or contact your
-          {si ? " දිස්ත්‍රික් ආපදා කළමනාකරණ මධ්‍යස්ථානය අමතන්න." : " district disaster management centre."}
+          {si
+            ? " දිස්ත්‍රික් ආපදා කළමනාකරණ මධ්‍යස්ථානය අමතන්න."
+            : " district disaster management centre."}
           <Link
             href="/"
             className="ml-2 text-indigo-600 hover:underline font-medium"

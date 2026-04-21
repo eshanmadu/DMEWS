@@ -26,6 +26,18 @@ const STEPS = [
   { id: 3, name: "Agreement", shortName: "Agree" },
 ];
 
+const DOB_CUTOFF = "2016-01-01";
+
+function isValidTenDigitPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length === 10;
+}
+
+function isValidEmail(value) {
+  const email = String(value || "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 export default function VolunteerJoinPage() {
   const { t } = useTranslation();
 
@@ -68,9 +80,15 @@ export default function VolunteerJoinPage() {
       case 0: // Basic Information
         if (!form.fullName.trim()) return "Full name is required.";
         if (!form.dateOfBirth) return "Date of birth is required.";
+        if (form.dateOfBirth >= DOB_CUTOFF)
+          return "Date of birth must be before 2016-01-01.";
         if (!form.gender) return "Gender is required.";
         if (!form.phoneNumber.trim()) return "Phone number is required.";
+        if (!isValidTenDigitPhone(form.phoneNumber))
+          return "Phone number must have exactly 10 digits.";
         if (!form.emailAddress.trim()) return "Email address is required.";
+        if (!isValidEmail(form.emailAddress))
+          return "Enter a valid email address (example: name@email.com).";
         if (!form.districtCity.trim()) return "District / City is required.";
         if (!form.currentLocation.trim()) return "Current location is required.";
         return "";
@@ -79,6 +97,8 @@ export default function VolunteerJoinPage() {
       case 2: // Health & Safety
         if (!form.emergencyContactPerson.trim()) return "Emergency contact person is required.";
         if (!form.emergencyContactNumber.trim()) return "Emergency contact number is required.";
+        if (!isValidTenDigitPhone(form.emergencyContactNumber))
+          return "Emergency contact number must have exactly 10 digits.";
         return "";
       case 3: // Agreement
         if (!form.agreeSafetyGuidelines) return "You must agree to follow safety guidelines.";
@@ -211,6 +231,16 @@ export default function VolunteerJoinPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
+  const validateEntireForm = () => {
+    for (let i = 0; i < STEPS.length; i += 1) {
+      const validationError = validateStep(i);
+      if (validationError) {
+        return { step: i, message: validationError };
+      }
+    }
+    return null;
+  };
+
   function toggleSkill(skill) {
     setForm((prev) => {
       const has = prev.skills.includes(skill);
@@ -226,7 +256,14 @@ export default function VolunteerJoinPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!token) return;
+    const formValidation = validateEntireForm();
+    if (formValidation) {
+      setCurrentStep(formValidation.step);
+      setStepError(formValidation.message);
+      return;
+    }
     setError("");
+    setStepError("");
     setSubmitting(true);
     try {
       const res = await fetch(`${API_BASE}/volunteers/register`, {
@@ -439,8 +476,12 @@ export default function VolunteerJoinPage() {
                             type="date"
                             value={form.dateOfBirth}
                             onChange={(e) => setField("dateOfBirth", e.target.value)}
+                            max="2015-12-31"
                             className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
                           />
+                          <p className="mt-1 text-xs text-slate-500">
+                            
+                          </p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -477,10 +518,17 @@ export default function VolunteerJoinPage() {
                           </label>
                           <input
                             required
+                            type="tel"
                             value={form.phoneNumber}
                             onChange={(e) => setField("phoneNumber", e.target.value)}
+                            inputMode="numeric"
+                            maxLength={10}
+                            placeholder="0712345678"
                             className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
                           />
+                          <p className="mt-1 text-xs text-slate-500">
+                           
+                          </p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -491,6 +539,7 @@ export default function VolunteerJoinPage() {
                             type="email"
                             value={form.emailAddress}
                             onChange={(e) => setField("emailAddress", e.target.value)}
+                            placeholder="name@email.com"
                             className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
                           />
                         </div>
@@ -594,10 +643,17 @@ export default function VolunteerJoinPage() {
                           </label>
                           <input
                             required
+                            type="tel"
                             value={form.emergencyContactNumber}
                             onChange={(e) => setField("emergencyContactNumber", e.target.value)}
+                            inputMode="numeric"
+                            maxLength={10}
+                            placeholder="0712345678"
                             className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
                           />
+                          <p className="mt-1 text-xs text-slate-500">
+                            Enter exactly 10 digits.
+                          </p>
                         </div>
                       </div>
                     </div>

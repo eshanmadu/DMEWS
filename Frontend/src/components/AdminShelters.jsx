@@ -1,8 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Loader from "@/components/Loader";
-import { Building2, Plus, MapPin, Pencil, Trash2, Save, X, RefreshCw, CheckCircle } from "lucide-react";
+import {
+  Building2,
+  Plus,
+  MapPin,
+  Pencil,
+  Trash2,
+  Save,
+  X,
+  RefreshCw,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { formatLkCityLabel } from "@/lib/lkLocations";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -47,9 +59,10 @@ export function AdminShelters() {
   const [formCitiesLoading, setFormCitiesLoading] = useState(false);
   const [editCitiesLoading, setEditCitiesLoading] = useState(false);
 
-  // New states for filter and pagination
+  // Filter and pagination
   const [districtFilter, setDistrictFilter] = useState("");
-  const [visibleCount, setVisibleCount] = useState(5);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
   const districtFilterOptions =
     districtsList.length > 0
@@ -61,15 +74,10 @@ export function AdminShelters() {
     ? shelters.filter(s => s.district === districtFilter)
     : shelters;
 
-  // Reset pagination when filter changes
+  // Reset page when filter changes
   useEffect(() => {
-    setVisibleCount(5);
+    setCurrentPage(1);
   }, [districtFilter]);
-
-  // Load more shelters
-  const loadMore = () => {
-    setVisibleCount(prev => Math.min(prev + 5, filteredShelters.length));
-  };
 
   function loadShelters() {
     setLoading(true);
@@ -331,8 +339,12 @@ export function AdminShelters() {
     }
   }
 
-  // Determine if we need to show the "Load more" button
-  const hasMore = visibleCount < filteredShelters.length;
+  // Pagination
+  const totalPages = Math.ceil(filteredShelters.length / itemsPerPage);
+  const paginatedShelters = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredShelters.slice(start, start + itemsPerPage);
+  }, [filteredShelters, currentPage]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100/40">
@@ -582,7 +594,7 @@ export function AdminShelters() {
                     </tr>
                   ) : (
                     <>
-                      {filteredShelters.slice(0, visibleCount).map((s) => (
+                      {paginatedShelters.map((s) => (
                         <tr
                           key={s.id}
                           className="border-b border-slate-100 transition hover:bg-sky-50/40"
@@ -769,22 +781,79 @@ export function AdminShelters() {
                           </td>
                         </tr>
                       ))}
-                      {hasMore && (
-                        <tr>
-                          <td colSpan={8} className="py-4 text-center">
-                            <button
-                              onClick={loadMore}
-                              className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-sky-600 shadow-sm transition hover:bg-sky-50"
-                            >
-                              Load more ({filteredShelters.length - visibleCount} remaining)
-                            </button>
-                          </td>
-                        </tr>
-                      )}
                     </>
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 sm:px-6">
+              <div className="flex flex-1 justify-between sm:hidden">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="relative ml-3 inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-slate-700">
+                    Showing{" "}
+                    <span className="font-medium">
+                      {(currentPage - 1) * itemsPerPage + 1}
+                    </span>{" "}
+                    to{" "}
+                    <span className="font-medium">
+                      {Math.min(currentPage * itemsPerPage, filteredShelters.length)}
+                    </span>{" "}
+                    of <span className="font-medium">{filteredShelters.length}</span>{" "}
+                    shelters
+                  </p>
+                </div>
+                <div>
+                  <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center rounded-l-md border border-slate-300 bg-white px-2 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 focus:z-20 disabled:opacity-40"
+                    >
+                      <span className="sr-only">Previous</span>
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`relative inline-flex items-center border px-4 py-2 text-sm font-medium focus:z-20 ${
+                          page === currentPage
+                            ? "z-10 border-sky-500 bg-sky-50 text-sky-600"
+                            : "border-slate-300 bg-white text-slate-500 hover:bg-slate-50"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="relative inline-flex items-center rounded-r-md border border-slate-300 bg-white px-2 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 focus:z-20 disabled:opacity-40"
+                    >
+                      <span className="sr-only">Next</span>
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                  </nav>
+                </div>
+              </div>
             </div>
           )}
         </section>

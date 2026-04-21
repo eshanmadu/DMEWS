@@ -19,6 +19,7 @@ const adminUsersRoutes = require("./routes/adminUsers.routes");
 const sensorRoutes = require("./routes/sensorRoutes");
 const locationsRoutes = require("./routes/locations.routes");
 const geocodeRoutes = require("./routes/geocode.routes");
+const resourcesRoutes = require("./routes/resources.routes");
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use("/api/predict", predictRoutes);
 app.use("/admin/users", adminUsersRoutes);
 app.use("/sensors", sensorRoutes);
 app.use("/geocode", geocodeRoutes);
+app.use("/", resourcesRoutes);
 
 module.exports = app;
 

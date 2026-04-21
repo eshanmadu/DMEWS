@@ -36,24 +36,41 @@ export function Nav() {
 
   // Incidents dropdown state
   const [incidentsDropdownOpen, setIncidentsDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
+  const incidentsDropdownRef = useRef(null);
   const closeTimeoutRef = useRef(null);
+  const [volunteerDropdownOpen, setVolunteerDropdownOpen] = useState(false);
+  const volunteerDropdownRef = useRef(null);
+  const volunteerCloseTimeoutRef = useRef(null);
 
   const dropdownItems = [
     { href: "/incidents/missing-persons", label: t("nav.findPeople", "Find People") },
     { href: "/incidents", label: t("nav.reports", "Reports") }, // keep current path
   ];
+  const volunteerDropdownItems = [
+    { href: "/volunteer", label: t("nav.volunteer", "Volunteer") },
+    { href: "/resources", label: t("nav.resources", "Resources") },
+  ];
 
   // Close incidents dropdown on route change
   useEffect(() => {
     setIncidentsDropdownOpen(false);
+    setVolunteerDropdownOpen(false);
   }, [pathname]);
 
   // Close incidents dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      if (
+        incidentsDropdownRef.current &&
+        !incidentsDropdownRef.current.contains(event.target)
+      ) {
         setIncidentsDropdownOpen(false);
+      }
+      if (
+        volunteerDropdownRef.current &&
+        !volunteerDropdownRef.current.contains(event.target)
+      ) {
+        setVolunteerDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -76,8 +93,25 @@ export function Nav() {
   const cancelClose = () => {
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
   };
+  const openVolunteerDropdown = () => {
+    if (volunteerCloseTimeoutRef.current)
+      clearTimeout(volunteerCloseTimeoutRef.current);
+    setVolunteerDropdownOpen(true);
+  };
+  const closeVolunteerDropdownWithDelay = () => {
+    volunteerCloseTimeoutRef.current = setTimeout(() => {
+      setVolunteerDropdownOpen(false);
+    }, 150);
+  };
+  const cancelVolunteerClose = () => {
+    if (volunteerCloseTimeoutRef.current)
+      clearTimeout(volunteerCloseTimeoutRef.current);
+  };
 
   const isIncidentsActive = dropdownItems.some((item) => pathname === item.href);
+  const isVolunteerActive = volunteerDropdownItems.some(
+    (item) => pathname === item.href
+  );
 
   // Language enforcement for admin routes
   useEffect(() => {
@@ -195,7 +229,7 @@ export function Nav() {
                 return (
                   <div
                     key="incidents-dropdown"
-                    ref={dropdownRef}
+                    ref={incidentsDropdownRef}
                     className="relative"
                     onMouseEnter={openDropdown}
                     onMouseLeave={closeDropdownWithDelay}
@@ -271,18 +305,58 @@ export function Nav() {
               );
             })}
             {isLoggedIn && (
-              <Link
-                href="/volunteer"
-                className={clsx(
-                  "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  pathname === "/volunteer"
-                    ? "bg-white/15 text-white shadow-sm"
-                    : "text-sky-100/80 hover:bg-sky-500/40 hover:text-white"
-                )}
+              <div
+                ref={volunteerDropdownRef}
+                className="relative"
+                onMouseEnter={openVolunteerDropdown}
+                onMouseLeave={closeVolunteerDropdownWithDelay}
               >
-                <Heart className="h-4 w-4" />
-                <span className="hidden sm:inline">{t("nav.volunteer")}</span>
-              </Link>
+                <button
+                  type="button"
+                  onClick={() => setVolunteerDropdownOpen((prev) => !prev)}
+                  className={clsx(
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
+                    isVolunteerActive || volunteerDropdownOpen
+                      ? "bg-white/15 text-white shadow-sm"
+                      : "text-sky-100/80 hover:bg-sky-500/40 hover:text-white"
+                  )}
+                  aria-expanded={volunteerDropdownOpen}
+                  aria-haspopup="true"
+                >
+                  <Heart className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t("nav.volunteer")}</span>
+                  <ChevronDown
+                    className={clsx(
+                      "h-3 w-3 transition-transform duration-200",
+                      volunteerDropdownOpen && "rotate-180"
+                    )}
+                  />
+                </button>
+                {volunteerDropdownOpen && (
+                  <div
+                    className="absolute left-0 mt-2 min-w-[170px] rounded-md bg-white py-1 shadow-lg ring-1 ring-black/5"
+                    onMouseEnter={cancelVolunteerClose}
+                    onMouseLeave={closeVolunteerDropdownWithDelay}
+                    role="menu"
+                    aria-orientation="vertical"
+                  >
+                    {volunteerDropdownItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={clsx(
+                          "block px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100",
+                          pathname === item.href && "bg-gray-100 font-medium"
+                        )}
+                        role="menuitem"
+                        onClick={() => setVolunteerDropdownOpen(false)}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <div className="hidden sm:flex items-center gap-2">

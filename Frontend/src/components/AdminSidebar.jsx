@@ -17,6 +17,7 @@ import {
   UserSearch,
   FileBarChart,
   Sparkles,
+  HandHeart,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/volunteers", label: "Volunteers", icon: Heart },
   { href: "/admin/missions", label: "Missions", icon: Boxes },
+  { href: "/admin/resources", label: "Resources", icon: HandHeart },
   { href: "/admin/missing-persons", label: "Missing Persons", icon: UserSearch },
   { href: "/admin/reports", label: "Reports", icon: FileBarChart },
 ];
