@@ -289,108 +289,176 @@ function DetectResultModal({
 
   const instructionList = isSafe
     ? [
-        "Monitor official updates.",
-        "Avoid unnecessary travel toward the alert area.",
-        "Stay ready in case conditions change.",
+        "Keep monitoring official updates for this alert.",
+        "Avoid unnecessary travel toward the affected area.",
+        "Stay prepared in case conditions change.",
       ]
     : isWarning
     ? [
-        "Stay away from the affected area if possible.",
-        "Keep your phone charged and watch official alerts.",
-        "Prepare essentials and be ready to move.",
+        "Stay alert and avoid the affected area if possible.",
+        "Keep your phone charged and follow official alerts.",
+        "Prepare essentials in case evacuation becomes necessary.",
       ]
     : [
-        "Leave the danger area as soon as possible.",
-        "Follow official evacuation instructions immediately.",
-        "Avoid affected roads, floodwater, or unstable zones.",
+        "Move away from the danger zone immediately if it is safe to do so.",
+        "Follow official evacuation and public safety instructions now.",
+        "Avoid affected roads, floodwater, unstable ground, or restricted zones.",
       ];
 
+  const statusTheme = isSafe
+    ? {
+        shell: "border-emerald-200",
+        header: "bg-emerald-600",
+        badge: "bg-emerald-100 text-emerald-800 border-emerald-200",
+        panel: "bg-emerald-50 border-emerald-200",
+        iconWrap: "bg-emerald-100",
+        iconColor: "text-emerald-700",
+        title: "SAFE STATUS",
+      }
+    : isWarning
+    ? {
+        shell: "border-amber-200",
+        header: "bg-amber-500",
+        badge: "bg-amber-100 text-amber-800 border-amber-200",
+        panel: "bg-amber-50 border-amber-200",
+        iconWrap: "bg-amber-100",
+        iconColor: "text-amber-700",
+        title: "WARNING STATUS",
+      }
+    : {
+        shell: "border-red-200",
+        header: "bg-red-600",
+        badge: "bg-red-100 text-red-800 border-red-200",
+        panel: "bg-red-50 border-red-200",
+        iconWrap: "bg-red-100",
+        iconColor: "text-red-700",
+        title: "DANGER STATUS",
+      };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
       <div
-        className="relative w-full max-w-lg rounded-[1.75rem] border border-white/20 bg-white shadow-2xl animate-[modalIn_0.22s_ease-out]"
+        className={`w-full max-w-md overflow-hidden rounded-3xl border bg-white shadow-2xl ${statusTheme.shell} animate-[modalIn_0.22s_ease-out]`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="detect-me-result-title"
       >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-4 top-4 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
-        >
-          Close
-        </button>
-
-        <div className="p-5 sm:p-6">
-          <div className="flex flex-col items-center text-center">
-            <div className="scale-35 sm:scale-75">
-              {isSafe ? <SafeVisual /> : <DangerVisual warning={isWarning} />}
-            </div>
-
-            <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Detect Me Result
+        <div className={`flex items-center justify-between px-5 py-4 text-white ${statusTheme.header}`}>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/85">
+              Emergency Location Check
             </p>
-
-            <h2
-              id="detect-me-result-title"
-              className="mt-2 text-xl font-bold text-slate-900 sm:text-2xl"
-            >
+            <h2 id="detect-me-result-title" className="mt-1 text-lg font-bold">
               {dangerStatus.title}
             </h2>
-
-            <p className="mt-2 max-w-md text-sm leading-6 text-slate-600">
-              {dangerStatus.message}
-            </p>
           </div>
 
-          <div className={`mt-5 rounded-2xl border p-4 ${dangerStatus.classes}`}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/20"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="flex items-center gap-4">
+            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${statusTheme.iconWrap}`}>
+              {isSafe ? (
+                <svg
+                  viewBox="0 0 24 24"
+                  className={`h-7 w-7 ${statusTheme.iconColor}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              ) : (
+                <svg
+                  viewBox="0 0 24 24"
+                  className={`h-7 w-7 ${statusTheme.iconColor}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 8v5" />
+                  <path d="M12 16h.01" />
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                </svg>
+              )}
+            </div>
+
+            <div className="min-w-0">
+              <div className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusTheme.badge}`}>
+                {statusTheme.title}
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {dangerStatus.message}
+              </p>
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border p-4 ${statusTheme.panel}`}>
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-white/60 bg-white/70 p-3">
-                <p className="text-[11px] uppercase tracking-wide opacity-70">
+              <div className="rounded-xl border border-white/70 bg-white/80 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Distance
                 </p>
-                <p className="mt-1 text-xl font-bold">
+                <p className="mt-1 text-xl font-bold text-slate-900">
                   {distanceKm?.toFixed(2)} km
                 </p>
               </div>
 
-              <div className="rounded-xl border border-white/60 bg-white/70 p-3">
-                <p className="text-[11px] uppercase tracking-wide opacity-70">
-                  Alert Area
+              <div className="rounded-xl border border-white/70 bg-white/80 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Area
                 </p>
-                <p className="mt-1 text-sm font-semibold line-clamp-2">
+                <p className="mt-1 line-clamp-2 text-sm font-semibold text-slate-900">
                   {alertArea}
                 </p>
               </div>
             </div>
 
-            <div className="mt-3 rounded-xl border border-white/60 bg-white/70 p-3">
-              <p className="text-[11px] uppercase tracking-wide opacity-70">
-                Alert
+            <div className="mt-3 rounded-xl border border-white/70 bg-white/80 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Alert Type
               </p>
-              <p className="mt-1 text-sm font-semibold">{alertTitle}</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {alertTitle}
+              </p>
             </div>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-sm font-semibold text-slate-900">
-              What you should do
+              Recommended Action
             </p>
-            <div className="mt-2 space-y-2">
+
+            <div className="mt-3 space-y-2">
               {instructionList.map((item, index) => (
                 <div
                   key={index}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700"
+                  className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3"
                 >
-                  {item}
+                  <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white">
+                    {index + 1}
+                  </div>
+                  <p className="text-sm leading-6 text-slate-700">{item}</p>
                 </div>
               ))}
             </div>
           </div>
 
           {userCoords && (
-            <div className="mt-4 text-center text-xs text-slate-500">
-              Your location: {userCoords.lat?.toFixed(5)}, {userCoords.lng?.toFixed(5)}
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-500">
+              <span className="font-semibold text-slate-700">Your detected location:</span>{" "}
+              {userCoords.lat?.toFixed(5)}, {userCoords.lng?.toFixed(5)}
             </div>
           )}
         </div>
