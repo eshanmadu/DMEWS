@@ -467,6 +467,148 @@ function DetectResultModal({
   );
 }
 
+function RiskMeter({
+  currentReading = 0,
+  threshold = 70,
+  unit = "%",
+}) {
+  const safeMax = Math.max(threshold * 1.4, currentReading, 1);
+  const currentPct = Math.min((currentReading / safeMax) * 100, 100);
+  const thresholdPct = Math.min((threshold / safeMax) * 100, 100);
+
+  const status =
+    currentReading >= threshold
+      ? "danger"
+      : currentReading >= threshold * 0.8
+      ? "warning"
+      : "safe";
+
+  const statusStyles =
+    status === "danger"
+      ? {
+          pill: "bg-red-100 text-red-800 border-red-200",
+          glow: "shadow-red-200/60",
+          marker: "bg-red-600",
+        }
+      : status === "warning"
+      ? {
+          pill: "bg-amber-100 text-amber-800 border-amber-200",
+          glow: "shadow-amber-200/60",
+          marker: "bg-amber-500",
+        }
+      : {
+          pill: "bg-emerald-100 text-emerald-800 border-emerald-200",
+          glow: "shadow-emerald-200/60",
+          marker: "bg-emerald-600",
+        };
+
+  return (
+    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            Risk Meter
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Current level compared with danger threshold
+          </p>
+        </div>
+
+        <span
+          className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusStyles.pill}`}
+        >
+          {status === "danger"
+            ? "Danger zone"
+            : status === "warning"
+            ? "Near threshold"
+            : "Safe zone"}
+        </span>
+      </div>
+
+      <div className="relative">
+        <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-slate-200 text-[11px] font-semibold uppercase tracking-wide">
+        <div className="bg-emerald-500/90 py-2 text-center text-white">
+          Safe
+        </div>
+        <div className="bg-amber-500/90 py-2 text-center text-white">
+          Caution
+        </div>
+        <div className="bg-red-600 py-2 text-center text-white">
+          Danger
+        </div>
+      </div>
+
+        <div className="relative mt-3 h-5 overflow-hidden rounded-full bg-slate-200">
+          <div className="absolute inset-y-0 left-0 w-1/2 bg-emerald-400/60" />
+          <div className="absolute inset-y-0 left-1/2 w-1/4 bg-amber-400/70" />
+          <div className="absolute inset-y-0 right-0 w-1/4 bg-red-500/75" />
+
+          <div
+            className="absolute top-1/2 z-20 h-8 w-8 -translate-y-1/2 -translate-x-1/2 rounded-full border-4 border-white shadow-lg transition-all duration-700"
+            style={{ left: `${currentPct}%` }}
+          >
+            <div
+              className={`h-full w-full rounded-full ${statusStyles.marker} ${statusStyles.glow}`}
+            />
+          </div>
+
+          <div
+            className="absolute top-1/2 z-10 h-10 -translate-y-1/2 -translate-x-1/2"
+            style={{ left: `${thresholdPct}%` }}
+          >
+            <div className="flex h-full flex-col items-center">
+              
+              <div className="h-full w-0.5 bg-slate-900/80" />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">
+              Current
+            </p>
+            <p className="mt-1 text-lg font-bold text-slate-900">
+              {currentReading} {unit}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">
+              Threshold
+            </p>
+            <p className="mt-1 text-lg font-bold text-slate-900">
+              {threshold} {unit}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">
+              Difference
+            </p>
+            <p className="mt-1 text-lg font-bold text-slate-900">
+              {(currentReading - threshold).toFixed(1)} {unit}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">
+              Status
+            </p>
+            <p className="mt-1 text-lg font-bold text-slate-900">
+              {status === "danger"
+                ? "Critical"
+                : status === "warning"
+                ? "Watch"
+                : "Normal"}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AlertLiveDetailsPage() {
   const params = useParams();
   const id = params?.id;
@@ -748,17 +890,11 @@ export default function AlertLiveDetailsPage() {
                 Danger threshold: {threshold} {scene.meterUnit}
               </p>
 
-              <div className="mt-4 h-4 overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-sky-500 transition-all duration-1000"
-                  style={{
-                    width: `${Math.min(
-                      (currentReading / Math.max(threshold * 1.4, 1)) * 100,
-                      100
-                    )}%`,
-                  }}
+              <RiskMeter
+                  currentReading={currentReading}
+                  threshold={threshold}
+                  unit={scene.meterUnit}
                 />
-              </div>
 
               <p className="mt-5 text-sm leading-6 text-white">
                 {getRiskMessage(typeKey, currentReading, threshold)}

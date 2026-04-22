@@ -179,6 +179,23 @@ function AlertCard({ alert, featured = false }) {
   );
 }
 
+function extractDistrictFromArea(area = "") {
+  const text = String(area).trim();
+  if (!text) return "";
+
+  const parts = text.split(",").map((part) => part.trim()).filter(Boolean);
+
+  const districtPart = parts.find((part) =>
+    part.toLowerCase().includes("district")
+  );
+
+  if (districtPart) {
+    return districtPart.replace(/district/i, "").trim();
+  }
+
+  return parts[0] || "";
+}
+
 export default function AlertsPage() {
   const { i18n } = useTranslation();
   const si = String(i18n.language || "").startsWith("si");
@@ -249,17 +266,25 @@ export default function AlertsPage() {
   }, [alerts]);
 
   const affectedAreas = useMemo(() => {
-    return [...new Set(activeAlerts.map((a) => a?.affectedArea).filter(Boolean))];
-  }, [activeAlerts]);
+  const extractedDistricts = activeAlerts
+    .map((alert) => extractDistrictFromArea(alert?.affectedArea))
+    .filter(Boolean);
+
+  return [...new Set(extractedDistricts)];
+}, [activeAlerts]);
 
   const districtOptions = useMemo(() => {
     return [si ? "සියල්ල" : "All", ...affectedAreas];
   }, [affectedAreas]);
 
   const visibleAlerts = useMemo(() => {
-    if (districtFilter === "All" || districtFilter === "සියල්ල") return activeAlerts;
-    return activeAlerts.filter((alert) => alert?.affectedArea === districtFilter);
-  }, [activeAlerts, districtFilter]);
+  if (districtFilter === "All" || districtFilter === "සියල්ල") return activeAlerts;
+
+  return activeAlerts.filter((alert) => {
+    const district = extractDistrictFromArea(alert?.affectedArea);
+    return district.toLowerCase() === String(districtFilter).toLowerCase();
+  });
+}, [activeAlerts, districtFilter]);
 
   const highAlerts = visibleAlerts.filter((a) => a?.severity === "High");
   const otherAlerts = visibleAlerts.filter((a) => a?.severity !== "High");

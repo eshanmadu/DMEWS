@@ -8,13 +8,31 @@ import {
   getSeverityFill,
 } from "@/lib/publicAlertDistrictUtils";
 
+function extractDistrictFromArea(area = "") {
+  const text = String(area).trim();
+  if (!text) return "";
+
+  const parts = text.split(",").map((part) => part.trim()).filter(Boolean);
+
+  const districtPart = parts.find((part) =>
+    part.toLowerCase().includes("district")
+  );
+
+  if (districtPart) {
+    return districtPart.replace(/district/i, "").trim();
+  }
+
+  return parts[0] || "";
+}
+
 function buildDistrictAlertMap(alerts = []) {
   const districtMap = {};
 
   for (const alert of alerts) {
     if (!alert?.affectedArea || alert?.status !== "Active") continue;
 
-    const key = normalizeDistrictName(alert.affectedArea);
+    const districtName = extractDistrictFromArea(alert.affectedArea);
+    const key = normalizeDistrictName(districtName);
     if (!key) continue;
 
     const current = districtMap[key];

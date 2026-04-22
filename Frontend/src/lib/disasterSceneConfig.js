@@ -15,7 +15,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "m³/s",
     infoStripBg: "bg-sky-100/95",
     infoStripBorder: "border-sky-200",
-    infoStripText: "text-sky-900",
+    infoStripText: "text-white",
     tips: [
       "Move to higher ground if water levels rise.",
       "Do not walk or drive through floodwater.",
@@ -39,7 +39,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "mm/h",
     infoStripBg: "bg-amber-100/95",
     infoStripBorder: "border-amber-200",
-    infoStripText: "text-amber-900",
+    infoStripText: "text-white",
     tips: [
       "Stay away from steep slopes and unstable ground.",
       "Leave immediately if you see falling debris.",
@@ -63,7 +63,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "%",
     infoStripBg: "bg-red-100/95",
     infoStripBorder: "border-red-200",
-    infoStripText: "text-red-900",
+    infoStripText: "text-white",
     tips: [
       "Move away from smoke and follow evacuation orders.",
       "Keep exit routes clear.",
@@ -87,7 +87,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "mm",
     infoStripBg: "bg-indigo-100/95",
     infoStripBorder: "border-indigo-200",
-    infoStripText: "text-indigo-900",
+    infoStripText: "text-white",
     tips: [
       "Stay indoors and away from windows.",
       "Avoid unnecessary travel.",
@@ -111,7 +111,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "hPa",
     infoStripBg: "bg-cyan-100/95",
     infoStripBorder: "border-cyan-200",
-    infoStripText: "text-cyan-900",
+    infoStripText: "text-white",
     tips: [
       "Remain indoors and follow official evacuation guidance.",
       "Stay away from exposed coastal areas.",
@@ -159,7 +159,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "%",
     infoStripBg: "bg-yellow-100/95",
     infoStripBorder: "border-yellow-200",
-    infoStripText: "text-yellow-900",
+    infoStripText: "text-white",
     tips: [
       "Conserve water and follow restrictions.",
       "Avoid heat exposure during peak hours.",
@@ -183,7 +183,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "%",
     infoStripBg: "bg-orange-100/95",
     infoStripBorder: "border-orange-200",
-    infoStripText: "text-orange-900",
+    infoStripText: "text-white0",
     tips: [
       "Stay hydrated and avoid direct sun exposure.",
       "Reduce outdoor activity during hottest hours.",
@@ -207,7 +207,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "µm/s",
     infoStripBg: "bg-stone-100/95",
     infoStripBorder: "border-stone-200",
-    infoStripText: "text-stone-900",
+    infoStripText: "text-white",
     tips: [
       "Stay away from damaged buildings.",
       "Be prepared for aftershocks.",
@@ -231,7 +231,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "µm/s",
     infoStripBg: "bg-zinc-100/95",
     infoStripBorder: "border-zinc-200",
-    infoStripText: "text-zinc-900",
+    infoStripText: "text-white",
     tips: [
       "Avoid ash-affected zones.",
       "Use face covering if ash is present.",
@@ -255,7 +255,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "°C",
     infoStripBg: "bg-slate-100/95",
     infoStripBorder: "border-slate-200",
-    infoStripText: "text-slate-900",
+    infoStripText: "text-white",
     tips: [
       "Avoid travel unless essential.",
       "Stay indoors and protect against extreme cold.",
@@ -279,7 +279,7 @@ export const disasterSceneConfig = {
     secondaryUnit: "",
     infoStripBg: "bg-slate-100/95",
     infoStripBorder: "border-slate-200",
-    infoStripText: "text-slate-900",
+    infoStripText: "text-white",
     tips: [
       "Follow official instructions carefully.",
       "Stay informed using trusted updates.",
