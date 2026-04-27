@@ -32,9 +32,20 @@ import {
 import { formatLkCityLabel } from "@/lib/lkLocations";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const NAME_RE = /^[A-Za-z]+(?:\s+[A-Za-z]+)*$/;
 
 // -------------------- Reusable Components --------------------
-function InputField({ icon: Icon, label, type = "text", value, onChange, placeholder, required, minLength }) {
+function InputField({
+  icon: Icon,
+  label,
+  type = "text",
+  value,
+  onChange,
+  placeholder,
+  required,
+  minLength,
+  readOnly = false,
+}) {
   return (
     <div className="space-y-1.5">
       <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</label>
@@ -45,10 +56,11 @@ function InputField({ icon: Icon, label, type = "text", value, onChange, placeho
         <input
           type={type}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange?.(e.target.value)}
           placeholder={placeholder}
           required={required}
           minLength={minLength}
+          readOnly={readOnly}
           className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
         />
       </div>
@@ -216,7 +228,7 @@ export default function ProfilePage() {
   }, [citiesList, city, cityLatitude]);
 
   // Handlers unchanged
-  async function handleProfileSubmit(e) { /* same as before */ e.preventDefault(); setProfileMsg(null); setProfileSuccess(null); const token = localStorage.getItem("dmews_token"); if (!token) { router.replace("/login"); return; } setProfileSaving(true); try { const res = await fetch(`${API_BASE}/auth/profile`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ name, email, mobile, district, city, cityLatitude, cityLongitude, avatar }) }); const data = await res.json(); if (!res.ok) { setProfileMsg(data?.message || t("profilePage.errors.updateProfile")); return; } if (data.token) localStorage.setItem("dmews_token", data.token); if (data.user) { localStorage.setItem("dmews_user", JSON.stringify(data.user)); if (data.user.district) localStorage.setItem("dmews_user_district", data.user.district); setProfile(data.user); setCity(data.user.city || ""); setCityLatitude(typeof data.user.cityLatitude === "number" ? data.user.cityLatitude : null); setCityLongitude(typeof data.user.cityLongitude === "number" ? data.user.cityLongitude : null); } setProfileSuccess(t("profilePage.success.profileUpdated")); window.dispatchEvent(new Event("dmews-auth-changed")); } catch { setProfileMsg(t("profilePage.errors.network")); } finally { setProfileSaving(false); } }
+  async function handleProfileSubmit(e) { /* same as before */ e.preventDefault(); setProfileMsg(null); setProfileSuccess(null); const trimmedName = String(name || "").trim(); if (!NAME_RE.test(trimmedName)) { setProfileMsg("Name must contain letters only."); return; } const token = localStorage.getItem("dmews_token"); if (!token) { router.replace("/login"); return; } setProfileSaving(true); try { const res = await fetch(`${API_BASE}/auth/profile`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ name: trimmedName, mobile, district, city, cityLatitude, cityLongitude, avatar }) }); const data = await res.json(); if (!res.ok) { setProfileMsg(data?.message || t("profilePage.errors.updateProfile")); return; } if (data.token) localStorage.setItem("dmews_token", data.token); if (data.user) { localStorage.setItem("dmews_user", JSON.stringify(data.user)); if (data.user.district) localStorage.setItem("dmews_user_district", data.user.district); setProfile(data.user); setName(data.user.name || ""); setEmail(data.user.email || ""); setCity(data.user.city || ""); setCityLatitude(typeof data.user.cityLatitude === "number" ? data.user.cityLatitude : null); setCityLongitude(typeof data.user.cityLongitude === "number" ? data.user.cityLongitude : null); } setProfileSuccess(t("profilePage.success.profileUpdated")); window.dispatchEvent(new Event("dmews-auth-changed")); } catch { setProfileMsg(t("profilePage.errors.network")); } finally { setProfileSaving(false); } }
   async function handlePasswordSubmit(e) { /* same */ e.preventDefault(); setPasswordMsg(null); setPasswordSuccess(null); if (newPassword !== confirmNewPassword) { setPasswordMsg(t("profilePage.errors.passwordMismatch")); return; } if (newPassword.length < 6) { setPasswordMsg(t("profilePage.errors.passwordTooShort")); return; } const token = localStorage.getItem("dmews_token"); if (!token) { router.replace("/login"); return; } setPasswordSaving(true); try { const res = await fetch(`${API_BASE}/auth/change-password`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ currentPassword, newPassword }) }); const data = await res.json(); if (!res.ok) { setPasswordMsg(data?.message || t("profilePage.errors.changePassword")); return; } setPasswordSuccess(t("profilePage.success.passwordUpdated")); setCurrentPassword(""); setNewPassword(""); setConfirmNewPassword(""); } catch { setPasswordMsg(t("profilePage.errors.network")); } finally { setPasswordSaving(false); } }
   async function handleLeaveVolunteer() { /* same */ const token = localStorage.getItem("dmews_token"); if (!token) { router.replace("/login"); return; } setVolunteerErr(null); setVolunteerMsg(null); setLeavingVolunteer(true); try { const res = await fetch(`${API_BASE}/volunteers/me`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }); const data = await res.json().catch(() => ({})); if (!res.ok) { setVolunteerErr(data?.message || t("profilePage.errors.leaveVolunteer")); return; } const nextProfile = { ...(profile || {}), volunteerStatus: null }; setProfile(nextProfile); try { const raw = localStorage.getItem("dmews_user"); const parsed = raw ? JSON.parse(raw) : {}; localStorage.setItem("dmews_user", JSON.stringify({ ...parsed, volunteerStatus: null })); } catch {} window.dispatchEvent(new Event("dmews-auth-changed")); setVolunteerMsg(data?.message || t("profilePage.success.leftVolunteer")); } catch { setVolunteerErr(t("profilePage.errors.network")); } finally { setLeavingVolunteer(false); } }
   async function handleDeleteAccount() { /* same */ const token = localStorage.getItem("dmews_token"); if (!token) { router.replace("/login"); return; } setDeleteAccountErr(null); setDeleteAccountBusy(true); try { const res = await fetch(`${API_BASE}/auth/account`, { method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(accountHasPassword ? { currentPassword: deleteAccountPassword } : {}) }); const data = await res.json().catch(() => ({})); if (!res.ok) { setDeleteAccountErr(data?.message || t("profilePage.errors.deleteAccount")); return; } localStorage.removeItem("dmews_token"); localStorage.removeItem("dmews_user"); localStorage.removeItem("dmews_user_district"); window.dispatchEvent(new Event("dmews-auth-changed")); router.replace("/login?deleted=1"); } catch { setDeleteAccountErr(t("profilePage.errors.network")); } finally { setDeleteAccountBusy(false); } }
@@ -248,6 +260,7 @@ export default function ProfilePage() {
 
   const districtOptions = districtsList.map(d => ({ id: d.id, label: d.name_en }));
   const cityOptions = citiesList.map(c => ({ id: c.id, label: formatLkCityLabel(c) }));
+  const nameValid = NAME_RE.test(String(name || "").trim());
 
   return (
     <div className="min-h-screen bg-slate-50/50">
@@ -373,9 +386,14 @@ export default function ProfilePage() {
                     <form onSubmit={handleProfileSubmit} className="space-y-5">
                       <div className="grid gap-5 sm:grid-cols-2">
                         <InputField icon={User} label={t("profilePage.fields.fullName")} value={name} onChange={setName} placeholder={t("profilePage.fields.fullNamePlaceholder")} />
-                        <InputField icon={Mail} label={t("profilePage.fields.emailAddress")} type="email" required value={email} onChange={setEmail} placeholder="you@example.com" />
+                        <InputField icon={Mail} label={t("profilePage.fields.emailAddress")} type="email" required value={email} onChange={setEmail} readOnly placeholder="you@example.com" />
                         <InputField icon={Phone} label={t("profilePage.fields.mobileNumber")} type="tel" value={mobile} onChange={(v) => setMobile(v.replace(/\D/g, "").slice(0, 10))} placeholder={t("profilePage.fields.mobilePlaceholder")} />
                       </div>
+                      {name && !nameValid && (
+                        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                          Name must contain letters only.
+                        </div>
+                      )}
                       <div className="grid gap-5 sm:grid-cols-2">
                         <SelectField
                           icon={MapPin}

@@ -12,6 +12,7 @@ import {
   Heart,
   BadgeCheck,
   ChevronDown,
+  Globe,
 } from "lucide-react";
 import Image from "next/image";
 import clsx from "clsx";
@@ -19,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { avatarSrcById } from "@/lib/avatars";
 import { useTranslation } from "react-i18next";
 import i18n from "@/lib/i18n";
+import { GB, LK } from "country-flag-icons/react/3x2";
 
 const linkKeys = [
   { href: "/", key: "dashboard", icon: LayoutDashboard },
@@ -41,6 +43,9 @@ export function Nav() {
   const [volunteerDropdownOpen, setVolunteerDropdownOpen] = useState(false);
   const volunteerDropdownRef = useRef(null);
   const volunteerCloseTimeoutRef = useRef(null);
+  const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
+  const languageDropdownRef = useRef(null);
+  const languageCloseTimeoutRef = useRef(null);
 
   const dropdownItems = [
     { href: "/incidents/missing-persons", label: t("nav.findPeople", "Find People") },
@@ -71,6 +76,12 @@ export function Nav() {
         !volunteerDropdownRef.current.contains(event.target)
       ) {
         setVolunteerDropdownOpen(false);
+      }
+      if (
+        languageDropdownRef.current &&
+        !languageDropdownRef.current.contains(event.target)
+      ) {
+        setLanguageDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -107,11 +118,24 @@ export function Nav() {
     if (volunteerCloseTimeoutRef.current)
       clearTimeout(volunteerCloseTimeoutRef.current);
   };
+  const openLanguageDropdown = () => {
+    if (languageCloseTimeoutRef.current) clearTimeout(languageCloseTimeoutRef.current);
+    setLanguageDropdownOpen(true);
+  };
+  const closeLanguageDropdownWithDelay = () => {
+    languageCloseTimeoutRef.current = setTimeout(() => {
+      setLanguageDropdownOpen(false);
+    }, 150);
+  };
+  const cancelLanguageClose = () => {
+    if (languageCloseTimeoutRef.current) clearTimeout(languageCloseTimeoutRef.current);
+  };
 
   const isIncidentsActive = dropdownItems.some((item) => pathname === item.href);
   const isVolunteerActive = volunteerDropdownItems.some(
     (item) => pathname === item.href
   );
+  const currentLang = i18n.language === "si" ? "si" : "en";
 
   // Language enforcement for admin routes
   useEffect(() => {
@@ -191,6 +215,14 @@ export function Nav() {
     setSession({ token: null, user: null, role: null });
     window.dispatchEvent(new Event("dmews-auth-changed"));
     router.push("/login");
+  }
+  function setLang(code) {
+    const normalized = code === "si" ? "si" : "en";
+    i18n.changeLanguage(normalized);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("dmews_lang", normalized);
+    }
+    setLanguageDropdownOpen(false);
   }
 
   const isLoggedIn = Boolean(session?.token);
@@ -427,6 +459,70 @@ export function Nav() {
                   {t("nav.logout")}
                 </button>
               </>
+            )}
+            {!isAdminRoute && (
+              <div
+                ref={languageDropdownRef}
+                className="relative"
+                onMouseEnter={openLanguageDropdown}
+                onMouseLeave={closeLanguageDropdownWithDelay}
+              >
+                <button
+                  type="button"
+                  onClick={() => setLanguageDropdownOpen((prev) => !prev)}
+                  className={clsx(
+                    "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition",
+                    languageDropdownOpen
+                      ? "bg-white/15 text-white shadow-sm"
+                      : "text-sky-100/80 hover:bg-sky-500/40 hover:text-white"
+                  )}
+                  aria-expanded={languageDropdownOpen}
+                  aria-haspopup="true"
+                  aria-label="Language"
+                >
+                  <Globe className="h-4 w-4" />
+                  <ChevronDown
+                    className={clsx(
+                      "h-3 w-3 transition-transform duration-200",
+                      languageDropdownOpen && "rotate-180"
+                    )}
+                  />
+                </button>
+                {languageDropdownOpen && (
+                  <div
+                    className="absolute right-0 mt-2 min-w-[155px] rounded-md bg-white py-1 shadow-lg ring-1 ring-black/5"
+                    onMouseEnter={cancelLanguageClose}
+                    onMouseLeave={closeLanguageDropdownWithDelay}
+                    role="menu"
+                    aria-orientation="vertical"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setLang("en")}
+                      className={clsx(
+                        "flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100",
+                        currentLang === "en" && "bg-gray-100 font-medium"
+                      )}
+                      role="menuitem"
+                    >
+                      <GB className="h-4 w-5" />
+                      English
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLang("si")}
+                      className={clsx(
+                        "flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100",
+                        currentLang === "si" && "bg-gray-100 font-medium"
+                      )}
+                      role="menuitem"
+                    >
+                      <LK className="h-4 w-5" />
+                      සිංහල
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </nav>

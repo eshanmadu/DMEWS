@@ -1,8 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   FileWarning,
@@ -11,8 +9,6 @@ import {
   Mail,
   Shield,
   Building2,
-  Globe,
-  ChevronDown,
   Facebook,
   Twitter,
   Instagram,
@@ -20,8 +16,6 @@ import {
   LifeBuoy,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import i18n from "@/lib/i18n";
-import { GB, LK } from "country-flag-icons/react/3x2";
 
 const quickLinks = [
   {
@@ -69,80 +63,8 @@ const socialLinks = [
   },
 ];
 
-function FooterLanguageSwitch() {
-  const { t, i18n: i18nInstance } = useTranslation();
-  const current = i18nInstance.language === "si" ? "si" : "en";
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  function setLang(code) {
-    const normalized = code === "si" ? "si" : "en";
-    i18n.changeLanguage(normalized);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("dmews_lang", normalized);
-    }
-    setIsOpen(false);
-  }
-
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-lg border border-sky-600/50 bg-sky-900/40 px-3 py-1.5 text-sm font-medium text-sky-200 transition hover:border-sky-500 hover:bg-sky-800/50"
-        aria-expanded={isOpen}
-        aria-haspopup="true"
-      >
-        <Globe className="h-4 w-4" />
-        <span>{current === "en" ? "English" : "සිංහල"}</span>
-        <ChevronDown className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-      {isOpen && (
-        <div className="absolute bottom-full right-0 mb-2 min-w-[140px] rounded-lg border border-sky-700/50 bg-sky-900/95 shadow-lg backdrop-blur-sm z-20">
-          <button
-            onClick={() => setLang("en")}
-            className={`flex w-full items-center gap-2 px-3 py-2 text-sm ${
-              current === "en"
-                ? "bg-amber-500/20 text-amber-200"
-                : "text-sky-200 hover:bg-sky-800/70"
-            }`}
-            role="menuitem"
-          >
-            <GB className="h-4 w-5" />
-            English
-          </button>
-          <button
-            onClick={() => setLang("si")}
-            className={`flex w-full items-center gap-2 px-3 py-2 text-sm ${
-              current === "si"
-                ? "bg-amber-500/20 text-amber-200"
-                : "text-sky-200 hover:bg-sky-800/70"
-            }`}
-            role="menuitem"
-          >
-            <LK className="h-4 w-5" />
-            සිංහල
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function Footer() {
   const { t } = useTranslation();
-  const pathname = usePathname();
-  const isAdminRoute = pathname?.startsWith("/admin");
   const year = new Date().getFullYear();
 
   const brandDesc = t("footer.brandDesc");
@@ -268,11 +190,6 @@ export function Footer() {
           <p className="order-2 text-center text-xs text-sky-300/80 lg:order-1 lg:text-left">
             {footerBottomText}
           </p>
-          {!isAdminRoute && (
-            <div className="order-1 w-full lg:order-2 lg:w-auto">
-              <FooterLanguageSwitch />
-            </div>
-          )}
           <div className="order-3 flex items-center gap-6 text-xs">
             <Link
               href="/login"

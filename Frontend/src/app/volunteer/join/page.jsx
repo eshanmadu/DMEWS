@@ -38,6 +38,12 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function isValidNic(value) {
+  const nic = String(value || "").trim();
+  if (!nic) return true;
+  return /^\d{1,12}$/.test(nic);
+}
+
 export default function VolunteerJoinPage() {
   const { t } = useTranslation();
 
@@ -83,6 +89,8 @@ export default function VolunteerJoinPage() {
         if (form.dateOfBirth >= DOB_CUTOFF)
           return "Date of birth must be before 2016-01-01.";
         if (!form.gender) return "Gender is required.";
+        if (!isValidNic(form.nicIdNumber))
+          return "NIC / ID number must contain digits only and be at most 12 digits.";
         if (!form.phoneNumber.trim()) return "Phone number is required.";
         if (!isValidTenDigitPhone(form.phoneNumber))
           return "Phone number must have exactly 10 digits.";
@@ -463,9 +471,12 @@ export default function VolunteerJoinPage() {
                           <input
                             required
                             value={form.fullName}
-                            onChange={(e) => setField("fullName", e.target.value)}
-                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                            readOnly
+                            className="w-full rounded-xl border border-slate-300 bg-slate-100 px-4 py-2.5 text-sm text-slate-700"
                           />
+                          <p className="mt-1 text-xs text-slate-500">
+                            Name is taken from your profile and cannot be edited here.
+                          </p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -508,9 +519,20 @@ export default function VolunteerJoinPage() {
                           </label>
                           <input
                             value={form.nicIdNumber}
-                            onChange={(e) => setField("nicIdNumber", e.target.value)}
+                            onChange={(e) =>
+                              setField(
+                                "nicIdNumber",
+                                e.target.value.replace(/\D/g, "").slice(0, 12)
+                              )
+                            }
+                            inputMode="numeric"
+                            maxLength={12}
+                            placeholder="Maximum 12 digits"
                             className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
                           />
+                          <p className="mt-1 text-xs text-slate-500">
+                            Enter digits only (up to 12).
+                          </p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -538,10 +560,13 @@ export default function VolunteerJoinPage() {
                             required
                             type="email"
                             value={form.emailAddress}
-                            onChange={(e) => setField("emailAddress", e.target.value)}
+                            readOnly
                             placeholder="name@email.com"
-                            className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"
+                            className="w-full rounded-xl border border-slate-300 bg-slate-100 px-4 py-2.5 text-sm text-slate-700"
                           />
+                          <p className="mt-1 text-xs text-slate-500">
+                            Email is taken from your account and cannot be edited here.
+                          </p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">

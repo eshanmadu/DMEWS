@@ -15,6 +15,7 @@ const PENDING_TOKEN_KEY = "dmews_pending_token";
 const PENDING_USER_KEY = "dmews_pending_user";
 
 const BASIC_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const NAME_RE = /^[A-Za-z]+(?:\s+[A-Za-z]+)*$/;
 
 // Modern validation indicator — subtle, animated, integrated
 function ValidIndicator() {
@@ -42,7 +43,7 @@ function ValidIndicator() {
   );
 }
 
-function FieldWrap({ children, valid }) {
+function FieldWrap({ children, valid, showIndicator = true }) {
   // Clone child to add valid-specific styling
   const enhancedChild = valid
     ? React.cloneElement(children, {
@@ -56,7 +57,7 @@ function FieldWrap({ children, valid }) {
   return (
     <div className="relative">
       {enhancedChild}
-      {valid ? <ValidIndicator /> : null}
+      {valid && showIndicator ? <ValidIndicator /> : null}
     </div>
   );
 }
@@ -109,8 +110,10 @@ export default function SignupPage() {
   }, [avatars, avatar]);
 
   const mobileDigits = mobile.replace(/\D/g, "");
+  const trimmedName = (name || "").trim();
+  const nameIsValid = NAME_RE.test(trimmedName);
   const emailValid = {
-    name: ((name || "").match(/\S/g) || []).length >= 2,
+    name: nameIsValid,
     email: BASIC_EMAIL_RE.test((email || "").trim()),
     mobile: mobileDigits.length >= 9,
     password: (password || "").length >= 6,
@@ -119,6 +122,20 @@ export default function SignupPage() {
     district: Boolean(districtId),
     city: Boolean(cityRowId),
   };
+  const passwordStrength = useMemo(() => {
+    if (!password) return { label: "", level: 0, color: "bg-slate-200" };
+
+    let score = 0;
+    if (password.length >= 6) score += 1;
+    if (password.length >= 10) score += 1;
+    if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score += 1;
+    if (/\d/.test(password)) score += 1;
+    if (/[^A-Za-z0-9]/.test(password)) score += 1;
+
+    if (score <= 2) return { label: "Weak", level: 1, color: "bg-red-500" };
+    if (score <= 4) return { label: "Moderate", level: 2, color: "bg-amber-500" };
+    return { label: "Strong", level: 3, color: "bg-emerald-500" };
+  }, [password]);
   const googleValid = {
     district: Boolean(districtId),
     city: Boolean(cityRowId),
@@ -389,6 +406,11 @@ export default function SignupPage() {
   async function handleEmailSubmit(e) {
     e.preventDefault();
     setError(null);
+
+    if (!nameIsValid) {
+      setError("Name is required and can contain letters only.");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError(t("signupPage.passwordMismatch"));
@@ -924,12 +946,18 @@ export default function SignupPage() {
                     <FieldWrap valid={emailValid.name}>
                       <input
                         type="text"
+                        required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className="mt-1 w-full rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-10 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/60"
                         placeholder={t("signupPage.namePlaceholder")}
                       />
                     </FieldWrap>
+                    {name && !emailValid.name && (
+                      <p className="mt-1 text-xs text-red-600">
+                        Name must contain letters only.
+                      </p>
+                    )}
                   </div>
 
                   {/* District & city */}
@@ -1060,7 +1088,7 @@ export default function SignupPage() {
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                       {t("signupPage.password")}
                     </label>
-                    <FieldWrap valid={emailValid.password}>
+                    <FieldWrap valid={emailValid.password} showIndicator={false}>
                       <input
                         type="password"
                         required
@@ -1071,6 +1099,26 @@ export default function SignupPage() {
                         placeholder={t("signupPage.passwordPlaceholder")}
                       />
                     </FieldWrap>
+                    {password && (
+                      <div className="mt-2">
+                        <div className="h-1.5 w-full rounded-full bg-slate-200">
+                          <div
+                            className={`h-1.5 rounded-full transition-all duration-200 ${passwordStrength.color}`}
+                            style={{
+                              width:
+                                passwordStrength.level === 1
+                                  ? "33%"
+                                  : passwordStrength.level === 2
+                                    ? "66%"
+                                    : "100%",
+                            }}
+                          />
+                        </div>
+                        <p className="mt-1 text-[11px] font-medium text-slate-600">
+                          Strength: {passwordStrength.label}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Confirm Password */}
@@ -1078,7 +1126,7 @@ export default function SignupPage() {
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                       {t("signupPage.confirmPassword")}
                     </label>
-                    <FieldWrap valid={emailValid.confirmPassword}>
+                    <FieldWrap valid={emailValid.confirmPassword} showIndicator={false}>
                       <input
                         type="password"
                         required
