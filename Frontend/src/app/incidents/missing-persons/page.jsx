@@ -25,6 +25,12 @@ import {
   Loader2,
   Camera,
   ArrowRight,
+  Baby,
+  Users,
+  Crown,
+  Layers,
+  Search,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import { MatchScoreBreakdown } from "@/components/MatchScoreBreakdown";
@@ -125,6 +131,14 @@ function sanitizeAgeInput(value) {
   return String(Math.min(120, Number(digitsOnly)));
 }
 
+function getAgeCategory(age) {
+  const n = Number(age);
+  if (Number.isNaN(n) || n < 0) return null;
+  if (n <= 12) return "kids";
+  if (n <= 59) return "adults";
+  return "seniors";
+}
+
 export default function MissingPersonsPage() {
   const { i18n } = useTranslation();
   const si = String(i18n.language || "").startsWith("si");
@@ -167,6 +181,10 @@ export default function MissingPersonsPage() {
 
   const [successMsg, setSuccessMsg] = useState(null);
   const [submitError, setSubmitError] = useState(null);
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [genderFilter, setGenderFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [submittingMissing, setSubmittingMissing] = useState(false);
   const [submittingFound, setSubmittingFound] = useState(false);
   const [missingEdit, setMissingEdit] = useState(null);
@@ -727,6 +745,99 @@ export default function MissingPersonsPage() {
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
+  const matchesSharedFilters = useCallback(
+    (person, type) => {
+      const ageCategory = getAgeCategory(person.age);
+      if (activeCategory !== "all" && ageCategory !== activeCategory) return false;
+
+      if (genderFilter !== "all") {
+        if ((person.gender || "").toLowerCase() !== genderFilter.toLowerCase()) return false;
+      }
+
+      if (statusFilter !== "all") {
+        if (statusFilter === "missing" && type !== "missing") return false;
+        if (statusFilter === "found" && type !== "found") return false;
+      }
+
+      if (normalizedQuery) {
+        const nameField = type === "missing" ? person.fullName : person.name;
+        if (!String(nameField || "").toLowerCase().includes(normalizedQuery)) return false;
+      }
+      return true;
+    },
+    [activeCategory, genderFilter, statusFilter, normalizedQuery]
+  );
+
+  const sortByRecent = (a, b, aDate, bDate) => {
+    const d1 = new Date(a[aDate]).getTime();
+    const d2 = new Date(b[bDate]).getTime();
+    return (Number.isNaN(d2) ? 0 : d2) - (Number.isNaN(d1) ? 0 : d1);
+  };
+
+  const filteredMissingPersons = missingPersons
+    .filter((p) => matchesSharedFilters(p, "missing"))
+    .sort((a, b) => sortByRecent(a, b, "dateMissing", "dateMissing"));
+
+  const filteredFoundPersons = foundPersons
+    .filter((p) => matchesSharedFilters(p, "found"))
+    .sort((a, b) => sortByRecent(a, b, "dateFound", "dateFound"));
+
+  const categoryCards = [
+    {
+      key: "kids",
+      label: "Kids (0-12)",
+      icon: Baby,
+      toneClass: "from-amber-400/20 via-amber-200/40 to-white",
+      borderClass: "border-amber-200/80",
+      iconClass: "bg-amber-500 text-white",
+      glowClass: "shadow-amber-200/70",
+    },
+    {
+      key: "adults",
+      label: "Adults (13-59)",
+      icon: Users,
+      toneClass: "from-sky-400/20 via-cyan-200/40 to-white",
+      borderClass: "border-sky-200/80",
+      iconClass: "bg-sky-500 text-white",
+      glowClass: "shadow-sky-200/70",
+    },
+    {
+      key: "seniors",
+      label: "Seniors (60+)",
+      icon: Crown,
+      toneClass: "from-violet-400/20 via-fuchsia-200/40 to-white",
+      borderClass: "border-violet-200/80",
+      iconClass: "bg-violet-500 text-white",
+      glowClass: "shadow-violet-200/70",
+    },
+    {
+      key: "all",
+      label: "All Categories",
+      icon: Layers,
+      toneClass: "from-slate-300/25 via-slate-100/50 to-white",
+      borderClass: "border-slate-200/90",
+      iconClass: "bg-slate-700 text-white",
+      glowClass: "shadow-slate-200/80",
+    },
+  ];
+
+  const categoryCounts = categoryCards.reduce((acc, cat) => {
+    if (cat.key === "all") {
+      acc[cat.key] = {
+        missing: missingPersons.length,
+        found: foundPersons.length,
+      };
+      return acc;
+    }
+    acc[cat.key] = {
+      missing: missingPersons.filter((p) => getAgeCategory(p.age) === cat.key).length,
+      found: foundPersons.filter((p) => getAgeCategory(p.age) === cat.key).length,
+    };
+    return acc;
+  }, {});
+
   return (
     <div className="min-h-[calc(100vh-4rem)]">
       <section
@@ -881,6 +992,14 @@ export default function MissingPersonsPage() {
                   />
                 </div>
                 {missingErrors.age && <p className="mt-1 text-xs text-rose-600">{missingErrors.age}</p>}
+                <p className="mt-1 text-xs font-medium text-rose-700">
+                  Category:{" "}
+                  {{
+                    kids: "Kid (0-12)",
+                    adults: "Adult (13-59)",
+                    seniors: "Senior (60+)",
+                  }[getAgeCategory(missingForm.age)] || "Select age to auto-categorize"}
+                </p>
               </div>
 
               {/* Gender */}
@@ -1115,6 +1234,14 @@ export default function MissingPersonsPage() {
                   />
                 </div>
                 {foundErrors.age && <p className="mt-1 text-xs text-rose-600">{foundErrors.age}</p>}
+                <p className="mt-1 text-xs font-medium text-emerald-700">
+                  Category:{" "}
+                  {{
+                    kids: "Kid (0-12)",
+                    adults: "Adult (13-59)",
+                    seniors: "Senior (60+)",
+                  }[getAgeCategory(foundForm.age)] || "Add age to auto-categorize"}
+                </p>
               </div>
 
               {/* Location Found */}
@@ -1269,7 +1396,110 @@ export default function MissingPersonsPage() {
         </div>
       )}
 
-      {/* Lists of Missing and Found People - unchanged */}
+      <section className="mt-10 space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-slate-500" />
+            <h2 className="text-lg font-semibold text-slate-900">Category-Based Navigation</h2>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
+            Select a group
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {categoryCards.map((cat) => {
+            const Icon = cat.icon;
+            const counts = categoryCounts[cat.key] || { missing: 0, found: 0 };
+            const active = activeCategory === cat.key;
+            return (
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() => setActiveCategory(cat.key)}
+                className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-4 text-left text-slate-900 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${cat.toneClass} ${cat.borderClass} ${
+                  active ? `ring-2 ring-indigo-500 ${cat.glowClass} shadow-lg` : "ring-1 ring-transparent"
+                }`}
+              >
+                <div className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-white/40 blur-2xl" />
+                <div className="relative flex items-center justify-between">
+                  <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl shadow-md ${cat.iconClass}`}>
+                    <Icon className="h-5 w-5 drop-shadow-sm" />
+                  </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                      active ? "bg-indigo-600 text-white" : "bg-white/80 text-slate-600"
+                    }`}
+                  >
+                    {active ? "Active" : "Open"}
+                  </span>
+                </div>
+                <p className="relative mt-3 text-sm font-semibold">{cat.label}</p>
+                <div className="relative mt-3 grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-white/70 bg-white/70 px-2 py-1.5">
+                    <p className="text-[11px] text-slate-500">Missing</p>
+                    <p className="text-sm font-semibold">{counts.missing}</p>
+                  </div>
+                  <div className="rounded-lg border border-white/70 bg-white/70 px-2 py-1.5">
+                    <p className="text-[11px] text-slate-500">Found</p>
+                    <p className="text-sm font-semibold">{counts.found}</p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+          <Search className="h-4 w-4" />
+          Smart Filtering System
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <label className="space-y-1 text-sm">
+            <span className="text-xs font-medium text-slate-600">Search (name)</span>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by name..."
+                className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-100"
+              />
+            </div>
+          </label>
+
+          <label className="space-y-1 text-sm">
+            <span className="text-xs font-medium text-slate-600">Gender filter</span>
+            <select
+              value={genderFilter}
+              onChange={(e) => setGenderFilter(e.target.value)}
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-100"
+            >
+              <option value="all">All genders</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="non-binary">Non-binary</option>
+            </select>
+          </label>
+
+          <label className="space-y-1 text-sm">
+            <span className="text-xs font-medium text-slate-600">Status</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-100"
+            >
+              <option value="all">All statuses</option>
+              <option value="missing">Missing</option>
+              <option value="found">Found</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      {/* Lists of Missing and Found People */}
       <div
         id="missing-persons-reports"
         className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-2"
@@ -1279,7 +1509,7 @@ export default function MissingPersonsPage() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-xl font-semibold text-slate-800">
               <UserSearch className="h-5 w-5 text-rose-600" />
-              {tr("Missing people", "අතුරුදහන් පුද්ගලයින්")} ({missingPersons.length})
+              {tr("Missing people", "අතුරුදහන් පුද්ගලයින්")} ({filteredMissingPersons.length})
             </h2>
           </div>
           {listLoading ? (
@@ -1288,13 +1518,13 @@ export default function MissingPersonsPage() {
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-center text-amber-900">
               {listError}
             </div>
-          ) : missingPersons.length === 0 ? (
+          ) : filteredMissingPersons.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
-              {tr('No missing person reports yet. Click "Report Missing Person" to add one.', 'තවම අතුරුදහන් පුද්ගල වාර්තා නොමැත. එක් කිරීමට "අතුරුදහන් වාර්තා කරන්න" ඔබන්න.')}
+              No missing person reports match the selected filters.
             </div>
           ) : (
             <div className="space-y-4">
-              {missingPersons.map((person) => (
+              {filteredMissingPersons.map((person) => (
                 <div key={person.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex gap-3">
                     <PersonPhotoThumb photoUrl={person.photoUrl} className="h-24 w-24" />
@@ -1372,7 +1602,7 @@ export default function MissingPersonsPage() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-xl font-semibold text-slate-800">
               <UserCheck className="h-5 w-5 text-emerald-600" />
-              {tr("Found people", "හමුවූ පුද්ගලයින්")} ({foundPersons.length})
+              {tr("Found people", "හමුවූ පුද්ගලයින්")} ({filteredFoundPersons.length})
             </h2>
           </div>
           {listLoading ? (
@@ -1381,13 +1611,13 @@ export default function MissingPersonsPage() {
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-center text-amber-900">
               {listError}
             </div>
-          ) : foundPersons.length === 0 ? (
+          ) : filteredFoundPersons.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
-              {tr('No found person reports yet. Click "Report Found Person" to add one.', 'තවම හමුවූ පුද්ගල වාර්තා නොමැත. එක් කිරීමට "හමු වූ පුද්ගලයා වාර්තා කරන්න" ඔබන්න.')}
+              No found person reports match the selected filters.
             </div>
           ) : (
             <div className="space-y-4">
-              {foundPersons.map((person) => (
+              {filteredFoundPersons.map((person) => (
                 <div key={person.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex gap-3">
                     <PersonPhotoThumb photoUrl={person.photoUrl} className="h-24 w-24" />
