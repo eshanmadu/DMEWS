@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Package,
   Pill,
@@ -58,14 +59,19 @@ const RESOURCE_TYPES = [
     examples: "Bottled water, purification tablets, refill containers",
   },
 ];
+const OTHER_RESOURCE_ID = "other";
 
 export default function ResourcesPage() {
+  const { i18n } = useTranslation();
+  const si = String(i18n.language || "").startsWith("si");
+  const tr = (en, siText) => (si ? siText : en);
   const [form, setForm] = useState({
     name: "",
     email: "",
     phone: "",
     district: "",
-    resourceType: "dry-food",
+    resourceTypes: ["dry-food"],
+    otherResource: "",
     quantity: "",
     availableDate: "",
     canTransport: false,
@@ -79,9 +85,9 @@ export default function ResourcesPage() {
   const [submitError, setSubmitError] = useState("");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  const selectedResource = useMemo(
-    () => RESOURCE_TYPES.find((r) => r.id === form.resourceType) || RESOURCE_TYPES[0],
-    [form.resourceType]
+  const selectedResources = useMemo(
+    () => RESOURCE_TYPES.filter((r) => (form.resourceTypes || []).includes(r.id)),
+    [form.resourceTypes]
   );
 
   const estimatedFamilies = useMemo(() => {
@@ -100,6 +106,18 @@ export default function ResourcesPage() {
     setSubmitted(false);
     setSubmitError("");
     setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function toggleResourceType(resourceId, checked) {
+    setSubmitted(false);
+    setSubmitError("");
+    setForm((prev) => {
+      const current = Array.isArray(prev.resourceTypes) ? prev.resourceTypes : [];
+      const next = checked
+        ? Array.from(new Set([...current, resourceId]))
+        : current.filter((id) => id !== resourceId);
+      return { ...prev, resourceTypes: next };
+    });
   }
 
   useEffect(() => {
@@ -160,34 +178,46 @@ export default function ResourcesPage() {
     e.preventDefault();
     const phoneDigits = normalizePhoneDigits(form.phone);
     if (phoneDigits.length !== 10) {
-      setSubmitError("Phone number must have exactly 10 digits.");
+      setSubmitError(tr("Phone number must have exactly 10 digits.", "දුරකථන අංකයට ඉලක්කම් 10ක් නිවැරදිව තිබිය යුතුය."));
+      return;
+    }
+    const selectedTypes = Array.isArray(form.resourceTypes) ? form.resourceTypes : [];
+    if (selectedTypes.length === 0) {
+      setSubmitError(tr("Please select at least one resource type.", "අවම වශයෙන් එක් සම්පත් වර්ගයක් තෝරන්න."));
+      return;
+    }
+    if (selectedTypes.includes(OTHER_RESOURCE_ID) && !form.otherResource.trim()) {
+      setSubmitError(tr('Please describe the "Other" resource type.', '"වෙනත්" සම්පත් වර්ගය විස්තර කරන්න.'));
       return;
     }
     if (!form.availableDate) {
-      setSubmitError("Available date is required.");
+      setSubmitError(tr("Available date is required.", "ලබාදිය හැකි දිනය අනිවාර්යයි."));
       return;
     }
     if (form.availableDate < minAvailableDate) {
-      setSubmitError("Available date cannot be in the past.");
+      setSubmitError(tr("Available date cannot be in the past.", "ලබාදිය හැකි දිනය අතීත දිනයක් විය නොහැක."));
       return;
     }
     if (form.availableDate > maxAvailableDate) {
-      setSubmitError("Available date must be within the next 30 days.");
+      setSubmitError(tr("Available date must be within the next 30 days.", "ලබාදිය හැකි දිනය ඉදිරි දින 30 ඇතුළත විය යුතුය."));
       return;
     }
     if (form.deliveryMode === "pickup" && !form.pickupAddress.trim()) {
-      setSubmitError("Pickup address is required when pickup is selected.");
+      setSubmitError(tr("Pickup address is required when pickup is selected.", "Pickup තේරූ විට ලිපිනය අනිවාර්යයි."));
       return;
     }
     const token =
       typeof window !== "undefined" ? window.localStorage.getItem("dmews_token") : null;
     if (!token) {
-      setSubmitError("Please log in to submit resource participation.");
+      setSubmitError(tr("Please log in to submit resource participation.", "සම්පත් සහභාගීත්වය යැවීමට කරුණාකර පිවිසෙන්න."));
       return;
     }
     const payload = {
       ...form,
       phone: phoneDigits,
+      resourceTypes: selectedTypes,
+      resourceType: selectedTypes[0] || "",
+      otherResource: selectedTypes.includes(OTHER_RESOURCE_ID) ? form.otherResource.trim() : "",
       pickupAddress:
         form.deliveryMode === "pickup" ? form.pickupAddress.trim() : "",
     };
@@ -203,12 +233,12 @@ export default function ResourcesPage() {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          setSubmitError(data?.message || "Could not submit participation.");
+          setSubmitError(data?.message || tr("Could not submit participation.", "සහභාගීත්වය යැවීමට නොහැකි විය."));
           return;
         }
       }
     } catch {
-      setSubmitError("Network error. Please try again.");
+      setSubmitError(tr("Network error. Please try again.", "ජාල දෝෂයක්. නැවත උත්සාහ කරන්න."));
       return;
     }
     setSubmitted(true);
@@ -222,15 +252,16 @@ export default function ResourcesPage() {
           <div className="max-w-3xl">
             <p className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-sky-100">
               <Sparkles className="h-3.5 w-3.5" />
-              Community Resource Hub
+              {tr("Community Resource Hub", "ප්‍රජා සම්පත් මධ්‍යස්ථානය")}
             </p>
             <h1 className="mt-5 font-oswald text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
-              Join Community Support Programs
+              {tr("Join Community Support Programs", "ප්‍රජා සහාය වැඩසටහන් වලට එකතු වන්න")}
             </h1>
             <p className="mt-4 text-base text-sky-100/95 sm:text-lg">
-              Support relief operations by contributing dry foods, medicines,
-              clothes, water, and transport help. This page matches your
-              contribution with active district programs.
+              {tr(
+                "Support relief operations by contributing dry foods, medicines, clothes, water, and transport help. This page matches your contribution with active district programs.",
+                "වියළි ආහාර, ඖෂධ, ඇඳුම්, පිරිසිදු ජලය සහ ප්‍රවාහන සහාය ලබාදී සහන ක්‍රියාකාරකම් වලට දායක වන්න. මෙම පිටුව ඔබගේ දායකත්වය සක්‍රීය දිස්ත්‍රික් වැඩසටහන් සමඟ ගැළපේ."
+              )}
             </p>
           </div>
         </div>
@@ -241,10 +272,10 @@ export default function ResourcesPage() {
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 bg-gradient-to-r from-sky-50 to-indigo-50/50 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-800">
-                Priority Resource Streams
+                {tr("Priority Resource Streams", "ප්‍රමුඛ සම්පත් ප්‍රවාහ")}
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                Choose where your support makes the biggest impact.
+                {tr("Choose where your support makes the biggest impact.", "ඔබගේ සහාය වැඩිම බලපෑමක් ඇති කරන ස්ථානය තෝරන්න.")}
               </p>
             </div>
             <div className="grid gap-4 p-5 sm:grid-cols-2">
@@ -275,7 +306,7 @@ export default function ResourcesPage() {
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-teal-50/50 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-800">
-                Active Allocation Programs
+                {tr("Active Allocation Programs", "සක්‍රීය බෙදාහැරීමේ වැඩසටහන්")}
               </h2>
             </div>
             <div className="space-y-3 p-5">
@@ -285,7 +316,10 @@ export default function ResourcesPage() {
                 </div>
               ) : programs.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  No active allocation programs right now. Admin can add programs from the admin panel.
+                  {tr(
+                    "No active allocation programs right now. Admin can add programs from the admin panel.",
+                    "දැනට සක්‍රීය බෙදාහැරීමේ වැඩසටහන් නොමැත. පරිපාලක මණ්ඩලයෙන් වැඩසටහන් එක් කළ හැක."
+                  )}
                 </div>
               ) : (
                 programs.map((program) => (
@@ -297,13 +331,13 @@ export default function ResourcesPage() {
                     <h3 className="font-semibold text-slate-900">{program.name}</h3>
                     <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
                       <CalendarDays className="h-3.5 w-3.5" />
-                      {program.date || "Open schedule"}
+                      {program.date || tr("Open schedule", "විවෘත කාලසටහන")}
                     </span>
                   </div>
                   <p className="mt-2 text-sm text-slate-700">{program.target}</p>
                   {program.location && (
                     <p className="mt-1 text-xs font-medium text-slate-500">
-                      Location: {program.location}
+                      {tr("Location:", "ස්ථානය:")} {program.location}
                     </p>
                   )}
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -330,10 +364,10 @@ export default function ResourcesPage() {
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 bg-gradient-to-r from-rose-50 to-orange-50/50 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-800">
-                Participate Now
+                {tr("Participate Now", "දැන් සහභාගී වන්න")}
               </h2>
               <p className="mt-1 text-xs text-slate-600">
-                Register your available resources for dispatch planning.
+                {tr("Register your available resources for dispatch planning.", "බෙදාහැරීමේ සැලසුම් සඳහා ඔබගේ තිබෙන සම්පත් ලියාපදිංචි කරන්න.")}
               </p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-3 p-5">
@@ -341,7 +375,7 @@ export default function ResourcesPage() {
                 required
                 value={form.name}
                 onChange={(e) => setField("name", e.target.value)}
-                placeholder="Your name"
+                placeholder={tr("Your name", "ඔබගේ නම")}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
               <input
@@ -349,14 +383,14 @@ export default function ResourcesPage() {
                 type="email"
                 value={form.email}
                 onChange={(e) => setField("email", e.target.value)}
-                placeholder="Email"
+                placeholder={tr("Email", "ඊමේල්")}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
               <input
                 required
                 value={form.phone}
                 onChange={(e) => setField("phone", e.target.value)}
-                placeholder="Phone number"
+                placeholder={tr("Phone number", "දුරකථන අංකය")}
                 inputMode="numeric"
                 maxLength={10}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -365,27 +399,51 @@ export default function ResourcesPage() {
                 required
                 value={form.district}
                 onChange={(e) => setField("district", e.target.value)}
-                placeholder="District / City"
+                placeholder={tr("District / City", "දිස්ත්‍රික්කය / නගරය")}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
-              <select
-                value={form.resourceType}
-                onChange={(e) => setField("resourceType", e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              >
-                {RESOURCE_TYPES.map((resource) => (
-                  <option key={resource.id} value={resource.id}>
-                    {resource.title}
-                  </option>
-                ))}
-              </select>
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {tr("Select resources (tick all that apply)", "සම්පත් තෝරන්න (අදාළ සියල්ල ටික් කරන්න)")}
+                </p>
+                <div className="space-y-2">
+                  {RESOURCE_TYPES.map((resource) => (
+                    <label key={resource.id} className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={(form.resourceTypes || []).includes(resource.id)}
+                        onChange={(e) => toggleResourceType(resource.id, e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      <span>{resource.title}</span>
+                    </label>
+                  ))}
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={(form.resourceTypes || []).includes(OTHER_RESOURCE_ID)}
+                      onChange={(e) => toggleResourceType(OTHER_RESOURCE_ID, e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <span>{tr("Other", "වෙනත්")}</span>
+                  </label>
+                </div>
+                {(form.resourceTypes || []).includes(OTHER_RESOURCE_ID) && (
+                  <input
+                    value={form.otherResource}
+                    onChange={(e) => setField("otherResource", e.target.value)}
+                    placeholder={tr("Please specify other resource", "වෙනත් සම්පත සඳහන් කරන්න")}
+                    className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                )}
+              </div>
               <input
                 required
                 type="number"
                 min="1"
                 value={form.quantity}
                 onChange={(e) => setField("quantity", e.target.value)}
-                placeholder="Estimated quantity"
+                placeholder={tr("Estimated quantity", "ඇස්තමේන්තු ප්‍රමාණය")}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
               <input
@@ -398,11 +456,11 @@ export default function ResourcesPage() {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
               <p className="text-[11px] text-slate-500">
-                Date must be between today and next 30 days.
+                {tr("Date must be between today and next 30 days.", "දිනය අද සිට ඉදිරි දින 30 අතර විය යුතුය.")}
               </p>
               <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Delivery Option
+                  {tr("Delivery Option", "බෙදාහැරීමේ විකල්පය")}
                 </p>
                 <label className="flex items-start gap-2 text-sm text-slate-700">
                   <input
@@ -412,7 +470,7 @@ export default function ResourcesPage() {
                     onChange={() => setField("deliveryMode", "self-drop")}
                     className="mt-0.5"
                   />
-                  I can bring items to a collection point.
+                  {tr("I can bring items to a collection point.", "මට භාණ්ඩ එකතු කිරීමේ ස්ථානයකට ගෙන යා හැක.")}
                 </label>
                 <label className="mt-2 flex items-start gap-2 text-sm text-slate-700">
                   <input
@@ -422,14 +480,14 @@ export default function ResourcesPage() {
                     onChange={() => setField("deliveryMode", "pickup")}
                     className="mt-0.5"
                   />
-                  I cannot bring items; please come and collect from my location.
+                  {tr("I cannot bring items; please come and collect from my location.", "මට භාණ්ඩ ගෙන යා නොහැක; කරුණාකර මාගේ ස්ථානයෙන් ගෙනයන්න.")}
                 </label>
                 {form.deliveryMode === "pickup" && (
                   <input
                     required
                     value={form.pickupAddress}
                     onChange={(e) => setField("pickupAddress", e.target.value)}
-                    placeholder="Pickup address"
+                    placeholder={tr("Pickup address", "එකතු කිරීමේ ලිපිනය")}
                     className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                 )}
@@ -438,7 +496,7 @@ export default function ResourcesPage() {
                 rows={3}
                 value={form.notes}
                 onChange={(e) => setField("notes", e.target.value)}
-                placeholder="Notes (packing state, special handling, etc.)"
+                placeholder={tr("Notes (packing state, special handling, etc.)", "සටහන් (ඇසුරුම් තත්වය, විශේෂ හැසිරවීම්, ආදිය)")}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
               <label className="flex items-start gap-2 text-sm text-slate-700">
@@ -448,7 +506,7 @@ export default function ResourcesPage() {
                   onChange={(e) => setField("canTransport", e.target.checked)}
                   className="mt-0.5"
                 />
-                I can help with transportation to the nearest allocation center.
+                {tr("I can help with transportation to the nearest allocation center.", "ළඟම බෙදාහැරීමේ මධ්‍යස්ථානයට ප්‍රවාහනයට මට සහාය විය හැක.")}
               </label>
 
               <button
@@ -456,7 +514,7 @@ export default function ResourcesPage() {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500"
               >
                 <HandHeart className="h-4 w-4" />
-                Join Resource Program
+                {tr("Join Resource Program", "සම්පත් වැඩසටහනට එකතු වන්න")}
               </button>
               {submitError && (
                 <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
@@ -468,21 +526,31 @@ export default function ResourcesPage() {
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Impact Preview
+              {tr("Impact Preview", "බලපෑම් පෙරදසුන")}
             </h3>
             <p className="mt-2 text-sm text-slate-700">
-              Based on your current quantity, we estimate support for:
+              {tr("Based on your current quantity, we estimate support for:", "ඔබගේ වත්මන් ප්‍රමාණය අනුව, අපි සහාය ඇස්තමේන්තු කරන්නේ:")}
             </p>
             <p className="mt-2 text-3xl font-bold text-indigo-700">
-              {estimatedFamilies} families
+              {estimatedFamilies} {tr("families", "පවුල්")}
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              Resource type: <strong>{selectedResource.title}</strong>
+              {tr("Resource type(s):", "සම්පත් වර්ග(ය):")}{" "}
+              <strong>
+                {[
+                  ...selectedResources.map((r) => r.title),
+                  (form.resourceTypes || []).includes(OTHER_RESOURCE_ID) && form.otherResource.trim()
+                    ? form.otherResource.trim()
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ") || "—"}
+              </strong>
             </p>
             {form.canTransport && (
               <p className="mt-3 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
                 <Truck className="h-3.5 w-3.5" />
-                Transport volunteer enabled
+                {tr("Transport volunteer enabled", "ප්‍රවාහන ස්වේච්ඡා සේවය සක්‍රීයයි")}
               </p>
             )}
           </div>
@@ -491,11 +559,13 @@ export default function ResourcesPage() {
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm">
               <p className="inline-flex items-center gap-2 font-semibold">
                 <CheckCircle2 className="h-5 w-5" />
-                Participation request recorded
+                {tr("Participation request recorded", "සහභාගීත්ව ඉල්ලීම සටහන් විය")}
               </p>
               <p className="mt-2 text-sm">
-                Coordination team will contact you to schedule collection and
-                dispatch details.
+                {tr(
+                  "Coordination team will contact you to schedule collection and dispatch details.",
+                  "එකතු කිරීම හා බෙදාහැරීමේ විස්තර සැලසුම් කිරීමට සම්බන්ධීකරණ කණ්ඩායම ඔබව සම්බන්ධ කරගනී."
+                )}
               </p>
             </div>
           )}
@@ -512,13 +582,15 @@ export default function ResourcesPage() {
             <div className="rounded-t-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-4 text-white">
               <p className="inline-flex items-center gap-2 text-lg font-semibold">
                 <CheckCircle2 className="h-5 w-5" />
-                Submission Confirmed
+                {tr("Submission Confirmed", "යැවීම තහවුරු විය")}
               </p>
             </div>
             <div className="space-y-4 px-5 py-5">
               <p className="text-sm text-slate-700">
-                Your resource participation request was submitted successfully.
-                We will contact you soon with collection and allocation details.
+                {tr(
+                  "Your resource participation request was submitted successfully. We will contact you soon with collection and allocation details.",
+                  "ඔබගේ සම්පත් සහභාගීත්ව ඉල්ලීම සාර්ථකව යවන ලදී. එකතු කිරීම හා බෙදාහැරීමේ විස්තර සමඟ අපි ඉක්මනින් ඔබව සම්බන්ධ කරගනිමු."
+                )}
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -526,13 +598,13 @@ export default function ResourcesPage() {
                   onClick={() => setShowConfirmModal(false)}
                   className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  Close
+                  {tr("Close", "වසන්න")}
                 </button>
                 <a
                   href="/volunteer"
                   className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
                 >
-                  Join field missions
+                  {tr("Join field missions", "ක්ෂේත්‍ර මෙහෙයුම් වලට එකතු වන්න")}
                   <ArrowRight className="h-4 w-4" />
                 </a>
               </div>

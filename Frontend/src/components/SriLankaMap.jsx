@@ -11,6 +11,7 @@ const SRI_LANKA_BOUNDS = [
 ];
 const SRI_LANKA_CENTER = [7.87, 80.77];
 const DEFAULT_ZOOM = 7;
+const SRI_LANKA_GEOJSON_URL = "/sri-lanka-districts.geojson";
 
 // CartoDB Positron base tiles
 const BASE_TILE_URL =
@@ -128,6 +129,31 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
         subdomains: "abcd",
         maxZoom: 19,
       }).addTo(map);
+
+      map.createPane("sl-boundary-pane");
+      map.getPane("sl-boundary-pane").style.zIndex = "370";
+      map.getPane("sl-boundary-pane").style.pointerEvents = "none";
+
+      (async () => {
+        try {
+          const res = await fetch(SRI_LANKA_GEOJSON_URL, { cache: "no-store" });
+          const geo = await res.json().catch(() => null);
+          if (!res.ok || !geo || isDisposed || !map) return;
+
+          L.geoJSON(geo, {
+            pane: "sl-boundary-pane",
+            interactive: false,
+            style: {
+              color: "#ffffff",
+              weight: 1.2,
+              opacity: 1,
+              fill: false,
+            },
+          }).addTo(map);
+        } catch {
+          // ignore boundary overlay failures so weather markers still render
+        }
+      })();
 
       districtsLayer = L.layerGroup().addTo(map);
 
@@ -446,7 +472,7 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
   }, [selectedDistrict]);
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-hidden rounded-xl bg-slate-800">
+    <div className="relative h-full min-h-0 w-full overflow-hidden rounded-xl bg-sky-400">
       <div ref={containerRef} className="h-full min-h-0 w-full" />
       {!mounted && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-800 text-slate-400">

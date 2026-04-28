@@ -6,6 +6,17 @@ import Loader from "@/components/Loader";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const SRI_LANKA_BOUNDS = [
+  [5.92, 79.52],
+  [9.83, 81.88],
+];
+const WORLD_RING = [
+  [-180, -90],
+  [180, -90],
+  [180, 90],
+  [-180, 90],
+  [-180, -90],
+];
 
 function normalizeDistrictName(name) {
   return String(name || "")
@@ -55,6 +66,40 @@ function getFillForRisk(level) {
   return "#22c55e"; // safe / default
 }
 
+function toLngLatRing(coordRing) {
+  return coordRing.map(([lng, lat]) => [lng, lat]);
+}
+
+function buildMaskGeoJson(districtGeoJson) {
+  const holes = [];
+  const features = Array.isArray(districtGeoJson?.features) ? districtGeoJson.features : [];
+  features.forEach((feature) => {
+    const geom = feature?.geometry;
+    if (!geom) return;
+    if (geom.type === "Polygon" && Array.isArray(geom.coordinates)) {
+      geom.coordinates.forEach((ring) => {
+        if (Array.isArray(ring) && ring.length >= 4) holes.push(toLngLatRing(ring));
+      });
+    } else if (geom.type === "MultiPolygon" && Array.isArray(geom.coordinates)) {
+      geom.coordinates.forEach((poly) => {
+        if (!Array.isArray(poly)) return;
+        poly.forEach((ring) => {
+          if (Array.isArray(ring) && ring.length >= 4) holes.push(toLngLatRing(ring));
+        });
+      });
+    }
+  });
+  if (!holes.length) return null;
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: {
+      type: "Polygon",
+      coordinates: [WORLD_RING, ...holes],
+    },
+  };
+}
+
 /** Keep in sync with getFillForRisk — used for the public legend under the map */
 const RISK_LEGEND_ITEMS = [
   { key: "safe", label: "Safe", hint: "normal conditions", color: "#22c55e" },
@@ -65,26 +110,26 @@ const RISK_LEGEND_ITEMS = [
 
 function RiskMapLegend() {
   return (
-    <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+    <div className="mt-4 space-y-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         District risk colors
       </p>
-      <ul className="flex flex-wrap gap-x-4 gap-y-2">
+      <ul className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-x-6 sm:gap-y-2">
         {RISK_LEGEND_ITEMS.map((item) => (
-          <li key={item.key} className="flex items-center gap-2 text-xs text-slate-700">
+          <li key={item.key} className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
             <span
-              className="h-3.5 w-3.5 shrink-0 rounded-sm border border-slate-300/80 shadow-sm ring-1 ring-black/5"
+              className="h-3.5 w-3.5 shrink-0 rounded-full border border-white/50 shadow-sm ring-1 ring-black/5"
               style={{ backgroundColor: item.color }}
               aria-hidden
             />
             <span>
-              <span className="font-semibold text-slate-800">{item.label}</span>
-              <span className="text-slate-500"> — {item.hint}</span>
+              <span className="font-medium text-slate-800 dark:text-slate-200">{item.label}</span>
+              <span className="text-slate-500 dark:text-slate-400"> — {item.hint}</span>
             </span>
           </li>
         ))}
       </ul>
-      <p className="text-[11px] leading-snug text-slate-500">
+      <p className="text-[11px] leading-snug text-slate-500 dark:text-slate-400">
         Districts without a published level use the safe (green) color. Select a district on the map for details.
       </p>
     </div>
@@ -116,10 +161,11 @@ export function RiskMap() {
 
     const map = L.map(containerRef.current, {
       center: [7.87, 80.77],
-      zoom: 7,
+      zoom: 9,
       minZoom: 6,
       maxZoom: 10,
-     
+      maxBounds: SRI_LANKA_BOUNDS,
+      maxBoundsViscosity: 1,
     });
 
     // Set immediately to prevent double-init
@@ -135,11 +181,43 @@ export function RiskMap() {
       }
     ).addTo(map);
 
+    map.createPane("sl-mask-pane");
+    map.getPane("sl-mask-pane").style.zIndex = "360";
+    map.getPane("sl-mask-pane").style.pointerEvents = "none";
+
+    map.createPane("sl-boundary-pane");
+    map.getPane("sl-boundary-pane").style.zIndex = "370";
+    map.getPane("sl-boundary-pane").style.pointerEvents = "none";
+
     (async () => {
       try {
         const { riskMap, geoJson } = await fetchRiskAndGeo();
         if (cancelled) return;
         if (!mapRef.current || mapRef.current !== map) return;
+
+        const maskFeature = buildMaskGeoJson(geoJson);
+        if (maskFeature) {
+          L.geoJSON(maskFeature, {
+            pane: "sl-mask-pane",
+            interactive: false,
+            style: {
+              stroke: false,
+              fillColor: "#ffffff",
+              fillOpacity: 1,
+            },
+          }).addTo(map);
+        }
+
+        L.geoJSON(geoJson, {
+          pane: "sl-boundary-pane",
+          interactive: false,
+          style: {
+            color: "#ffffff",
+            weight: 1.2,
+            opacity: 1,
+            fill: false,
+          },
+        }).addTo(map);
 
         const layer = L.geoJSON(geoJson, {
           style: (feature) => {
@@ -186,7 +264,7 @@ export function RiskMap() {
 
         try {
           if (mapRef.current === map) {
-            map.fitBounds(layer.getBounds().pad(0.1));
+            map.fitBounds(layer.getBounds().pad(0.01), { maxZoom: 8 });
           }
         } catch {
           // ignore
@@ -263,22 +341,45 @@ export function RiskMap() {
 
   return (
     <div className="w-full">
-      <div className="relative h-[320px] w-full overflow-hidden rounded-xl bg-slate-800">
-        <div ref={containerRef} className="h-full w-full" />
-        {loading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-900/70 text-sky-50">
-            <Loader size="md" />
-            <span className="text-xs">Loading risk map…</span>
-          </div>
-        )}
-        {error && !loading && (
-          <div className="absolute inset-x-4 bottom-4 rounded-lg bg-red-900/80 px-3 py-2 text-center text-xs text-red-50">
-            {error}
-          </div>
-        )}
+      {/* Outer card with glass effect */}
+      <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/70 backdrop-blur-lg shadow-xl dark:bg-slate-800/80 dark:border-slate-700/30">
+        {/* Map header */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-2">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+            🗺️ Risk Map Overview
+          </h2>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            Click a district for details
+          </span>
+        </div>
+
+        {/* Map container */}
+        <div className="relative mx-4 mb-4 h-[400px] overflow-hidden rounded-xl bg-slate-800 shadow-inner">
+          <div ref={containerRef} className="h-full w-full" />
+
+          {/* Loading overlay */}
+          {loading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/60 backdrop-blur-sm">
+              <Loader size="md" />
+              <span className="text-sm font-medium text-white/90">
+                Loading risk map…
+              </span>
+            </div>
+          )}
+
+          {/* Error toast */}
+          {error && !loading && (
+            <div className="absolute bottom-4 left-4 right-4 rounded-lg bg-red-500/90 px-4 py-2.5 text-center text-xs font-medium text-white shadow-lg backdrop-blur-sm">
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* Legend inside the card footer */}
+        <div className="border-t border-slate-200/60 px-5 pb-4 dark:border-slate-700/40">
+          <RiskMapLegend />
+        </div>
       </div>
-      <RiskMapLegend />
     </div>
   );
 }
-
