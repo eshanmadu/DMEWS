@@ -36,6 +36,10 @@ export function Nav() {
   const { t } = useTranslation();
   const isAdminRoute = pathname?.startsWith("/admin");
 
+  // Profile dropdown state
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef(null);
+
   // Incidents dropdown state
   const [incidentsDropdownOpen, setIncidentsDropdownOpen] = useState(false);
   const incidentsDropdownRef = useRef(null);
@@ -60,6 +64,7 @@ export function Nav() {
   useEffect(() => {
     setIncidentsDropdownOpen(false);
     setVolunteerDropdownOpen(false);
+    setProfileDropdownOpen(false);
   }, [pathname]);
 
   // Close incidents dropdown on click outside
@@ -82,6 +87,13 @@ export function Nav() {
         !languageDropdownRef.current.contains(event.target)
       ) {
         setLanguageDropdownOpen(false);
+      }
+
+      if (
+        profileDropdownRef.current &&
+        !profileDropdownRef.current.contains(event.target)
+      ) {
+        setProfileDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -419,45 +431,75 @@ export function Nav() {
               </>
             ) : (
               <>
-                <Link
-                  href={accountHref}
-                  className={clsx(
-                    "flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 transition hover:bg-white/15",
-                    accountLinkActive ? "ring-1 ring-amber-300/60" : ""
+                <div ref={profileDropdownRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setProfileDropdownOpen((prev) => !prev)}
+                    className={clsx(
+                      "flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 transition hover:bg-white/15",
+                      accountLinkActive ? "ring-1 ring-amber-300/60" : ""
+                    )}
+                    aria-haspopup="true"
+                    aria-expanded={profileDropdownOpen}
+                  >
+                    <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-amber-200/30">
+                      {avatarSrc ? (
+                        <Image
+                          src={avatarSrc}
+                          alt={displayName}
+                          fill
+                          sizes="32px"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <UserCircle className="h-5 w-5 text-amber-200" />
+                      )}
+                    </span>
+                    <span className="flex max-w-[180px] items-center gap-1 truncate text-sm text-sky-50">
+                      <span className="truncate">{displayName}</span>
+                      {volunteerApproved && (
+                        <BadgeCheck
+                          className="h-4 w-4 flex-shrink-0 text-blue-300"
+                          aria-label="Verified volunteer"
+                          title="Verified volunteer"
+                        />
+                      )}
+                      <ChevronDown className="h-4 w-4 flex-shrink-0 opacity-90" />
+                    </span>
+                  </button>
+
+                  {profileDropdownOpen && (
+                    <div
+                      className="absolute right-0 mt-2 min-w-[190px] rounded-md bg-white py-1 shadow-lg ring-1 ring-black/5"
+                      role="menu"
+                      aria-orientation="vertical"
+                    >
+                      <Link
+                        href="/profile"
+                        className="block px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100"
+                        role="menuitem"
+                        onClick={() => setProfileDropdownOpen(false)}
+                      >
+                        View profile
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileDropdownOpen(false);
+                          handleLogout();
+                        }}
+                        className="block w-full px-4 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100"
+                        role="menuitem"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <LogOut className="h-4 w-4" />
+                          {t("nav.logout")}
+                        </span>
+                      </button>
+                    </div>
                   )}
-                >
-                  <span className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-amber-200/30">
-                    {avatarSrc ? (
-                      <Image
-                        src={avatarSrc}
-                        alt={displayName}
-                        fill
-                        sizes="32px"
-                        className="object-cover"
-                      />
-                    ) : (
-                      <UserCircle className="h-5 w-5 text-amber-200" />
-                    )}
-                  </span>
-                  <span className="flex max-w-[180px] items-center gap-1 truncate text-sm text-sky-50">
-                    <span className="truncate">{displayName}</span>
-                    {volunteerApproved && (
-                      <BadgeCheck
-                        className="h-4 w-4 flex-shrink-0 text-blue-300"
-                        aria-label="Verified volunteer"
-                        title="Verified volunteer"
-                      />
-                    )}
-                  </span>
-                </Link>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-sky-50 transition hover:bg-white/15"
-                >
-                  <LogOut className="h-4 w-4" />
-                  {t("nav.logout")}
-                </button>
+                </div>
               </>
             )}
             {!isAdminRoute && (

@@ -20,6 +20,7 @@ import Image from "next/image";
 import Link from "next/link";
 import Loader from "@/components/Loader";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "next/navigation";
 
 function StatusBadge({ status }) {
   const c =
@@ -97,6 +98,8 @@ export default function IncidentsPage() {
   const [error, setError] = useState("");
   const [districtFilter, setDistrictFilter] = useState("");
 
+  const searchParams = useSearchParams();
+
   // Report form state
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [district, setDistrict] = useState("");
@@ -125,6 +128,14 @@ export default function IncidentsPage() {
       : null;
 
   const { minDate, maxDate } = useMemo(() => getIncidentDateBounds(), []);
+
+  // Support deep-linking from Home quick actions.
+  // Example: /incidents?open=report
+  useEffect(() => {
+    if (searchParams?.get("open") === "report") {
+      setIsReportModalOpen(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!isReportModalOpen) return;

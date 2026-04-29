@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "next/navigation";
 import {
   UserSearch,
   UserPlus,
@@ -143,6 +144,7 @@ export default function MissingPersonsPage() {
   const { i18n } = useTranslation();
   const si = String(i18n.language || "").startsWith("si");
   const tr = (en, siText) => (si ? siText : en);
+  const searchParams = useSearchParams();
   const [missingPersons, setMissingPersons] = useState([]);
   const [foundPersons, setFoundPersons] = useState([]);
   const [listLoading, setListLoading] = useState(true);
@@ -150,6 +152,42 @@ export default function MissingPersonsPage() {
 
   const [showMissingForm, setShowMissingForm] = useState(false);
   const [showFoundForm, setShowFoundForm] = useState(false);
+
+  // Support deep-linking from Home quick actions.
+  // Examples:
+  // - /incidents/missing-persons?open=missing
+  // - /incidents/missing-persons?open=found
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const open = searchParams?.get("open");
+    if (open === "missing") {
+      setShowFoundForm(false);
+      setShowMissingForm(true);
+      setTimeout(() => {
+        document
+          .getElementById("missing-persons-report-actions")
+          ?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+      }, 0);
+      return;
+    }
+
+    if (open === "found") {
+      setShowMissingForm(false);
+      setShowFoundForm(true);
+      setTimeout(() => {
+        document
+          .getElementById("missing-persons-report-actions")
+          ?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+      }, 0);
+    }
+  }, [searchParams]);
 
   const [missingForm, setMissingForm] = useState({
     fullName: "",

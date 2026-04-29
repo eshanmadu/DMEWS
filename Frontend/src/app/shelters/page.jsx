@@ -471,6 +471,16 @@ export default function SheltersPage() {
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  // Support deep-linking from Home quick actions.
+  // Example: /shelters#shelters-list
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (hash === "#shelters-list" || hash === "#nearest-shelter") {
+      setTimeout(() => scrollToShelters(), 0);
+    }
+  }, []);
+
   // Smooth scroll to contacts section
   const scrollToContacts = () => {
     document
