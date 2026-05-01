@@ -38,7 +38,7 @@ export function FloodWarningBanner({ highDistricts = [], mediumDistricts = [] })
   return (
     <div className="space-y-0">
       {hasHigh && <TickerBar text={highText} isHigh />}
-      {hasMedium && <TickerBar text={mediumText} isHigh={false} />}
+      {!hasHigh && hasMedium && <TickerBar text={mediumText} isHigh={false} />}
     </div>
   );
 }

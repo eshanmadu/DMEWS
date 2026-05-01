@@ -2,15 +2,25 @@
 
 import { useEffect, useState } from "react";
 import Loader from "@/components/Loader";
+import { useTranslation } from "react-i18next";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 export default function PublicForecastPanel() {
+  const { i18n, t } = useTranslation();
   const [rawText, setRawText] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeLang, setActiveLang] = useState("en"); // "en" | "si" | "ta"
+
+  const uiLang = String(i18n.language || "en").startsWith("si") ? "si" : "en";
+  const [activeLang, setActiveLang] = useState(uiLang); // "en" | "si" | "ta"
+
+  useEffect(() => {
+    // Keep the forecast panel aligned with the app language.
+    // (User can still switch to EN/TA via the local buttons.)
+    setActiveLang(uiLang);
+  }, [uiLang]);
 
   useEffect(() => {
     let cancelled = false;
@@ -21,7 +31,7 @@ export default function PublicForecastPanel() {
         setError("");
         const res = await fetch(`${API_BASE}/public-forecast`);
         if (!res.ok) {
-          throw new Error("Failed to load public forecast.");
+          throw new Error(t("forecast.loadFailed", "Failed to load public forecast."));
         }
         const data = await res.json();
         if (!cancelled) {
@@ -30,7 +40,12 @@ export default function PublicForecastPanel() {
       } catch (err) {
         console.error("Failed to load public forecast", err);
         if (!cancelled) {
-          setError("Unable to load public weather forecast right now.");
+          setError(
+            t(
+              "forecast.loadError",
+              "Unable to load public weather forecast right now."
+            )
+          );
         }
       } finally {
         if (!cancelled) {
@@ -101,17 +116,16 @@ export default function PublicForecastPanel() {
     activeLang === "si" ? chunks.si : activeLang === "en" ? chunks.en : chunks.ta;
 
   const title =
-    activeLang === "si"
-      ? "දෛනික කාලගුණ අනාවැකිය"
-      : activeLang === "ta"
-        ? "தினசரி வானிலை முன்னறிவிப்பு"
-        : "Daily weather forecast";
+    activeLang === "ta"
+      ? "தினசரி வானிலை முன்னறிவிப்பு"
+      : t("forecast.title", "Daily weather forecast");
   const subtitle =
-    activeLang === "si"
-      ? "ශ්‍රී ලංකා කාලගුණ දෙපාර්තමේන්තුවෙන් (සිංහල, ඉංග්‍රීසි සහ දෙමළ) — Firecrawl හරහා."
-      : activeLang === "ta"
-        ? "இலங்கை வானிலைத் துறை (සිංහල, English & Tamil) — Firecrawl வழியாக பெறப்பட்ட உரை."
-        : "Text from Department of Meteorology Sri Lanka via Firecrawl (Sinhala, English & Tamil).";
+    activeLang === "ta"
+      ? "இலங்கை வானிலைத் துறை (සිංහල, English & Tamil) — Firecrawl வழியாக பெறப்பட்ட உரை."
+      : t(
+          "forecast.subtitle",
+          "Text from Department of Meteorology Sri Lanka via Firecrawl (Sinhala, English & Tamil)."
+        );
 
   return (
     <section className="card flex h-full flex-col gap-2 p-4">
@@ -176,11 +190,11 @@ export default function PublicForecastPanel() {
 
           <div className="mt-1 flex-1 overflow-auto rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-800 whitespace-pre-wrap">
             {currentText ||
-              (activeLang === "si"
-                ? "අනාවැකි පෙළ ලබාගත නොහැක."
-                : activeLang === "ta"
-                  ? "முன்னறிவிப்பு உரை கிடைக்கவில்லை."
-                  : "No forecast text available.")}
+              (activeLang === "ta"
+                ? t("forecast.noTextTa", "முன்னறிவிப்பு உரை கிடைக்கவில்லை.")
+                : activeLang === "si"
+                  ? t("forecast.noTextSi", "අනාවැකි පෙළ ලබාගත නොහැක.")
+                  : t("forecast.noText", "No forecast text available."))}
           </div>
         </>
       )}

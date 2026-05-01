@@ -475,12 +475,12 @@ export function Nav() {
                       aria-orientation="vertical"
                     >
                       <Link
-                        href="/profile"
+                        href={isAdminUser ? "/admin" : "/profile"}
                         className="block px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100"
                         role="menuitem"
                         onClick={() => setProfileDropdownOpen(false)}
                       >
-                        View profile
+                        {isAdminUser ? "Admin dashboard" : "View profile"}
                       </Link>
 
                       <button
