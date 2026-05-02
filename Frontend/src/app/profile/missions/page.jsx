@@ -115,7 +115,9 @@ export default function MyMissionsPage() {
             </div>
             <h3 className="mt-4 text-lg font-semibold text-slate-900">No missions joined yet</h3>
             <p className="mt-2 text-sm text-slate-500">
-              You haven't volunteered for any missions. Check available missions to lend a hand.
+              {
+                "You haven't volunteered for any missions. Check available missions to lend a hand."
+              }
             </p>
             <Link href="/volunteer"
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"

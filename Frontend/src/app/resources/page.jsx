@@ -12,7 +12,6 @@ import {
   HandHeart,
   CheckCircle2,
   ArrowRight,
-  Sparkles,
   Loader2,
 } from "lucide-react";
 
@@ -247,17 +246,47 @@ export default function ResourcesPage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70">
-      <section className="border-b border-slate-200 bg-gradient-to-br from-sky-900 via-indigo-900 to-slate-900 text-white">
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <div className="max-w-3xl">
-            <p className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-sky-100">
-              <Sparkles className="h-3.5 w-3.5" />
-              {tr("Community Resource Hub", "ප්‍රජා සම්පත් මධ්‍යස්ථානය")}
-            </p>
-            <h1 className="mt-5 font-oswald text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
-              {tr("Join Community Support Programs", "ප්‍රජා සහාය වැඩසටහන් වලට එකතු වන්න")}
+      <section
+        className="relative isolate min-h-[320px] overflow-hidden border-b border-slate-800 sm:min-h-[380px] lg:min-h-[420px]"
+        aria-labelledby="resources-hero-title"
+      >
+        {/* Photo fills hero; gradient sleeve on the left reads text clearly */}
+        <div
+          className="absolute inset-0 bg-sky-950 bg-cover bg-[center_right] bg-no-repeat sm:bg-center"
+          style={{ backgroundImage: "url(/img/resources.png)" }}
+        />
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 w-full bg-gradient-to-r from-[#0a1628] via-[#0a1628]/92 to-transparent sm:max-w-[58%] sm:via-[#0a1628]/88 lg:max-w-[52%]"
+          aria-hidden
+        />
+        <div className="pointer-events-none absolute left-3 top-3 h-16 w-16 rounded-full border border-sky-400/20 opacity-40 sm:left-6 sm:top-6" aria-hidden />
+        <div className="pointer-events-none absolute bottom-8 left-6 h-2 w-2 rounded-full bg-sky-400/40 sm:bottom-10 sm:left-10" aria-hidden />
+        <div className="pointer-events-none absolute bottom-12 left-14 h-1.5 w-1.5 rounded-full bg-sky-300/30" aria-hidden />
+
+        <div className="relative z-10 mx-auto flex max-w-7xl flex-col justify-center px-4 py-12 sm:px-6 sm:py-16 lg:min-h-[420px] lg:px-8 lg:py-20">
+          <div className="max-w-xl lg:max-w-lg">
+            <div className="mb-4 flex justify-start">
+              <HandHeart
+                className="h-16 w-16 text-sky-300/45 sm:h-20 sm:w-20"
+                strokeWidth={1.15}
+                aria-hidden
+              />
+            </div>
+            <p className="sr-only">{tr("Community Resource Hub", "ප්‍රජා සම්පත් මධ්‍යස්ථානය")}</p>
+            <h1
+              id="resources-hero-title"
+              className="font-oswald text-3xl font-bold uppercase tracking-[0.08em] text-white sm:text-4xl lg:text-5xl lg:leading-tight"
+            >
+              {tr("Together we rebuild", "එක්ව නැවත ගොඩනගමු")}
             </h1>
-            <p className="mt-4 text-base text-sky-100/95 sm:text-lg">
+            <div className="mt-3 h-0.5 w-14 rounded-full bg-sky-400 sm:w-16" aria-hidden />
+            <p className="mt-4 text-base font-medium text-sky-100 sm:text-lg">
+              {tr(
+                "Your resources. Their relief. Our community.",
+                "ඔබගේ සම්පත්. ඔවුන්ගේ සහනය. අපගේ ප්‍රජාව."
+              )}
+            </p>
+            <p className="mt-4 text-sm leading-relaxed text-sky-100/85 sm:text-base">
               {tr(
                 "Support relief operations by contributing dry foods, medicines, clothes, water, and transport help. This page matches your contribution with active district programs.",
                 "වියළි ආහාර, ඖෂධ, ඇඳුම්, පිරිසිදු ජලය සහ ප්‍රවාහන සහාය ලබාදී සහන ක්‍රියාකාරකම් වලට දායක වන්න. මෙම පිටුව ඔබගේ දායකත්වය සක්‍රීය දිස්ත්‍රික් වැඩසටහන් සමඟ ගැළපේ."

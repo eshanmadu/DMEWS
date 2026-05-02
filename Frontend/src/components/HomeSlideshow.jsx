@@ -4,6 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Noto_Sans_Sinhala } from "next/font/google";
+import localFont from "next/font/local";
 
 import homeSlide from "@/img/slides/home.png";
 import riskSlide from "@/img/slides/risk.png";
@@ -17,80 +20,83 @@ import { Autoplay, Pagination, A11y, Mousewheel } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/pagination";
 
-import localFont from "next/font/local";
-
 const savenirsans = localFont({
   src: "../fonts/SavenirSans.ttf",
-  
 });
 
-const SLIDES = [
+const notoSansSinhala = Noto_Sans_Sinhala({
+  subsets: ["sinhala"],
+  weight: ["600", "700"],
+  display: "swap",
+});
+
+const BRAND_TITLE = "DisasterWatch";
+
+const SLIDE_DEFS = [
   {
     key: "home",
     imageSrc: homeSlide,
-    title: "DisasterWatch",
-    subtitle: "Disaster Management & Early Warning System",
-    body: "Stay informed. Stay prepared. Monitor live risk across Sri Lanka.",
     ctaHref: "/signup",
-    ctaLabel: "Sign up",
     ctaClass:
       "bg-gradient-to-r from-red-600 to-rose-600 text-white hover:from-red-700 hover:to-rose-700 shadow-lg shadow-red-500/25",
   },
   {
     key: "risk",
     imageSrc: riskSlide,
-    title: "Risk map",
-    subtitle: "District risk levels",
-    body: "View live risk by district and see updates when admins change levels.",
     ctaHref: "#risk-map",
-    ctaLabel: "Open risk map",
     ctaClass:
       "bg-gradient-to-r from-amber-400 to-orange-400 text-slate-900 hover:from-amber-500 hover:to-orange-500 shadow-lg shadow-amber-500/25",
   },
   {
     key: "weather",
     imageSrc: weatherSlide,
-    title: "Weather forecast",
-    subtitle: "Stay ahead of conditions",
-    body: "Check the forecast and district conditions to plan safely.",
     ctaHref: "#weather-map",
-    ctaLabel: "View forecast",
     ctaClass:
       "bg-gradient-to-r from-sky-600 to-blue-600 text-white hover:from-sky-700 hover:to-blue-700 shadow-lg shadow-sky-500/25",
   },
   {
     key: "shelter",
     imageSrc: shelterSlide,
-    title: "Relief Camps",
-    subtitle: "Find Relief Camps",
-    body: "See shelters near you when logged in, plus safety instructions.",
     ctaHref: "/shelters",
-    ctaLabel: "Find shelters",
     ctaClass:
       "bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700 shadow-lg shadow-emerald-500/25",
   },
   {
     key: "persons",
     imageSrc: personSlide,
-    title: "Missing & found persons",
-    subtitle: "Under incident response",
-    body: "Browse reports of missing people and reunions—linked to local incidents when available.",
     ctaHref: "/incidents/missing-persons",
-    ctaLabel: "Learn more",
     ctaClass:
       "bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-lg shadow-violet-500/25",
   },
 ];
 
+function slideCopy(t, key) {
+  if (key === "home") {
+    return {
+      title: BRAND_TITLE,
+      subtitle: t("slideshow.homeSubtitle"),
+      body: t("slideshow.homeBody"),
+      ctaLabel: t("slideshow.homeCta"),
+    };
+  }
+  return {
+    title: t(`slideshow.${key}Title`),
+    subtitle: t(`slideshow.${key}Subtitle`),
+    body: t(`slideshow.${key}Body`),
+    ctaLabel: t(`slideshow.${key}Cta`),
+  };
+}
+
 export function HomeSlideshow() {
+  const { t, i18n } = useTranslation();
   const [broken, setBroken] = useState({});
-  const slides = useMemo(() => SLIDES, []);
+  const slides = useMemo(() => SLIDE_DEFS, []);
   const [swiper, setSwiper] = useState(null);
+  const isSinhala = i18n.language?.startsWith("si");
 
   return (
     <section className="relative mb-12 overflow-hidden rounded-3xl bg-slate-900 shadow-2xl">
       <div className="relative h-[320px] sm:h-[420px] lg:h-[520px]">
-
         <Swiper
           modules={[Autoplay, Pagination, A11y, Mousewheel]}
           onSwiper={setSwiper}
@@ -108,81 +114,89 @@ export function HomeSlideshow() {
           }}
           className="h-full modern-vertical-swiper"
         >
-          {slides.map((slide) => (
-            <SwiperSlide key={slide.key} className="relative h-full">
+          {slides.map((slide) => {
+            const copy = slideCopy(t, slide.key);
+            const titleFont =
+              isSinhala && slide.key !== "home"
+                ? notoSansSinhala.className
+                : savenirsans.className;
 
-              {/* Background */}
-              {!broken[slide.key] ? (
-                <Image
-                  src={slide.imageSrc}
-                  alt={slide.title}
-                  fill
-                  priority={slide.key === "home"}
-                  onError={() =>
-                    setBroken((p) => ({ ...p, [slide.key]: true }))
-                  }
-                  className="object-cover transition-transform duration-[7000ms] scale-105"
-                />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-sky-900 via-slate-900 to-black" />
-              )}
+            return (
+              <SwiperSlide key={slide.key} className="relative h-full">
+                {!broken[slide.key] ? (
+                  <Image
+                    src={slide.imageSrc}
+                    alt={copy.title}
+                    fill
+                    priority={slide.key === "home"}
+                    onError={() =>
+                      setBroken((p) => ({ ...p, [slide.key]: true }))
+                    }
+                    className="scale-105 object-cover transition-transform duration-[7000ms]"
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-br from-sky-900 via-slate-900 to-black" />
+                )}
 
-              {/* Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
 
-              {/* Content */}
-              <div className="absolute inset-0 flex items-center">
-                <div className="max-w-2xl px-8">
-                  <h1 className={`${savenirsans.className} text-4xl sm:text-6xl font-bold tracking-wide text-white`}>
-                    {slide.title}
-                  </h1>
-
-                  <p className="mt-2 text-sky-200 uppercase tracking-wider text-sm">
-                    {slide.subtitle}
-                  </p>
-
-                  <p className="mt-4 text-slate-200">
-                    {slide.body}
-                  </p>
-
-                  <div className="mt-6 flex gap-3">
-                    <Link
-                      href={slide.ctaHref}
-                      className={`rounded-full px-6 py-3 text-sm font-semibold transition hover:scale-105 ${slide.ctaClass}`}
+                <div className="absolute inset-0 flex items-center">
+                  <div className="max-w-2xl px-8">
+                    <h1
+                      className={`${titleFont} text-4xl font-bold tracking-wide text-white sm:text-6xl`}
+                      lang={slide.key === "home" ? "en" : isSinhala ? "si" : undefined}
                     >
-                      {slide.ctaLabel}
-                    </Link>
+                      {copy.title}
+                    </h1>
 
-                    <Link
-                      href="/alerts"
-                      className="rounded-full border border-white/30 px-6 py-3 text-white hover:bg-white/10 transition"
+                    <p
+                      className={`mt-2 text-sm tracking-wider text-sky-200 ${isSinhala ? "" : "uppercase"}`}
+                      lang={slide.key === "home" && !isSinhala ? "en" : isSinhala ? "si" : undefined}
                     >
-                      View alerts
-                    </Link>
+                      {copy.subtitle}
+                    </p>
+
+                    <p className="mt-4 text-slate-200">{copy.body}</p>
+
+                    <div className="mt-6 flex gap-3">
+                      <Link
+                        href={slide.ctaHref}
+                        className={`rounded-full px-6 py-3 text-sm font-semibold transition hover:scale-105 ${slide.ctaClass}`}
+                      >
+                        {copy.ctaLabel}
+                      </Link>
+
+                      <Link
+                        href="/alerts"
+                        className="rounded-full border border-white/30 px-6 py-3 text-white transition hover:bg-white/10"
+                      >
+                        {t("slideshow.viewAlerts")}
+                      </Link>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-            </SwiperSlide>
-          ))}
+              </SwiperSlide>
+            );
+          })}
         </Swiper>
 
-        {/* Up button */}
         <button
+          type="button"
           onClick={() => swiper?.slidePrev()}
-          className="absolute top-6 left-1/2 -translate-x-1/2 z-10 rounded-full bg-white/10 p-3 text-white backdrop-blur-md hover:bg-white/20 transition"
+          className="absolute top-6 left-1/2 z-10 -translate-x-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition hover:bg-white/20"
+          aria-label={t("slideshow.prevSlide")}
         >
           <ChevronUp size={22} />
         </button>
 
-        {/* Down button */}
         <button
+          type="button"
           onClick={() => swiper?.slideNext()}
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 rounded-full bg-white/10 p-3 text-white backdrop-blur-md hover:bg-white/20 transition"
+          className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur-md transition hover:bg-white/20"
+          aria-label={t("slideshow.nextSlide")}
         >
           <ChevronDown size={22} />
         </button>
-
       </div>
 
       <style jsx global>{`
@@ -191,7 +205,7 @@ export function HomeSlideshow() {
         }
 
         .modern-vertical-swiper .swiper-pagination-bullet {
-          background: rgba(255,255,255,0.6);
+          background: rgba(255, 255, 255, 0.6);
           width: 6px;
           height: 6px;
         }

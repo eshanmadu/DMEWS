@@ -15,12 +15,41 @@
   },
 
   "slideshow": {
-    "slide1Title": "Welcome to DisasterWatch",
-    "slide1Desc": "Your trusted source for real-time disaster alerts and information in Sri Lanka.",
-    "slide2Title": "Stay informed, stay safe",
-    "slide2Desc": "Get live updates on flood risks, weather conditions, and emergency resources tailored to your district.",
-    "slide3Title": "Join our community",
-    "slide3Desc": "Sign up to receive personalised alerts, access emergency contacts, and contribute to our volunteer network."
+    "prevSlide": "Previous slide",
+    "nextSlide": "Next slide",
+    "viewAlerts": "View alerts",
+    "homeSubtitle": "Disaster Management & Early Warning System",
+    "homeBody": "Stay informed. Stay prepared. Monitor live risk across Sri Lanka.",
+    "homeCta": "Sign up",
+    "riskTitle": "Risk map",
+    "riskSubtitle": "District risk levels",
+    "riskBody": "View live risk by district and see updates when admins change levels.",
+    "riskCta": "Open risk map",
+    "weatherTitle": "Weather forecast",
+    "weatherSubtitle": "Stay ahead of conditions",
+    "weatherBody": "Check the forecast and district conditions to plan safely.",
+    "weatherCta": "View forecast",
+    "shelterTitle": "Relief camps",
+    "shelterSubtitle": "Find relief camps",
+    "shelterBody": "See shelters near you when logged in, plus safety instructions.",
+    "shelterCta": "Find shelters",
+    "personsTitle": "Missing & found persons",
+    "personsSubtitle": "Under incident response",
+    "personsBody": "Browse reports of missing people and reunions—linked to local incidents when available.",
+    "personsCta": "Learn more"
+  },
+  "homeQuickActions": {
+    "sectionTitle": "Quick actions",
+    "sectionSubtitle": "Report, volunteer, and find shelter fast.",
+    "reportIncident": "Report incident",
+    "reportIncidentHint": "Open incident report form",
+    "reportMissing": "Report missing person",
+    "reportMissingHint": "Open missing person report form",
+    "findShelter": "Find nearest shelter",
+    "findShelterHint": "Jump to shelter list",
+    "volunteer": "Volunteer",
+    "volunteerHint": "Open volunteer form",
+    "startNow": "Start now"
   },
   
   "flood": {
