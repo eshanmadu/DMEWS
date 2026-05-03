@@ -45,6 +45,16 @@ function skillsFromType(type, t) {
   return t("volunteerHub.skillDefault");
 }
 
+function formatCategory(category) {
+  const value = String(category || "").trim();
+  if (!value) return "General";
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function urgencyFromIncident(inc, t) {
   const s = String(inc?.status || "").toLowerCase();
   if (s === "responding") {
@@ -463,6 +473,12 @@ export default function VolunteerPage() {
                         {t("volunteerHub.skills")}:{" "}
                       </span>
                       {m.skills}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      <span className="font-semibold text-slate-500">
+                        Category:{" "}
+                      </span>
+                      {formatCategory(m.category)}
                     </p>
 
                     <div className="mt-4 flex flex-wrap gap-2">

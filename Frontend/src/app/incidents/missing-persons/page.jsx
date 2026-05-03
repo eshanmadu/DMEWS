@@ -1124,7 +1124,7 @@ export default function MissingPersonsPage() {
                   </p>
                 )}
                 <div className="mt-4">
-                  <label className="block text-sm font-medium text-slate-700">Additional contact (optional)</label>
+                  <label className="block text-sm font-medium text-slate-700">Additional contact (Optional)</label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
@@ -1161,7 +1161,7 @@ export default function MissingPersonsPage() {
             <div className="mt-6">
               <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700">
                 <Camera className="h-4 w-4 text-slate-500" />
-                {tr("Photo (optional, max 10MB)", "ඡායාරූපය (විකල්ප, උපරිම 10MB)")}
+                {tr("Photo (Optional, Supported formats: jpg, jpeg, png, Max 10MB)", "ඡායාරූපය (විකල්ප, උපරිම 10MB)")}
               </label>
               <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">
@@ -1351,7 +1351,7 @@ export default function MissingPersonsPage() {
                   </p>
                 )}
                 <div className="mt-4">
-                  <label className="block text-sm font-medium text-slate-700">Additional contact (optional)</label>
+                  <label className="block text-sm font-medium text-slate-700">Additional contact (Optional)</label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
@@ -1388,7 +1388,7 @@ export default function MissingPersonsPage() {
             <div className="mt-6">
               <label className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-700">
                 <Camera className="h-4 w-4 text-slate-500" />
-                Photo (optional, max 10MB)
+                Photo (Optional, Supported formats: jpg, jpeg, png, Max 10MB)
               </label>
               <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">

@@ -40,6 +40,18 @@ function UrgencyBadge({ urgency }) {
 }
 
 export default function AdminMissionsPage() {
+  const categoryOptions = [
+    { value: "flood", label: "Flood response" },
+    { value: "landslide", label: "Landslide response" },
+    { value: "shelter", label: "Shelter support" },
+    { value: "supply", label: "Relief supply distribution" },
+    { value: "medical", label: "Medical assistance" },
+    { value: "logistics", label: "Logistics coordination" },
+    { value: "evacuation", label: "Evacuation support" },
+    { value: "remote", label: "Remote coordination" },
+    { value: "other", label: "Other" },
+  ];
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -48,6 +60,7 @@ export default function AdminMissionsPage() {
   const [form, setForm] = useState({
     title: "",
     category: "",
+    customCategory: "",
     district: "",
     description: "",
     volunteersNeeded: 0,
@@ -56,8 +69,17 @@ export default function AdminMissionsPage() {
   });
 
   const canSubmit = useMemo(() => {
-    return String(form.title || "").trim().length > 2;
-  }, [form.title]);
+    const selectedCategory = String(form.category || "").trim();
+    const customCategory = String(form.customCategory || "").trim();
+    const hasCategory =
+      selectedCategory.length > 0 &&
+      (selectedCategory !== "other" || customCategory.length > 0);
+
+    return (
+      String(form.title || "").trim().length > 2 &&
+      hasCategory
+    );
+  }, [form.title, form.category, form.customCategory]);
 
   const load = useCallback(async () => {
     const token = typeof window !== "undefined" ? window.localStorage.getItem("dmews_token") : null;
@@ -101,13 +123,22 @@ export default function AdminMissionsPage() {
 
     setBusyId("create");
     try {
+      const selectedCategory = String(form.category || "").trim();
+      const payload = {
+        ...form,
+        category:
+          selectedCategory === "other"
+            ? String(form.customCategory || "").trim()
+            : selectedCategory,
+      };
+
       const res = await fetch(`${API_BASE}/missions/admin`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -119,6 +150,7 @@ export default function AdminMissionsPage() {
       setForm({
         title: "",
         category: "",
+        customCategory: "",
         district: "",
         description: "",
         volunteersNeeded: 0,
@@ -290,15 +322,45 @@ export default function AdminMissionsPage() {
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Category (optional)
+                Category *
               </label>
-              <input
+              <select
                 value={form.category}
-                onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
-                placeholder="supply | flood | landslide | shelter | remote"
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    category: e.target.value,
+                    customCategory: e.target.value === "other" ? p.customCategory : "",
+                  }))
+                }
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
-              />
+              >
+                <option value="" disabled>
+                  Select a category
+                </option>
+                {categoryOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {form.category === "other" && (
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Custom category *
+                </label>
+                <input
+                  value={form.customCategory}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, customCategory: e.target.value }))
+                  }
+                  placeholder="Type the category"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-200"
+                />
+              </div>
+            )}
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">

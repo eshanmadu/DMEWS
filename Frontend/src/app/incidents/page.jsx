@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { formatDistanceToNow } from "date-fns";
 import {
   AlertTriangle,
   Loader2,
@@ -36,6 +35,9 @@ function StatusBadge({ status }) {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+/** Shown when an incident has no photo or video attachment */
+const INCIDENT_CARD_FALLBACK_IMAGE = "/img/Background.png";
+
 const DISTRICTS = [
   "Colombo",
   "Gampaha",
@@ -64,14 +66,62 @@ const DISTRICTS = [
   "Kegalle",
 ];
 
-function rel(iso) {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "—";
-    return formatDistanceToNow(d, { addSuffix: true });
-  } catch {
-    return "—";
+function safeDate(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function isUtcMidnight(d) {
+  return (
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0
+  );
+}
+
+/** When the report was submitted (actual server timestamp). */
+function formatSubmissionAt(iso, si) {
+  const d = safeDate(iso);
+  if (!d) return "—";
+  return new Intl.DateTimeFormat(si ? "si-LK" : "en-LK", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(d);
+}
+
+function formatUpdatedAt(iso, si) {
+  const d = safeDate(iso);
+  if (!d) return "—";
+  return new Intl.DateTimeFormat(si ? "si-LK" : "en-LK", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(d);
+}
+
+/** Short label for overlays, e.g. "April 22" — incident date, UTC calendar when midnight UTC */
+function formatIncidentBadgeDate(iso, si) {
+  const d = safeDate(iso);
+  if (!d) return "";
+  if (isUtcMidnight(d)) {
+    return new Intl.DateTimeFormat(si ? "si-LK" : "en-LK", {
+      timeZone: "UTC",
+      month: "long",
+      day: "numeric",
+    }).format(d);
   }
+  return new Intl.DateTimeFormat(si ? "si-LK" : "en-LK", {
+    month: "long",
+    day: "numeric",
+  }).format(d);
+}
+
+function showUpdatedLine(incident) {
+  const c = safeDate(incident?.createdAt);
+  const u = safeDate(incident?.updatedAt);
+  if (!c || !u) return false;
+  return u.getTime() - c.getTime() > 3000;
 }
 
 function inferDistrict(incident) {
@@ -97,6 +147,7 @@ export default function IncidentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [districtFilter, setDistrictFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
 
   const searchParams = useSearchParams();
 
@@ -162,9 +213,10 @@ export default function IncidentsPage() {
     setLoading(true);
     setError("");
     try {
-      const qs = districtFilter
-        ? `?district=${encodeURIComponent(districtFilter)}`
-        : "";
+      const params = new URLSearchParams();
+      if (districtFilter) params.set("district", districtFilter);
+      if (dateFilter) params.set("date", dateFilter);
+      const qs = params.size ? `?${params.toString()}` : "";
       const res = await fetch(`${API_BASE}/incidents${qs}`, { cache: "no-store" });
       const data = await res.json().catch(() => []);
       if (!res.ok) {
@@ -179,7 +231,7 @@ export default function IncidentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [districtFilter]);
+  }, [districtFilter, dateFilter]);
 
   useEffect(() => {
     load();
@@ -379,22 +431,58 @@ export default function IncidentsPage() {
       </div>
 
       <div className="mb-6 flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {si ? "දිස්ත්‍රික් අනුව පෙරණය" : "Filter by district"}
-          </label>
-          <select
-            value={districtFilter}
-            onChange={(e) => setDistrictFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
-          >
-            <option value="">{si ? "සියලු දිස්ත්‍රික්ක" : "All districts"}</option>
-            {DISTRICTS.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {si ? "දිස්ත්‍රික්කය" : "District"}
+            </label>
+            <select
+              value={districtFilter}
+              onChange={(e) => setDistrictFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+            >
+              <option value="">{si ? "සියලු දිස්ත්‍රික්ක" : "All districts"}</option>
+              {DISTRICTS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <label htmlFor="incident-date-filter" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {si ? "සිදුවූ දිනය" : "Incident date"}
+            </label>
+            <div
+              className={`inline-flex items-center rounded-lg border bg-white shadow-sm transition focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-200 ${
+                dateFilter ? "border-sky-200 pl-2 pr-1" : "border-slate-200 px-1"
+              }`}
+            >
+              <input
+                id="incident-date-filter"
+                type="date"
+                value={dateFilter}
+                min={minDate}
+                max={maxDate}
+                onChange={(e) => setDateFilter(e.target.value)}
+                aria-label={si ? "සිදුවූ දිනය පෙරහන" : "Filter by incident date"}
+                className={`min-h-[42px] border-0 bg-transparent py-2 text-sm text-slate-700 outline-none focus:ring-0 ${
+                  dateFilter ? "pl-1 pr-1" : "px-3"
+                }`}
+              />
+              {dateFilter ? (
+                <button
+                  type="button"
+                  onClick={() => setDateFilter("")}
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                  title={si ? "දින පෙරහන නිවා දමන්න" : "Clear date filter"}
+                  aria-label={si ? "දින පෙරහන නිවා දමන්න" : "Clear date filter"}
+                >
+                  <X className="h-4 w-4" strokeWidth={2.25} />
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
 
         <div className="flex justify-end">
@@ -443,48 +531,67 @@ export default function IncidentsPage() {
                   String(incident?.reporter?.id || "") === String(currentUser?.id);
                 
                 const districtName = incident.district || inferDistrict(incident);
+                /** Incident calendar date: explicit DB field, or merged `reportedAt` for older API responses. */
+                const incidentDateRaw = incident.incidentOccurredAt ?? incident.reportedAt;
+                const posted = formatSubmissionAt(incident.createdAt, si);
+                const badgeDate = incidentDateRaw ? formatIncidentBadgeDate(incidentDateRaw, si) : "";
+                const showUpdated = showUpdatedLine(incident);
 
                 return (
                   <div
                     key={incident.id}
                     className="group flex h-full flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-slate-300 hover:shadow-md overflow-hidden"
                   >
-                    {/* ===== DISTRICT HEADER (TOP OF CARD) ===== */}
-                    {/* If media exists, we overlay a glass pill on the media */}
-                    {media0?.url ? (
+                    {/* ===== Card cover: video, user image, or default background ===== */}
+                    {isVideo && media0?.url ? (
                       <div className="relative overflow-hidden">
-                        {isVideo ? (
-                          <video src={media0.url} controls className="w-full" />
-                        ) : (
-                          <div className="relative aspect-[16/9] w-full bg-slate-100">
-                            <Image
-                              src={media0.url}
-                              alt={incident.title || "Incident media"}
-                              fill
-                              className="object-cover transition-transform group-hover:scale-105"
-                              sizes="(max-width: 768px) 100vw, 50vw"
-                              unoptimized
-                            />
+                        <div className="relative aspect-video w-full bg-slate-900">
+                          <video src={media0.url} controls className="h-full w-full object-cover" />
+                        </div>
+                        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
+                          <div className="rounded-full border border-white/30 bg-white/80 px-3 py-1 shadow-md backdrop-blur-sm">
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                              <MapPin className="h-3 w-3 shrink-0 text-rose-500" />
+                              <span className="line-clamp-1">{districtName}</span>
+                            </div>
                           </div>
-                        )}
-                        {/* Creative glassmorphic pill overlaying the top of media */}
-                        <div className="absolute left-3 top-3 z-10 rounded-full bg-white/80 backdrop-blur-sm px-3 py-1 shadow-md border border-white/30">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
-                            <MapPin className="h-3 w-3 text-rose-500" />
-                            <span>{districtName}</span>
-                          </div>
+                          {badgeDate ? (
+                            <div className="rounded-full border border-white/30 bg-white/80 px-3 py-1 text-xs font-semibold tabular-nums text-slate-800 shadow-md backdrop-blur-sm">
+                              {badgeDate}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     ) : (
-                      /* No media: clean header bar at the top */
-                      <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-4 py-2">
-                        <div className="flex items-center gap-2">
-                          <div className="rounded-full bg-sky-100 p-1.5">
-                            <MapPin className="h-3.5 w-3.5 text-sky-600" />
+                      <div className="relative overflow-hidden">
+                        <div className="relative aspect-[16/9] w-full bg-slate-100">
+                          <Image
+                            src={media0?.url ? media0.url : INCIDENT_CARD_FALLBACK_IMAGE}
+                            alt={
+                              media0?.url
+                                ? incident.title || "Incident media"
+                                : si
+                                  ? "සිදුවීමේ පෙරනිමි රූපය"
+                                  : "Default incident illustration"
+                            }
+                            fill
+                            className="object-cover transition-transform group-hover:scale-105"
+                            sizes="(max-width: 768px) 100vw, 50vw"
+                            unoptimized={Boolean(media0?.url)}
+                          />
+                        </div>
+                        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
+                          <div className="rounded-full border border-white/30 bg-white/80 px-3 py-1 shadow-md backdrop-blur-sm">
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                              <MapPin className="h-3 w-3 shrink-0 text-rose-500" />
+                              <span className="line-clamp-1">{districtName}</span>
+                            </div>
                           </div>
-                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            {districtName} District
-                          </span>
+                          {badgeDate ? (
+                            <div className="rounded-full border border-white/30 bg-white/80 px-3 py-1 text-xs font-semibold tabular-nums text-slate-800 shadow-md backdrop-blur-sm">
+                              {badgeDate}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     )}
@@ -498,9 +605,18 @@ export default function IncidentsPage() {
                             {incident.source === "user" ? (si ? "ප්‍රජා" : "Community") : incident.type}
                           </span>
                         </div>
-                        <span className="text-xs text-slate-400">
-                          {rel(incident.reportedAt || incident.updatedAt)}
-                        </span>
+                        <div className="text-right text-xs leading-snug text-slate-500">
+                          <div>
+                            <span className="font-medium text-slate-600">{si ? "පළ කළ:" : "Posted:"}</span>{" "}
+                            {posted}
+                          </div>
+                          {showUpdated ? (
+                            <div className="mt-0.5">
+                              <span className="font-medium text-slate-600">{si ? "යාවත්කාලීන:" : "Updated:"}</span>{" "}
+                              {formatUpdatedAt(incident.updatedAt, si)}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
 
                       <h3 className="mt-3 text-lg font-semibold text-slate-800">
@@ -700,7 +816,7 @@ export default function IncidentsPage() {
                   className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-sky-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-sky-700 hover:file:bg-sky-200"
                 />
                 <p className="mt-1 text-xs text-slate-400">
-                  Max 25MB. If media upload isn&apos;t configured on the backend, you can still submit without a file.
+                  Max 25MB. Supported formats: jpg, jpeg, png, mp4, webm, mov.
                 </p>
               </div>
 

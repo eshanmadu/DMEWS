@@ -56,8 +56,8 @@ export function Nav() {
     { href: "/incidents", label: t("nav.reports", "Reports") }, // keep current path
   ];
   const volunteerDropdownItems = [
-    { href: "/volunteer", label: t("nav.volunteer", "Volunteer") },
-    { href: "/resources", label: t("nav.resources", "Resources") },
+    { href: "/volunteer", label: t("nav.volunteer") },
+    { href: "/resources", label: t("nav.resources") },
   ];
 
   // Close incidents dropdown on route change
@@ -480,7 +480,7 @@ export function Nav() {
                         role="menuitem"
                         onClick={() => setProfileDropdownOpen(false)}
                       >
-                        {isAdminUser ? "Admin dashboard" : "View profile"}
+                        {isAdminUser ? t("nav.adminDashboard") : t("nav.viewProfile")}
                       </Link>
 
                       <button

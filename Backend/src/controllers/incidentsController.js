@@ -23,7 +23,11 @@ function normalizeUserIncident(doc) {
       mobile: o.userSnapshot?.mobile || "",
       avatar: o.userSnapshot?.avatar || "",
     },
+    /** Merged timeline field (occurred date falls back for older clients / sorting). */
     reportedAt: o.reportedAt || o.createdAt,
+    /** When the incident occurred per the reporter’s form date (omit if unset in DB). */
+    incidentOccurredAt: o.reportedAt != null ? o.reportedAt : null,
+    createdAt: o.createdAt,
     updatedAt: o.updatedAt,
   };
 }
@@ -32,8 +36,15 @@ async function getIncidents(req, res) {
   try {
     await connectDb();
     const district = req.query?.district ? String(req.query.district).trim() : "";
+    const dateYmd = req.query?.date ? String(req.query.date).trim() : "";
 
     const q = district ? { district } : {};
+    // Filter by incident date from the report form (stored on `reportedAt` as UTC midnight for that day).
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateYmd)) {
+      const dayStart = new Date(`${dateYmd}T00:00:00.000Z`);
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      q.reportedAt = { $gte: dayStart, $lt: dayEnd };
+    }
     const userIncidents = await IncidentReport.find(q)
       .sort({ createdAt: -1 })
       .limit(500)
