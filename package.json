@@ -1,0 +1,19 @@
+{
+  "name": "dmews-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "Backend",
+    "Frontend",
+    "mobile-officer"
+  ],
+  "scripts": {
+    "dev:backend": "npm --workspace Backend run dev",
+    "dev:web": "npm --workspace Frontend run dev",
+    "dev:mobile": "npm --workspace mobile-officer run start",
+    "start:backend": "npm --workspace Backend run start",
+    "start:web": "npm --workspace Frontend run start",
+    "start:mobile": "npm --workspace mobile-officer run start",
+    "build:web": "npm --workspace Frontend run build"
+  }
+}
