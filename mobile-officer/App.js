@@ -12,9 +12,32 @@ import {
 } from 'react-native';
 import Constants from 'expo-constants';
 
-const API_URL = (Constants.manifest && Constants.manifest.extra && Constants.manifest.extra.API_URL)
-  || (Constants.expoConfig && Constants.expoConfig.extra && Constants.expoConfig.extra.API_URL)
-  || 'http://localhost:4000';
+function resolveApiUrl() {
+  const configured =
+    (Constants.expoConfig && Constants.expoConfig.extra && Constants.expoConfig.extra.API_URL) ||
+    'http://localhost:4000';
+
+  try {
+    const url = new URL(configured);
+    const isLoopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    if (!isLoopback) return configured.replace(/\/$/, '');
+
+    const hostUri = Constants.expoConfig && Constants.expoConfig.hostUri;
+    if (hostUri) {
+      const host = String(hostUri).split('/')[0].split(':')[0];
+      if (host && host !== 'localhost' && host !== '127.0.0.1') {
+        url.hostname = host;
+        return url.origin;
+      }
+    }
+  } catch (_) {
+    // Fall back to the configured URL.
+  }
+
+  return configured.replace(/\/$/, '');
+}
+
+const API_URL = resolveApiUrl();
 
 export default function App() {
   const [name, setName] = useState('');

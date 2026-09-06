@@ -3,8 +3,22 @@
     "name": "Mobile Officer",
     "slug": "mobile-officer",
     "version": "1.0.0",
-    "sdkVersion": "48.0.0",
-    "platforms": ["ios", "android", "web"],
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "usesCleartextTraffic": true,
+      "edgeToEdgeEnabled": true
+    },
     "extra": {
       "API_URL": "http://localhost:4000"
     }

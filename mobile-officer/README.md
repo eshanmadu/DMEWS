@@ -9,12 +9,14 @@ Quick start
    npm install
 
 2. Configure backend URL
-   - By default app.json.extra.API_URL is set to http://localhost:4000. Update that value if your backend runs elsewhere.
-   - To run against a remote backend, edit app.json -> expo.extra.API_URL.
+   - Default is http://localhost:4000 in app.json extra.API_URL.
+   - On a physical phone, localhost is the phone itself. The app rewrites that to the same LAN IP Expo Go uses to load the bundle (your PC). Keep the phone and PC on the same Wi‑Fi.
+   - For a remote backend, set expo.extra.API_URL to that host.
 
 3. Start the app
    npm run start
-   - Use Expo Go on a phone, or run on simulator/emulator.
+   - Scan the QR code with Expo Go (SDK 54 from the App Store).
+   - This project uses Expo SDK 54. Older Expo projects (SDK 48) fail on current Expo Go with "legacy manifests".
 
 Notes
 
