@@ -1,6 +1,8 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
+const fs = require("fs");
+const path = require("path");
 const { OAuth2Client } = require("google-auth-library");
 
 const { connectDb } = require("../db");
@@ -24,6 +26,43 @@ const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-production";
 
 const PASSWORD_RESET_OTP_TTL_MS = 15 * 60 * 1000;
 
+const DISTRICTS_PATH = path.join(__dirname, "..", "..", "data", "districts.json");
+const CITIES_PATH = path.join(__dirname, "..", "..", "data", "cities.json");
+
+function isValidLocation(province, district, city) {
+  try {
+    const districts = JSON.parse(fs.readFileSync(DISTRICTS_PATH, "utf8")).districts || [];
+    const selectedDistrict = districts.find(
+      (item) => String(item.id) === String(district) || item.name_en === district
+    );
+    if (!selectedDistrict || String(selectedDistrict.province_id) !== String(province)) {
+      return false;
+    }
+
+    const cities = JSON.parse(fs.readFileSync(CITIES_PATH, "utf8")).cities || [];
+    return cities.some(
+      (item) =>
+        String(item.district_id) === String(selectedDistrict.id) &&
+        (item.name_en === city ||
+          item.name === city ||
+          `${item.name_en}${item.sub_name_en ? ` (${item.sub_name_en})` : ""}` === city)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function provinceForDistrict(district) {
+  try {
+    const districts = JSON.parse(fs.readFileSync(DISTRICTS_PATH, "utf8")).districts || [];
+    return districts.find(
+      (item) => String(item.id) === String(district) || item.name_en === district
+    )?.province_id || "";
+  } catch {
+    return "";
+  }
+}
+
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID || undefined);
 
@@ -46,6 +85,7 @@ async function attachVolunteerStatus(userDoc) {
   return {
     id: userDoc._id.toString(),
     name: userDoc.name || "",
+    province: userDoc.province || "",
     district: userDoc.district || "",
     city: userDoc.city || "",
     cityLatitude:
@@ -105,6 +145,7 @@ async function signup(req, res) {
   try {
     const {
       name,
+      province,
       district,
       city,
       cityLatitude,
@@ -115,10 +156,12 @@ async function signup(req, res) {
       avatar,
     } = req.body || {};
 
-    if (!district || !email || !password || !mobile) {
+    const trimmedDistrict = String(district || "").trim();
+    const trimmedProvince = String(province || provinceForDistrict(trimmedDistrict)).trim();
+    if (!trimmedProvince || !trimmedDistrict || !email || !password || !mobile) {
       return res
         .status(400)
-        .json({ message: "District, email, password and mobile are required." });
+        .json({ message: "Province, district, email, password and mobile are required." });
     }
 
     const trimmedCity = String(city || "").trim();
@@ -128,6 +171,10 @@ async function signup(req, res) {
       return res.status(400).json({
         message: "City and valid coordinates (cityLatitude, cityLongitude) are required.",
       });
+    }
+
+    if (!isValidLocation(trimmedProvince, trimmedDistrict, trimmedCity)) {
+      return res.status(400).json({ message: "Select a valid province, district and city." });
     }
 
     if (!/^\d{10}$/.test(String(mobile).trim())) {
@@ -145,9 +192,9 @@ async function signup(req, res) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const trimmedDistrict = String(district || "").trim();
     const user = await User.create({
       name: name || "",
+      province: trimmedProvince,
       district: trimmedDistrict,
       city: trimmedCity,
       cityLatitude: lat,
@@ -223,6 +270,7 @@ async function login(req, res) {
       user: {
         id: user._id.toString(),
         name: user.name,
+        province: user.province || "",
         district: user.district,
         city: user.city || "",
         cityLatitude:
@@ -382,11 +430,12 @@ async function completeProfile(req, res) {
       });
     }
 
-    const { mobile, district, city, cityLatitude, cityLongitude, preferredLanguage, avatar } =
+    const { mobile, province, district, city, cityLatitude, cityLongitude, preferredLanguage, avatar } =
       req.body || {};
 
     const trimmedMobile = String(mobile || "").trim();
     const trimmedDistrict = String(district || "").trim();
+    const trimmedProvince = String(province || provinceForDistrict(trimmedDistrict)).trim();
     const trimmedCity = String(city || "").trim();
     const lat = Number(cityLatitude);
     const lon = Number(cityLongitude);
@@ -398,8 +447,11 @@ async function completeProfile(req, res) {
         .status(400)
         .json({ message: "Mobile number must be exactly 10 digits." });
     }
-    if (!trimmedDistrict) {
-      return res.status(400).json({ message: "District is required." });
+    if (!trimmedProvince || !trimmedDistrict) {
+      return res.status(400).json({ message: "Province and district are required." });
+    }
+    if (!isValidLocation(trimmedProvince, trimmedDistrict, trimmedCity)) {
+      return res.status(400).json({ message: "Select a valid province, district and city." });
     }
     if (!trimmedCity || !Number.isFinite(lat) || !Number.isFinite(lon)) {
       return res.status(400).json({
@@ -417,6 +469,7 @@ async function completeProfile(req, res) {
     }
 
     user.mobile = trimmedMobile;
+    user.province = trimmedProvince;
     user.district = trimmedDistrict;
     user.city = trimmedCity;
     user.cityLatitude = lat;

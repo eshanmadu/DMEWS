@@ -7,6 +7,18 @@ const CITIES_PATH = path.join(__dirname, "..", "..", "data", "cities.json");
 let districtsDocCache = null;
 let citiesListCache = null;
 
+const PROVINCE_NAMES = {
+  1: "Western Province",
+  2: "Central Province",
+  3: "Southern Province",
+  4: "North Western Province",
+  5: "Sabaragamuwa Province",
+  6: "Eastern Province",
+  7: "Uva Province",
+  8: "North Central Province",
+  9: "Northern Province",
+};
+
 function readDistrictsDoc() {
   if (districtsDocCache) return districtsDocCache;
   const raw = fs.readFileSync(DISTRICTS_PATH, "utf8");
@@ -58,4 +70,20 @@ function getSriLankaCities(req, res) {
   }
 }
 
-module.exports = { getSriLankaDistricts, getSriLankaCities };
+function getSriLankaProvinces(_req, res) {
+  try {
+    const districts = readDistrictsDoc().districts || [];
+    const ids = [...new Set(districts.map((item) => String(item.province_id)))].sort(
+      (a, b) => Number(a) - Number(b)
+    );
+    return res.json({
+      success: true,
+      provinces: ids.map((id) => ({ id, name_en: PROVINCE_NAMES[id] || `Province ${id}` })),
+    });
+  } catch (error) {
+    console.error("locations provinces", error);
+    return res.status(500).json({ message: "Failed to load provinces." });
+  }
+}
+
+module.exports = { getSriLankaDistricts, getSriLankaCities, getSriLankaProvinces };

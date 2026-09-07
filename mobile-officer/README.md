@@ -15,8 +15,8 @@ Quick start
 
 3. Start the app
    npm run start
-   - Scan the QR code with Expo Go (SDK 54 from the App Store).
-   - This project uses Expo SDK 54. Older Expo projects (SDK 48) fail on current Expo Go with "legacy manifests".
+   - Scan the QR code with Expo Go (SDK 57).
+   - This project uses Expo SDK 57 so it matches current Expo Go. Older SDKs fail with "incompatible" or "legacy manifests".
 
 Notes
 

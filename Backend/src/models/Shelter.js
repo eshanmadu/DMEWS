@@ -32,6 +32,21 @@ const ShelterSchema = new Schema(
       required: true,
       min: 0,
     },
+    occupied: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    availability: {
+      type: String,
+      enum: ["open", "closed"],
+      default: "open",
+    },
+    condition: {
+      type: String,
+      enum: ["good", "fair", "needs-attention", "critical"],
+      default: "good",
+    },
     contact: {
       type: String,
       trim: true,
@@ -41,6 +56,11 @@ const ShelterSchema = new Schema(
       type: String,
       trim: true,
       default: "",
+    },
+    status: {
+      type: String,
+      enum: ["active", "inactive"],
+      default: "active",
     },
   },
   {

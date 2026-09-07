@@ -8,6 +8,11 @@ const UserSchema = new Schema(
       type: String,
       trim: true,
     },
+    province: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     district: {
       type: String,
       trim: true,

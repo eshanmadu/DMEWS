@@ -25,6 +25,10 @@ import {
   ChevronRight,
   AlertCircle,
   ArrowRight,
+  DoorOpen,
+  DoorClosed,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -1178,6 +1182,21 @@ export default function SheltersPage() {
 
 // Shelter Card Component
 function ShelterCard({ shelter, highlight, distanceLabel }) {
+  const occupied = Number(shelter.occupied || 0);
+  const capacity = Number(shelter.capacity || 0);
+  const isFull = Boolean(shelter.isFull || (capacity > 0 && occupied >= capacity));
+  const isOpen = (shelter.availability || (shelter.status === "inactive" ? "closed" : "open")) === "open";
+  const condition = shelter.condition || "good";
+  const conditionLabel = condition === "needs-attention" ? "Needs attention" : condition[0].toUpperCase() + condition.slice(1);
+  const conditionClass =
+    condition === "critical"
+      ? "bg-red-100 text-red-800"
+      : condition === "needs-attention"
+        ? "bg-amber-100 text-amber-800"
+        : condition === "fair"
+          ? "bg-yellow-100 text-yellow-800"
+          : "bg-emerald-100 text-emerald-800";
+
   return (
     <div
       className={`group relative rounded-xl border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
@@ -1195,6 +1214,19 @@ function ShelterCard({ shelter, highlight, distanceLabel }) {
         <h3 className="pr-8 text-lg font-semibold text-slate-900">
           {shelter.name}
         </h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${isOpen ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>
+            {isOpen ? <DoorOpen className="h-3.5 w-3.5" /> : <DoorClosed className="h-3.5 w-3.5" />}
+            {isOpen ? "Open" : "Closed"}
+          </span>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${isFull ? "bg-red-100 text-red-800" : "bg-sky-100 text-sky-800"}`}>
+            {isFull ? <AlertTriangle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            {isFull ? "FULL" : `${Math.max(0, capacity - occupied)} spaces available`}
+          </span>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${conditionClass}`}>
+            Condition: {conditionLabel}
+          </span>
+        </div>
         <div className="mt-3 space-y-2">
           <div className="flex items-start gap-2 text-sm text-slate-700">
             <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-500" />
@@ -1218,7 +1250,7 @@ function ShelterCard({ shelter, highlight, distanceLabel }) {
             )}
             <span className="flex items-center gap-1.5">
               <Users className="h-3.5 w-3.5" />
-              Capacity: {shelter.capacity}
+              {occupied}/{capacity} occupied
             </span>
           </div>
           {shelter.contact && (
@@ -1228,6 +1260,17 @@ function ShelterCard({ shelter, highlight, distanceLabel }) {
             </div>
           )}
         </div>
+        {capacity > 0 && (
+          <div className="mt-4">
+            <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+              <span>Current occupancy</span>
+              <span>{Math.min(100, Math.round((occupied / capacity) * 100))}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className={`h-full ${isFull ? "bg-red-500" : "bg-sky-500"}`} style={{ width: `${Math.min(100, Math.max(0, (occupied / capacity) * 100))}%` }} />
+            </div>
+          </div>
+        )}
         {shelter.contact && (
           <div className="mt-4 border-t border-slate-100 pt-3">
             <a

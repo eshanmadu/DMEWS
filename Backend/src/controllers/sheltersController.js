@@ -1,5 +1,6 @@
 const { connectDb } = require("../db");
 const { Shelter } = require("../models/Shelter");
+const { User } = require("../models/User");
 
 function toApiShelter(s) {
   return {
@@ -11,8 +12,14 @@ function toApiShelter(s) {
     cityLatitude: typeof s.cityLatitude === "number" ? s.cityLatitude : undefined,
     cityLongitude: typeof s.cityLongitude === "number" ? s.cityLongitude : undefined,
     capacity: s.capacity,
+    occupied: s.occupied || 0,
+    availableSpaces: Math.max(0, (s.capacity || 0) - (s.occupied || 0)),
+    isFull: (s.occupied || 0) >= (s.capacity || 0),
+    availability: s.availability || (s.status === "inactive" ? "closed" : "open"),
+    condition: s.condition || "good",
     contact: s.contact || "",
     notes: s.notes || "",
+    status: s.status || "active",
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
   };
@@ -145,5 +152,95 @@ async function deleteShelter(req, res) {
   }
 }
 
-module.exports = { getShelters, createShelter, updateShelter, deleteShelter };
+async function updateShelterStatus(req, res) {
+  try {
+    const status = String(req.body?.status || "").trim().toLowerCase();
+    if (!["active", "inactive"].includes(status)) {
+      return res.status(400).json({ message: "Status must be active or inactive." });
+    }
+
+    await connectDb();
+    const shelter = await Shelter.findById(req.params.id).exec();
+
+    if (!shelter) {
+      return res.status(404).json({ message: "Shelter not found." });
+    }
+
+    if (!req.isDevAdmin) {
+      const user = await User.findById(req.userId).select("district").lean().exec();
+      if (!user) return res.status(401).json({ message: "User account not found." });
+      if (String(user.district || "").trim() !== String(shelter.district || "").trim()) {
+        return res.status(403).json({ message: "You can only change shelters in your district." });
+      }
+    }
+
+    shelter.status = status;
+    shelter.availability = status === "active" ? "open" : "closed";
+    await shelter.save();
+
+    return res.json(toApiShelter(shelter));
+  } catch (error) {
+    console.error("Shelter status update error", error);
+    return res.status(500).json({ message: "Failed to update shelter status." });
+  }
+}
+
+async function updateShelterManagement(req, res) {
+  try {
+    await connectDb();
+    const shelter = await Shelter.findById(req.params.id).exec();
+    if (!shelter) return res.status(404).json({ message: "Shelter not found." });
+
+    if (!req.isDevAdmin) {
+      const user = await User.findById(req.userId).select("district").lean().exec();
+      if (!user) return res.status(401).json({ message: "User account not found." });
+      if (String(user.district || "").trim() !== String(shelter.district || "").trim()) {
+        return res.status(403).json({ message: "You can only manage shelters in your district." });
+      }
+    }
+
+    const { capacity, occupied, availability, condition } = req.body || {};
+    if (capacity !== undefined) {
+      const value = Number(capacity);
+      if (!Number.isInteger(value) || value <= 0) {
+        return res.status(400).json({ message: "Capacity must be a positive integer." });
+      }
+      shelter.capacity = value;
+    }
+    if (occupied !== undefined) {
+      const value = Number(occupied);
+      if (!Number.isInteger(value) || value < 0 || value > shelter.capacity) {
+        return res.status(400).json({ message: "Occupied places must be between 0 and capacity." });
+      }
+      shelter.occupied = value;
+    }
+    if ((shelter.occupied || 0) > shelter.capacity) {
+      return res.status(400).json({ message: "Capacity cannot be lower than occupied places." });
+    }
+    if (!["open", "closed"].includes(availability)) {
+      return res.status(400).json({ message: "Availability must be open or closed." });
+    }
+    if (!["good", "fair", "needs-attention", "critical"].includes(condition)) {
+      return res.status(400).json({ message: "Select a valid shelter condition." });
+    }
+
+    shelter.availability = availability;
+    shelter.status = availability === "open" ? "active" : "inactive";
+    shelter.condition = condition;
+    await shelter.save();
+    return res.json(toApiShelter(shelter));
+  } catch (error) {
+    console.error("Shelter management update error", error);
+    return res.status(500).json({ message: "Failed to update shelter details." });
+  }
+}
+
+module.exports = {
+  getShelters,
+  createShelter,
+  updateShelter,
+  updateShelterStatus,
+  updateShelterManagement,
+  deleteShelter,
+};
 
