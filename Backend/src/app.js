@@ -20,6 +20,7 @@ const sensorRoutes = require("./routes/sensorRoutes");
 const locationsRoutes = require("./routes/locations.routes");
 const geocodeRoutes = require("./routes/geocode.routes");
 const resourcesRoutes = require("./routes/resources.routes");
+const victimAccessRoutes = require("./routes/victimAccess.routes");
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use("/admin/users", adminUsersRoutes);
 app.use("/sensors", sensorRoutes);
 app.use("/geocode", geocodeRoutes);
 app.use("/", resourcesRoutes);
+app.use("/victim-access", victimAccessRoutes);
 
 module.exports = app;
 

@@ -32,6 +32,9 @@ import {
   Layers,
   Search,
   SlidersHorizontal,
+  ShieldCheck,
+  FileUp,
+  ExternalLink,
 } from "lucide-react";
 
 import { MatchScoreBreakdown } from "@/components/MatchScoreBreakdown";
@@ -241,6 +244,16 @@ export default function MissingPersonsPage() {
   const [photoLightboxUrl, setPhotoLightboxUrl] = useState(null);
   const [profileHint, setProfileHint] = useState({ name: "", mobile: "" });
   const [clientSignedIn, setClientSignedIn] = useState(false);
+  const [victimAccessRequest, setVictimAccessRequest] = useState(null);
+  const [showVictimAccessForm, setShowVictimAccessForm] = useState(false);
+  const [victimAccessForm, setVictimAccessForm] = useState({
+    requestedRole: "",
+    organization: "",
+    employeeId: "",
+    document: null,
+  });
+  const [victimAccessError, setVictimAccessError] = useState("");
+  const [victimAccessSubmitting, setVictimAccessSubmitting] = useState(false);
 
   const loadLists = useCallback(async () => {
     setListLoading(true);
@@ -270,6 +283,21 @@ export default function MissingPersonsPage() {
     setProfileHint(readStoredProfileHint());
     setClientSignedIn(Boolean(window.localStorage.getItem("dmews_token")));
   }, [showMissingForm, showFoundForm]);
+
+  useEffect(() => {
+    if (!clientSignedIn) {
+      setVictimAccessRequest(null);
+      return;
+    }
+    const token = window.localStorage.getItem("dmews_token");
+    fetch(`${API_BASE}/victim-access/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })
+      .then((res) => res.json().catch(() => ({})))
+      .then((data) => setVictimAccessRequest(data?.request || null))
+      .catch(() => setVictimAccessRequest(null));
+  }, [clientSignedIn]);
 
   useEffect(() => {
     if (successMsg) {
@@ -783,6 +811,38 @@ export default function MissingPersonsPage() {
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const submitVictimAccessRequest = async (e) => {
+    e.preventDefault();
+    setVictimAccessError("");
+    if (!victimAccessForm.requestedRole.trim() || !victimAccessForm.organization.trim() || !victimAccessForm.employeeId.trim() || !victimAccessForm.document) {
+      setVictimAccessError("Role, organization, employee/officer ID, and a document are required.");
+      return;
+    }
+    setVictimAccessSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.append("requestedRole", victimAccessForm.requestedRole.trim());
+      fd.append("organization", victimAccessForm.organization.trim());
+      fd.append("employeeId", victimAccessForm.employeeId.trim());
+      fd.append("document", victimAccessForm.document);
+      const res = await fetch(`${API_BASE}/victim-access/request`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Could not submit access request.");
+      setVictimAccessRequest(data.request || null);
+      setShowVictimAccessForm(false);
+      setVictimAccessForm({ requestedRole: "", organization: "", employeeId: "", document: null });
+      setSuccessMsg({ type: "access", text: "✓ Victim identification access request submitted" });
+    } catch (error) {
+      setVictimAccessError(error?.message || "Could not submit access request.");
+    } finally {
+      setVictimAccessSubmitting(false);
+    }
+  };
+
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
   const matchesSharedFilters = useCallback(
@@ -957,8 +1017,82 @@ export default function MissingPersonsPage() {
             <UserCheck className="h-5 w-5" />
             {showFoundForm ? tr("Hide", "සඟවන්න") : tr("Report Found", "හමුවූ පුද්ගලයා වාර්තා කරන්න")}
           </button>
+          {victimAccessRequest?.status === "approved" ? (
+            <Link
+              href="/incidents/victim-identification"
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-indigo-600"
+            >
+              <ShieldCheck className="h-5 w-5" />
+              Victim Identification
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setVictimAccessError("");
+                setShowVictimAccessForm(true);
+              }}
+              disabled={!clientSignedIn || victimAccessRequest?.status === "pending"}
+              className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-5 py-2.5 text-sm font-semibold text-indigo-800 shadow-sm transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <ShieldCheck className="h-5 w-5" />
+              {victimAccessRequest?.status === "pending" ? "Verification pending" : "Request victim verification"}
+            </button>
+          )}
         </div>
       </div>
+
+      {!clientSignedIn && (
+        <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Sign in to request restricted victim identification access.
+        </p>
+      )}
+      {clientSignedIn && victimAccessRequest && victimAccessRequest.status !== "approved" && (
+        <p className="mb-6 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+          Access request status: <strong className="capitalize">{victimAccessRequest.status}</strong>. An administrator must approve your officer credentials before the protected page becomes available.
+        </p>
+      )}
+
+      {showVictimAccessForm && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="victim-access-title">
+          <button type="button" className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" onClick={() => setShowVictimAccessForm(false)} aria-label="Close" />
+          <form onSubmit={submitVictimAccessRequest} className="relative z-10 w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="victim-access-title" className="text-xl font-bold text-slate-900">Request victim identification access</h2>
+                <p className="mt-1 text-sm text-slate-600">Submit your official details for administrator verification.</p>
+              </div>
+              <button type="button" onClick={() => setShowVictimAccessForm(false)} className="rounded-full p-1 text-slate-500 hover:bg-slate-100" aria-label="Close"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="mt-5 space-y-4">
+              <label className="block text-sm font-medium text-slate-700">Requested role
+                <input required value={victimAccessForm.requestedRole} onChange={(e) => setVictimAccessForm({ ...victimAccessForm, requestedRole: e.target.value })} placeholder="Police Investigator" className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+              </label>
+              <label className="block text-sm font-medium text-slate-700">Organization
+                <input required value={victimAccessForm.organization} onChange={(e) => setVictimAccessForm({ ...victimAccessForm, organization: e.target.value })} placeholder="Police Department" className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+              </label>
+              <label className="block text-sm font-medium text-slate-700">Employee/Officer ID
+                <input required value={victimAccessForm.employeeId} onChange={(e) => setVictimAccessForm({ ...victimAccessForm, employeeId: e.target.value })} placeholder="POL-XXXX" className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+              </label>
+              <label className="block text-sm font-medium text-slate-700">Verification document
+                <span className="mt-1 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-indigo-300 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-800 hover:bg-indigo-50">
+                  <FileUp className="h-4 w-4" />
+                  {victimAccessForm.document?.name || "Choose image or PDF (max 10MB)"}
+                  <input required type="file" accept="image/*,.pdf,application/pdf" onChange={(e) => setVictimAccessForm({ ...victimAccessForm, document: e.target.files?.[0] || null })} className="hidden" />
+                </span>
+              </label>
+            </div>
+            {victimAccessError && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{victimAccessError}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowVictimAccessForm(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="submit" disabled={victimAccessSubmitting} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-600 disabled:opacity-60">
+                {victimAccessSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Submit request
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Global error / success messages */}
       {submitError && (

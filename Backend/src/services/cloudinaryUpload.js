@@ -55,6 +55,28 @@ function uploadBuffer(buffer, mimetype, options = {}) {
   });
 }
 
+function uploadDocumentBuffer(buffer, options = {}) {
+  ensureConfigured();
+  const folder = options.folder || "dmews/victim-identification";
+
+  return new Promise((resolve, reject) => {
+    const upload = cloudinary.uploader.upload_stream(
+      { folder, resource_type: "raw" },
+      (err, result) => {
+        if (err) return reject(err);
+        resolve({
+          url: result?.secure_url || result?.url,
+          publicId: result?.public_id || "",
+          resourceType: result?.resource_type || "raw",
+          format: result?.format || "",
+          bytes: result?.bytes || 0,
+        });
+      }
+    );
+    upload.end(buffer);
+  });
+}
+
 /**
  * Best-effort delete by Cloudinary public_id (image).
  * @param {string} publicId
@@ -86,6 +108,7 @@ async function destroyMediaPublicId(publicId, resourceType) {
 module.exports = {
   isCloudinaryConfigured,
   uploadBuffer,
+  uploadDocumentBuffer,
   destroyPublicId,
   destroyMediaPublicId,
 };
