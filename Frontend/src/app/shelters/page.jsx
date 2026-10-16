@@ -29,8 +29,10 @@ import {
   DoorClosed,
   AlertTriangle,
   CheckCircle2,
+  LocateFixed,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import RouteModal from "@/components/RouteModal";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -260,6 +262,10 @@ export default function SheltersPage() {
   const [userCityLongitude, setUserCityLongitude] = useState(null);
   const [selectedDistrict, setSelectedDistrict] = useState("");
   const [districts, setDistricts] = useState([]);
+  const [browserLocation, setBrowserLocation] = useState(null);
+  const [browserLocationStatus, setBrowserLocationStatus] = useState("idle");
+  const [browserLocationError, setBrowserLocationError] = useState("");
+  const [routeShelter, setRouteShelter] = useState(null);
 
   // Shelters accordion state
   const [expandedShelterDistricts, setExpandedShelterDistricts] = useState({});
@@ -492,6 +498,31 @@ export default function SheltersPage() {
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const requestBrowserLocation = (shelterToRoute = null) => {
+    if (!navigator.geolocation) {
+      setBrowserLocationStatus("error");
+      setBrowserLocationError("Browser GPS is not available on this device.");
+      return;
+    }
+    setBrowserLocationStatus("loading");
+    setBrowserLocationError("");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setBrowserLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setBrowserLocationStatus("ready");
+        if (shelterToRoute) setRouteShelter(shelterToRoute);
+      },
+      (error) => {
+        setBrowserLocationStatus("error");
+        setBrowserLocationError(error.code === 1 ? "Location permission was denied. Enable GPS to get directions." : "Could not get your current location.");
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
   return (
     <div className="min-h-[calc(100vh-4rem)]">
       {/* ========== HERO SECTION – VOLUNTEER PAGE STYLE ========== */}
@@ -529,6 +560,14 @@ export default function SheltersPage() {
               >
                 {si ? "සහන කඳවුරු ලැයිස්තුව බලන්න" : "View Relief Camp List"}
                 <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={requestBrowserLocation}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-white/40 bg-white/10 px-5 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15"
+              >
+                <LocateFixed className="h-4 w-4" />
+                {browserLocationStatus === "ready" ? "Browser GPS ready" : "Browser GPS"}
               </button>
               <button
                 type="button"
@@ -733,6 +772,11 @@ export default function SheltersPage() {
                                       distanceLabel={formatDistanceKm(
                                         s.distanceKm
                                       )}
+                                      onDirections={() => {
+                                        if (!browserLocation) requestBrowserLocation(s);
+                                        else setRouteShelter(s);
+                                      }}
+                                      directionsReady={Boolean(browserLocation)}
                                     />
                                   ))}
                                 </div>
@@ -1176,12 +1220,22 @@ export default function SheltersPage() {
           .
         </p>
       </div>
+      {browserLocationStatus === "error" && (
+        <p className="mt-4 text-center text-sm text-amber-800">{browserLocationError}</p>
+      )}
+      {routeShelter && browserLocation && (
+        <RouteModal
+          shelter={routeShelter}
+          userLocation={browserLocation}
+          onClose={() => setRouteShelter(null)}
+        />
+      )}
     </div>
   );
 }
 
 // Shelter Card Component
-function ShelterCard({ shelter, highlight, distanceLabel }) {
+function ShelterCard({ shelter, highlight, distanceLabel, onDirections, directionsReady }) {
   const occupied = Number(shelter.occupied || 0);
   const capacity = Number(shelter.capacity || 0);
   const isFull = Boolean(shelter.isFull || (capacity > 0 && occupied >= capacity));
@@ -1282,6 +1336,18 @@ function ShelterCard({ shelter, highlight, distanceLabel }) {
             </a>
           </div>
         )}
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <button
+            type="button"
+            onClick={onDirections}
+            disabled={!shelter.latitude || !shelter.longitude}
+            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            title={!shelter.latitude || !shelter.longitude ? "Shelter coordinates are not available" : "Use Browser GPS and OSRM to get directions"}
+          >
+            <Navigation className="h-3.5 w-3.5" />
+            {directionsReady ? "Get Directions" : "Get Directions (enable GPS)"}
+          </button>
+        </div>
       </div>
     </div>
   );

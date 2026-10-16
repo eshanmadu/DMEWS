@@ -18,3 +18,6 @@ npm run dev
 ```
 
 Runs at http://localhost:4000 (or `PORT` from env).
+
+## shelter migration
+npm run backfill:shelter-coordinates

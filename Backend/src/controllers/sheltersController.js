@@ -3,6 +3,8 @@ const { Shelter } = require("../models/Shelter");
 const { User } = require("../models/User");
 
 function toApiShelter(s) {
+  const latitude = typeof s.latitude === "number" ? s.latitude : s.cityLatitude;
+  const longitude = typeof s.longitude === "number" ? s.longitude : s.cityLongitude;
   return {
     id: s._id.toString(),
     name: s.name,
@@ -11,6 +13,8 @@ function toApiShelter(s) {
     city: s.city || "",
     cityLatitude: typeof s.cityLatitude === "number" ? s.cityLatitude : undefined,
     cityLongitude: typeof s.cityLongitude === "number" ? s.cityLongitude : undefined,
+    latitude: typeof latitude === "number" ? latitude : undefined,
+    longitude: typeof longitude === "number" ? longitude : undefined,
     capacity: s.capacity,
     occupied: s.occupied || 0,
     availableSpaces: Math.max(0, (s.capacity || 0) - (s.occupied || 0)),
@@ -26,7 +30,7 @@ function toApiShelter(s) {
 }
 
 function validateShelterPayload(payload) {
-  const { name, location, district, capacity, contact, notes, city, cityLatitude, cityLongitude } =
+  const { name, location, district, capacity, contact, notes, city, cityLatitude, cityLongitude, latitude, longitude } =
     payload || {};
 
   const cleanName = String(name || "").trim();
@@ -38,6 +42,12 @@ function validateShelterPayload(payload) {
 
   if (!cleanName || !cleanLocation || !cleanDistrict || capacity == null) {
     return { error: "Name, location, district, and capacity are required." };
+  }
+
+  const shelterLatitude = Number(latitude);
+  const shelterLongitude = Number(longitude);
+  if (!Number.isFinite(shelterLatitude) || shelterLatitude < -90 || shelterLatitude > 90 || !Number.isFinite(shelterLongitude) || shelterLongitude < -180 || shelterLongitude > 180) {
+    return { error: "Valid actual shelter latitude and longitude are required." };
   }
 
   const cap = Number(capacity);
@@ -67,6 +77,8 @@ function validateShelterPayload(payload) {
     contact: cleanContact,
     notes: cleanNotes,
     city: cleanCity,
+    latitude: shelterLatitude,
+    longitude: shelterLongitude,
   };
 
   if (!cleanCity) {

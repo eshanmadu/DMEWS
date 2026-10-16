@@ -6,7 +6,8 @@
     "dev": "node server.js",
     "start": "node server.js",
     "seed:risk-predictions": "node scripts/seedRiskPredictions.js",
-    "seed:lk-locations": "node scripts/seedLkLocations.js"
+    "seed:lk-locations": "node scripts/seedLkLocations.js",
+    "backfill:shelter-coordinates": "node scripts/backfillShelterCoordinates.js"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",

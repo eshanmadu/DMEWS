@@ -27,6 +27,8 @@ const ShelterSchema = new Schema(
     },
     cityLatitude: { type: Number },
     cityLongitude: { type: Number },
+    latitude: { type: Number, min: -90, max: 90, required: true },
+    longitude: { type: Number, min: -180, max: 180, required: true },
     capacity: {
       type: Number,
       required: true,

@@ -36,6 +36,8 @@ const initialForm = {
   cityRowId: "",
   cityLatitude: null,
   cityLongitude: null,
+  latitude: "",
+  longitude: "",
   capacity: "",
   contact: "",
   notes: "",
@@ -193,8 +195,8 @@ export function AdminShelters() {
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (!form.name.trim() || !form.location.trim() || !form.district || form.capacity === "") {
-      setError("Name, location, district, and capacity are required.");
+    if (!form.name.trim() || !form.location.trim() || !form.district || form.capacity === "" || form.latitude === "" || form.longitude === "") {
+      setError("Name, location, district, capacity, latitude, and longitude are required.");
       return;
     }
     const cap = parseInt(form.capacity, 10);
@@ -216,6 +218,8 @@ export function AdminShelters() {
       contact: (form.contact || "").trim(),
       notes: (form.notes || "").trim(),
       city: (form.city || "").trim(),
+      latitude: Number(form.latitude),
+      longitude: Number(form.longitude),
     };
     if (form.city && form.cityLatitude != null && form.cityLongitude != null) {
       payload.cityLatitude = form.cityLatitude;
@@ -253,6 +257,8 @@ export function AdminShelters() {
       cityRowId: "",
       cityLatitude: typeof s.cityLatitude === "number" ? s.cityLatitude : null,
       cityLongitude: typeof s.cityLongitude === "number" ? s.cityLongitude : null,
+      latitude: typeof s.latitude === "number" ? String(s.latitude) : "",
+      longitude: typeof s.longitude === "number" ? String(s.longitude) : "",
       capacity: String(s.capacity ?? ""),
       contact: s.contact || "",
       notes: s.notes || "",
@@ -270,8 +276,8 @@ export function AdminShelters() {
   }
 
   async function saveEdit(id) {
-    if (!editForm.name.trim() || !editForm.location.trim() || !editForm.district || editForm.capacity === "") {
-      setError("Name, location, district, and capacity are required.");
+    if (!editForm.name.trim() || !editForm.location.trim() || !editForm.district || editForm.capacity === "" || editForm.latitude === "" || editForm.longitude === "") {
+      setError("Name, location, district, capacity, latitude, and longitude are required.");
       return;
     }
     const cap = parseInt(editForm.capacity, 10);
@@ -294,6 +300,8 @@ export function AdminShelters() {
         contact: (editForm.contact || "").trim(),
         notes: (editForm.notes || "").trim(),
         city: (editForm.city || "").trim(),
+        latitude: Number(editForm.latitude),
+        longitude: Number(editForm.longitude),
       };
       if (editForm.city && editForm.cityLatitude != null && editForm.cityLongitude != null) {
         putBody.cityLatitude = editForm.cityLatitude;
@@ -393,6 +401,14 @@ export function AdminShelters() {
                   placeholder="Address or area"
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Actual shelter latitude <span className="text-red-500">*</span></label>
+                <input name="latitude" type="number" step="any" min="-90" max="90" value={form.latitude} onChange={handleChange} placeholder="e.g. 6.9934" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Actual shelter longitude <span className="text-red-500">*</span></label>
+                <input name="longitude" type="number" step="any" min="-180" max="180" value={form.longitude} onChange={handleChange} placeholder="e.g. 81.0550" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200" />
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -576,6 +592,8 @@ export function AdminShelters() {
                   <tr>
                     <th className="py-3 pl-5 pr-3 font-semibold text-slate-700">Name</th>
                     <th className="py-3 px-3 font-medium text-slate-600">Location</th>
+                    <th className="py-3 px-3 font-medium text-slate-600">Latitude</th>
+                    <th className="py-3 px-3 font-medium text-slate-600">Longitude</th>
                     <th className="py-3 px-3 font-medium text-slate-600">District</th>
                     <th className="py-3 px-3 font-medium text-slate-600">City</th>
                     <th className="py-3 px-3 font-medium text-slate-600">Capacity</th>
@@ -587,7 +605,7 @@ export function AdminShelters() {
                 <tbody>
                   {filteredShelters.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-500">
+                      <td colSpan={10} className="py-12 text-center text-slate-500">
                         <MapPin className="mx-auto mb-2 h-10 w-10 text-slate-300" />
                         {districtFilter ? `No shelters in ${districtFilter} district.` : "No shelters yet. Add one above."}
                       </td>
@@ -622,6 +640,12 @@ export function AdminShelters() {
                             ) : (
                               s.location
                             )}
+                          </td>
+                          <td className="py-3 px-3 text-slate-600">
+                            {editingId === s.id ? <input name="latitude" type="number" step="any" value={editForm.latitude} onChange={handleEditChange} className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm" /> : (s.latitude ?? "-")}
+                          </td>
+                          <td className="py-3 px-3 text-slate-600">
+                            {editingId === s.id ? <input name="longitude" type="number" step="any" value={editForm.longitude} onChange={handleEditChange} className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm" /> : (s.longitude ?? "-")}
                           </td>
                           <td className="py-3 px-3 text-slate-600">
                             {editingId === s.id ? (
