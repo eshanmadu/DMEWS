@@ -1,0 +1,60 @@
+# Local Python environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Local credentials and machine-specific configuration
+.env
+.env.*
+!.env.example
+credentials/
+secrets/
+*.pem
+*.key
+
+# Research data: keep planning documentation outside these directories
+data/raw/*
+!data/raw/dem/
+data/raw/dem/*
+!data/raw/dem/METADATA.md
+data/interim/
+data/processed/
+data/restricted/
+data/local/
+
+# Trained models and generated experiment artifacts
+models/
+artifacts/
+outputs/
+runs/
+logs/
+mlruns/
+wandb/
+*.joblib
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.keras
+*.pt
+*.pth
+*.onnx
+*.ckpt
+
+# Local databases and scratch files
+*.sqlite
+*.sqlite3
+*.db
+*.log
+tmp/
+temp/
+.DS_Store

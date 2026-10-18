@@ -1,0 +1,40 @@
+# Snapshot of the existing research environment: Python 3.9 on macOS.
+# Includes direct and transitive dependencies for DEM processing and pysheds checks.
+# Cross-platform installation has not been validated; datasets are acquired separately.
+affine==3.0.1
+attrs==26.1.0
+certifi==2026.7.22
+click==8.1.8
+click-plugins==1.1.1.2
+cligj==0.7.2
+contourpy==1.3.0
+cycler==0.12.1
+fonttools==4.60.2
+geojson==3.2.0
+ImageIO==2.37.2
+importlib_metadata==8.7.1
+importlib_resources==6.5.2
+kiwisolver==1.4.7
+lazy-loader==0.6
+llvmlite==0.43.0
+looseversion==1.3.0
+matplotlib==3.9.4
+networkx==3.2.1
+numba==0.60.0
+numpy==2.0.2
+packaging==26.3
+pandas==2.2.3
+pillow==11.3.0
+pyparsing==3.3.3
+pyproj==3.6.1
+pysheds==0.5
+pyshp==2.3.1
+python-dateutil==2.9.0.post0
+pytz==2026.5
+rasterio==1.4.3
+scikit-image==0.24.0
+scipy==1.13.1
+six==1.17.0
+tifffile==2024.8.30
+tzdata==2026.5
+zipp==3.23.1
