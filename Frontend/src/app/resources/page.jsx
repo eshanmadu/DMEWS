@@ -13,6 +13,10 @@ import {
   CheckCircle2,
   ArrowRight,
   Loader2,
+  MapPin,
+  ChevronLeft,
+  ChevronRight,
+  PackageCheck,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -31,34 +35,42 @@ function normalizePhoneDigits(value) {
 const RESOURCE_TYPES = [
   {
     id: "dry-food",
-    title: "Dry Foods",
+    title: "Food and dry rations",
     icon: Package,
     color: "from-amber-500 to-orange-500",
-    examples: "Rice, dhal, milk powder, canned food, instant meals",
+    examples: "Rice, dhal, milk powder, canned food",
   },
   {
     id: "medicines",
-    title: "Medicines",
+    title: "Medical supplies",
     icon: Pill,
     color: "from-emerald-500 to-teal-500",
-    examples: "First-aid kits, pain relief, antiseptic, ORS, masks",
+    examples: "First-aid kits, antiseptic, ORS, masks",
   },
   {
     id: "clothes",
-    title: "Clothes",
+    title: "Clothing and bedding",
     icon: Shirt,
     color: "from-indigo-500 to-violet-500",
-    examples: "Children wear, blankets, raincoats, footwear",
+    examples: "Children's wear, blankets, raincoats",
   },
   {
     id: "water",
-    title: "Clean Water",
+    title: "Drinking water",
     icon: Droplets,
     color: "from-sky-500 to-blue-500",
-    examples: "Bottled water, purification tablets, refill containers",
+    examples: "Bottled water and purification supplies",
   },
 ];
 const OTHER_RESOURCE_ID = "other";
+const OTHER_RESOURCE = { id: OTHER_RESOURCE_ID, title: "Other essentials", icon: HandHeart, color: "from-slate-500 to-slate-700", examples: "Hygiene items, tools, and other urgent needs" };
+const ALL_RESOURCE_TYPES = [...RESOURCE_TYPES, OTHER_RESOURCE];
+const CONDITION_OPTIONS = [
+  ["new", "New"],
+  ["good", "Good condition"],
+  ["used", "Used"],
+  ["needs-review", "Needs review"],
+];
 
 export default function ResourcesPage() {
   const { i18n } = useTranslation();
@@ -72,6 +84,8 @@ export default function ResourcesPage() {
     resourceTypes: ["dry-food"],
     otherResource: "",
     quantity: "",
+    unit: "units",
+    condition: "new",
     availableDate: "",
     canTransport: false,
     deliveryMode: "self-drop",
@@ -83,17 +97,20 @@ export default function ResourcesPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [step, setStep] = useState(1);
+  const [submittedReference, setSubmittedReference] = useState("");
+  const [resourceItems, setResourceItems] = useState({});
 
   const selectedResources = useMemo(
-    () => RESOURCE_TYPES.filter((r) => (form.resourceTypes || []).includes(r.id)),
+    () => ALL_RESOURCE_TYPES.filter((r) => (form.resourceTypes || []).includes(r.id)),
     [form.resourceTypes]
   );
 
   const estimatedFamilies = useMemo(() => {
-    const qty = Number(form.quantity || 0);
+    const qty = Object.values(resourceItems).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
     if (!Number.isFinite(qty) || qty <= 0) return 0;
     return Math.max(1, Math.floor(qty / 5));
-  }, [form.quantity]);
+  }, [resourceItems]);
   const minAvailableDate = useMemo(() => formatDateOnly(new Date()), []);
   const maxAvailableDate = useMemo(() => {
     const d = new Date();
@@ -115,8 +132,47 @@ export default function ResourcesPage() {
       const next = checked
         ? Array.from(new Set([...current, resourceId]))
         : current.filter((id) => id !== resourceId);
+      setResourceItems((items) => checked
+        ? { ...items, [resourceId]: items[resourceId] || { quantity: "", unit: "units", condition: "new" } }
+        : Object.fromEntries(Object.entries(items).filter(([id]) => id !== resourceId)));
       return { ...prev, resourceTypes: next };
     });
+  }
+
+  function updateResourceItem(resourceId, field, value) {
+    setSubmitted(false);
+    setSubmitError("");
+    setResourceItems((previous) => ({
+      ...previous,
+      [resourceId]: { ...(previous[resourceId] || { quantity: "", unit: "units", condition: "new" }), [field]: value },
+    }));
+  }
+
+  function scrollToSection(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function validateStep(nextStep) {
+    if (nextStep === 2) {
+      if (!form.resourceTypes.length) return "Select at least one resource category.";
+      const invalid = form.resourceTypes.some((id) => {
+        const item = resourceItems[id];
+        return !item || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) < 1 || !item.unit || !item.condition;
+      });
+      if (invalid) return "Add a valid quantity, unit, and condition for each selected resource.";
+    }
+    if (nextStep === 3) {
+      if (!form.availableDate) return "Choose when your resources will be available.";
+      if (form.deliveryMode === "pickup" && !form.pickupAddress.trim()) return "Add a pickup location to continue.";
+    }
+    return "";
+  }
+
+  function continueStep() {
+    const validation = validateStep(step + 1);
+    if (validation) return setSubmitError(validation);
+    setSubmitError("");
+    setStep((current) => Math.min(3, current + 1));
   }
 
   useEffect(() => {
@@ -175,6 +231,11 @@ export default function ResourcesPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const stepValidation = validateStep(3);
+    if (stepValidation) {
+      setSubmitError(stepValidation);
+      return;
+    }
     const phoneDigits = normalizePhoneDigits(form.phone);
     if (phoneDigits.length !== 10) {
       setSubmitError(tr("Phone number must have exactly 10 digits.", "දුරකථන අංකයට ඉලක්කම් 10ක් නිවැරදිව තිබිය යුතුය."));
@@ -216,6 +277,10 @@ export default function ResourcesPage() {
       phone: phoneDigits,
       resourceTypes: selectedTypes,
       resourceType: selectedTypes[0] || "",
+      quantity: Number(resourceItems[selectedTypes[0]]?.quantity || 0),
+      unit: resourceItems[selectedTypes[0]]?.unit || "units",
+      condition: resourceItems[selectedTypes[0]]?.condition || "new",
+      resourceItems: selectedTypes.map((id) => ({ resourceType: id, ...resourceItems[id], quantity: Number(resourceItems[id].quantity) })),
       otherResource: selectedTypes.includes(OTHER_RESOURCE_ID) ? form.otherResource.trim() : "",
       pickupAddress:
         form.deliveryMode === "pickup" ? form.pickupAddress.trim() : "",
@@ -235,12 +300,14 @@ export default function ResourcesPage() {
           setSubmitError(data?.message || tr("Could not submit participation.", "සහභාගීත්වය යැවීමට නොහැකි විය."));
           return;
         }
+        setSubmittedReference(data?.id || "");
       }
     } catch {
       setSubmitError(tr("Network error. Please try again.", "ජාල දෝෂයක්. නැවත උත්සාහ කරන්න."));
       return;
     }
     setSubmitted(true);
+    setStep(1);
     setShowConfirmModal(true);
   }
 
@@ -277,7 +344,7 @@ export default function ResourcesPage() {
               id="resources-hero-title"
               className="font-oswald text-3xl font-bold uppercase tracking-[0.08em] text-white sm:text-4xl lg:text-5xl lg:leading-tight"
             >
-              {tr("Together we rebuild", "එක්ව නැවත ගොඩනගමු")}
+              {tr("Your Help Can Make a Difference", "ඔබගේ සහායට විශාල වෙනසක් කළ හැකිය")}
             </h1>
             <div className="mt-3 h-0.5 w-14 rounded-full bg-sky-400 sm:w-16" aria-hidden />
             <p className="mt-4 text-base font-medium text-sky-100 sm:text-lg">
@@ -288,51 +355,56 @@ export default function ResourcesPage() {
             </p>
             <p className="mt-4 text-sm leading-relaxed text-sky-100/85 sm:text-base">
               {tr(
-                "Support relief operations by contributing dry foods, medicines, clothes, water, and transport help. This page matches your contribution with active district programs.",
-                "වියළි ආහාර, ඖෂධ, ඇඳුම්, පිරිසිදු ජලය සහ ප්‍රවාහන සහාය ලබාදී සහන ක්‍රියාකාරකම් වලට දායක වන්න. මෙම පිටුව ඔබගේ දායකත්වය සක්‍රීය දිස්ත්‍රික් වැඩසටහන් සමඟ ගැළපේ."
+                "Your confirmed contribution can move from a collection point to families and communities affected by disasters.",
+                "ඔබගේ තහවුරු කළ දායකත්වය එකතු කිරීමේ ස්ථානයේ සිට ආපදා බලපෑමට ලක් වූ පවුල් සහ ප්‍රජාවන් වෙත ගෙන යා හැකිය."
               )}
             </p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <button type="button" onClick={() => { setStep(1); scrollToSection("resource-contribution-form"); }} className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:bg-rose-500">
+                {tr("Contribute Resources", "සම්පත් දායක කරන්න")} <ArrowRight className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => scrollToSection("active-resource-programs")} className="inline-flex items-center gap-2 rounded-lg border border-white/35 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15">
+                {tr("View Active Programs", "සක්‍රීය වැඩසටහන් බලන්න")} <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </section>
 
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-3 lg:px-8">
         <section className="space-y-5 lg:col-span-2">
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div id="resource-categories" className="rounded-2xl border border-slate-200 bg-white shadow-sm scroll-mt-6">
             <div className="border-b border-slate-100 bg-gradient-to-r from-sky-50 to-indigo-50/50 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-800">
-                {tr("Priority Resource Streams", "ප්‍රමුඛ සම්පත් ප්‍රවාහ")}
+                {tr("Choose resources to contribute", "දායක කිරීමට සම්පත් තෝරන්න")}
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                {tr("Choose where your support makes the biggest impact.", "ඔබගේ සහාය වැඩිම බලපෑමක් ඇති කරන ස්ථානය තෝරන්න.")}
+                {tr("Select one or more categories, then add the quantity and condition for each.", "එක් හෝ වැඩි සම්පත් වර්ග තෝරා එක් එක් වර්ගයට ප්‍රමාණය සහ තත්ත්වය එක් කරන්න.")}
               </p>
             </div>
             <div className="grid gap-4 p-5 sm:grid-cols-2">
-              {RESOURCE_TYPES.map((resource) => {
+              {ALL_RESOURCE_TYPES.map((resource) => {
                 const Icon = resource.icon;
+                const selected = (form.resourceTypes || []).includes(resource.id);
+                const item = resourceItems[resource.id] || { quantity: "", unit: "units", condition: "new" };
                 return (
                   <article
                     key={resource.id}
-                    className="rounded-xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md"
+                    className={`rounded-xl border p-4 transition ${selected ? "border-rose-400 bg-rose-50/50 shadow-md ring-2 ring-rose-100" : "border-slate-200 bg-white hover:-translate-y-0.5 hover:shadow-md"}`}
                   >
-                    <div
-                      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br ${resource.color} text-white`}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <h3 className="mt-3 font-semibold text-slate-900">
-                      {resource.title}
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {resource.examples}
-                    </p>
+                    <button type="button" onClick={() => toggleResourceType(resource.id, !selected)} className="flex w-full items-start gap-3 text-left">
+                      <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${resource.color} text-white`}><Icon className="h-5 w-5" /></span>
+                      <span className="min-w-0 flex-1"><span className="block font-semibold text-slate-900">{resource.title}</span><span className="mt-1 block text-sm text-slate-600">{resource.examples}</span></span>
+                      <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? "border-rose-600 bg-rose-600 text-white" : "border-slate-300 bg-white"}`}>{selected ? "✓" : ""}</span>
+                    </button>
+                    {selected && <div className="mt-4 grid grid-cols-2 gap-2 border-t border-rose-100 pt-3"><label className="text-xs font-semibold text-slate-600">Quantity<input required min="1" type="number" step="0.01" value={item.quantity} onChange={(e) => updateResourceItem(resource.id, "quantity", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900" /></label><label className="text-xs font-semibold text-slate-600">Unit<select value={item.unit} onChange={(e) => updateResourceItem(resource.id, "unit", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900"><option value="units">Units</option><option value="kg">kg</option><option value="liters">Liters</option><option value="boxes">Boxes</option><option value="cartons">Cartons</option><option value="packs">Packs</option><option value="kits">Kits</option><option value="pairs">Pairs</option></select></label><label className="col-span-2 text-xs font-semibold text-slate-600">Condition<select value={item.condition} onChange={(e) => updateResourceItem(resource.id, "condition", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900">{CONDITION_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{resource.id === OTHER_RESOURCE_ID && <label className="col-span-2 text-xs font-semibold text-slate-600">Describe essential<input required value={form.otherResource} onChange={(e) => setField("otherResource", e.target.value)} placeholder="e.g. hygiene kits" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900" /></label>}</div>}
                   </article>
                 );
               })}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div id="active-resource-programs" className="rounded-2xl border border-slate-200 bg-white shadow-sm scroll-mt-6">
             <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-teal-50/50 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-800">
                 {tr("Active Allocation Programs", "සක්‍රීය බෙදාහැරීමේ වැඩසටහන්")}
@@ -356,11 +428,11 @@ export default function ResourcesPage() {
                   key={program.id || program._id || program.name}
                   className="rounded-xl border border-slate-200 bg-slate-50/50 p-4"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-semibold text-slate-900">{program.name}</h3>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div><h3 className="font-semibold text-slate-900">{program.name}</h3><p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-slate-500"><MapPin className="h-3.5 w-3.5" />{program.location || tr("District not specified", "දිස්ත්‍රික්කය සඳහන් කර නැත")}</p></div>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
                       <CalendarDays className="h-3.5 w-3.5" />
-                      {program.date || tr("Open schedule", "විවෘත කාලසටහන")}
+                      {program.status === "active" ? tr("Active", "සක්‍රීය") : program.status}
                     </span>
                   </div>
                   <p className="mt-2 text-sm text-slate-700">{program.target}</p>
@@ -382,6 +454,7 @@ export default function ResourcesPage() {
                       </span>
                     ))}
                   </div>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3"><p className="text-xs text-slate-500">{tr("Confirmed stock figures are shown only after warehouse receipt.", "තහවුරු කළ තොග සංඛ්‍යා පෙන්වන්නේ ගබඩා ලැබීමෙන් පසුව පමණි.")}</p><button type="button" onClick={() => { setStep(1); scrollToSection("resource-contribution-form"); }} className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500">{tr("Contribute to this program", "මෙම වැඩසටහනට දායක වන්න")}<ArrowRight className="h-3.5 w-3.5" /></button></div>
                 </div>
                 ))
               )}
@@ -399,7 +472,15 @@ export default function ResourcesPage() {
                 {tr("Register your available resources for dispatch planning.", "බෙදාහැරීමේ සැලසුම් සඳහා ඔබගේ තිබෙන සම්පත් ලියාපදිංචි කරන්න.")}
               </p>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-3 p-5">
+            <form id="resource-contribution-form" onSubmit={handleSubmit} className="space-y-3 p-5 scroll-mt-6">
+              <div className="mb-5 grid grid-cols-3 gap-2" aria-label="Contribution steps">
+                {["Choose resources", "Arrange delivery", "Your details"].map((label, index) => {
+                  const number = index + 1;
+                  return <div key={label} className={`border-t-2 pt-2 text-[11px] font-semibold ${step >= number ? "border-rose-600 text-rose-700" : "border-slate-200 text-slate-400"}`}><span>{number}. </span>{tr(label, ["සම්පත් තෝරන්න", "බෙදාහැරීම සකසන්න", "ඔබගේ විස්තර"][index])}</div>;
+                })}
+              </div>
+              {step === 1 && <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-3 text-sm text-slate-700"><p className="font-semibold text-slate-900">{tr("Choose resources", "සම්පත් තෝරන්න")}</p><p className="mt-1 text-xs text-slate-600">{tr("Select cards on the left and add quantity, unit, and condition for each selected item.", "වම් පස ඇති කාඩ්පත් තෝරා එක් එක් සම්පතට ප්‍රමාණය, ඒකකය සහ තත්ත්වය එක් කරන්න.")}</p>{selectedResources.length > 0 && <ul className="mt-3 space-y-1 text-xs">{selectedResources.map((resource) => <li key={resource.id} className="flex items-center justify-between"><span>{resource.title}</span><span className="font-semibold">{resourceItems[resource.id]?.quantity || "—"} {resourceItems[resource.id]?.unit || ""}</span></li>)}</ul>}</div>}
+              {step === 3 && <>
               <input
                 required
                 value={form.name}
@@ -431,50 +512,8 @@ export default function ResourcesPage() {
                 placeholder={tr("District / City", "දිස්ත්‍රික්කය / නගරය")}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
-              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {tr("Select resources (tick all that apply)", "සම්පත් තෝරන්න (අදාළ සියල්ල ටික් කරන්න)")}
-                </p>
-                <div className="space-y-2">
-                  {RESOURCE_TYPES.map((resource) => (
-                    <label key={resource.id} className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={(form.resourceTypes || []).includes(resource.id)}
-                        onChange={(e) => toggleResourceType(resource.id, e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300"
-                      />
-                      <span>{resource.title}</span>
-                    </label>
-                  ))}
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={(form.resourceTypes || []).includes(OTHER_RESOURCE_ID)}
-                      onChange={(e) => toggleResourceType(OTHER_RESOURCE_ID, e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300"
-                    />
-                    <span>{tr("Other", "වෙනත්")}</span>
-                  </label>
-                </div>
-                {(form.resourceTypes || []).includes(OTHER_RESOURCE_ID) && (
-                  <input
-                    value={form.otherResource}
-                    onChange={(e) => setField("otherResource", e.target.value)}
-                    placeholder={tr("Please specify other resource", "වෙනත් සම්පත සඳහන් කරන්න")}
-                    className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  />
-                )}
-              </div>
-              <input
-                required
-                type="number"
-                min="1"
-                value={form.quantity}
-                onChange={(e) => setField("quantity", e.target.value)}
-                placeholder={tr("Estimated quantity", "ඇස්තමේන්තු ප්‍රමාණය")}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
+              </>}
+              {step === 2 && <>
               <input
                 required
                 type="date"
@@ -537,14 +576,19 @@ export default function ResourcesPage() {
                 />
                 {tr("I can help with transportation to the nearest allocation center.", "ළඟම බෙදාහැරීමේ මධ්‍යස්ථානයට ප්‍රවාහනයට මට සහාය විය හැක.")}
               </label>
+              </>}
+              {step === 3 && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"><p className="font-semibold text-slate-900">{tr("Final review", "අවසාන සමාලෝචනය")}</p><p className="mt-1">{selectedResources.map((resource) => `${resource.title}: ${resourceItems[resource.id]?.quantity || "—"} ${resourceItems[resource.id]?.unit || ""}`).join(" · ")}</p><p className="mt-1">{form.deliveryMode === "pickup" ? `Pickup: ${form.pickupAddress || "—"}` : "Self-delivery to a collection point"} · {form.availableDate || "No date"}</p></div>}
 
               <button
-                type="submit"
+                type={step === 3 ? "submit" : "button"}
+                onClick={step === 3 ? undefined : continueStep}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500"
               >
-                <HandHeart className="h-4 w-4" />
-                {tr("Join Resource Program", "සම්පත් වැඩසටහනට එකතු වන්න")}
+                {step > 1 && <ChevronLeft className="h-4 w-4" />}
+                {step === 3 ? <HandHeart className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                {step === 3 ? tr("Submit contribution", "දායකත්වය යවන්න") : tr("Continue", "ඉදිරියට")}
               </button>
+              {step > 1 && <button type="button" onClick={() => setStep((current) => current - 1)} className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">{tr("Back", "ආපසු")}</button>}
               {submitError && (
                 <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
                   {submitError}
@@ -596,6 +640,7 @@ export default function ResourcesPage() {
                   "එකතු කිරීම හා බෙදාහැරීමේ විස්තර සැලසුම් කිරීමට සම්බන්ධීකරණ කණ්ඩායම ඔබව සම්බන්ධ කරගනී."
                 )}
               </p>
+              <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{tr("Reference number", "යොමු අංකය")}</p><p className="mt-1 font-mono text-sm font-bold text-slate-900">{submittedReference || "Pending"}</p></div>
             </div>
           )}
         </aside>

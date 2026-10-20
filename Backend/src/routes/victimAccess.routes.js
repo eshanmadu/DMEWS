@@ -4,7 +4,7 @@ const { authMiddleware } = require("../middleware/authMiddleware");
 const { adminMiddleware } = require("../middleware/adminMiddleware");
 const { victimIdentificationMiddleware } = require("../middleware/victimIdentificationMiddleware");
 const { submit, me, adminList, adminSetStatus } = require("../controllers/victimAccessController");
-const { createCase, listMyCases } = require("../controllers/victimCasesController");
+const { createCase, listMyCases, listAllCases } = require("../controllers/victimCasesController");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -20,6 +20,7 @@ router.post("/request", authMiddleware, upload.single("document"), submit);
 router.get("/me", authMiddleware, me);
 router.get("/admin/list", adminMiddleware, adminList);
 router.patch("/admin/:id", adminMiddleware, adminSetStatus);
+router.get("/admin/cases", adminMiddleware, listAllCases);
 router.get("/protected", victimIdentificationMiddleware, (_req, res) => res.json({ allowed: true }));
 router.post("/cases", victimIdentificationMiddleware, upload.single("evidence"), createCase);
 router.get("/cases", victimIdentificationMiddleware, listMyCases);

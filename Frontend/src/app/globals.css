@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap");
-
 body {
   @apply bg-sky-50 text-slate-900 antialiased;
 }
@@ -29,8 +27,7 @@ body {
   .badge-info { @apply bg-cyan-500/20 text-cyan-400; }
   .badge-success { @apply bg-emerald-500/20 text-emerald-400; }
   .font-oswald {
-    font-family: "Oswald", system-ui, -apple-system, BlinkMacSystemFont,
-      "Segoe UI", sans-serif;
+    font-family: inherit;
   }
   .marquee-wrap {
     width: 100%;

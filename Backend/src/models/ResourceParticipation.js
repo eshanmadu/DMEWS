@@ -11,6 +11,16 @@ const ResourceParticipationSchema = new Schema(
     district: { type: String, required: true, trim: true },
     resourceType: { type: String, required: true, trim: true },
     quantity: { type: Number, required: true, min: 1 },
+    unit: { type: String, required: true, trim: true, default: "units" },
+    resourceItems: {
+      type: [{
+        resourceType: { type: String, required: true, trim: true },
+        quantity: { type: Number, required: true, min: 0.01 },
+        unit: { type: String, required: true, trim: true },
+        condition: { type: String, enum: ["new", "good", "used", "needs-review"], default: "new" },
+      }],
+      default: [],
+    },
     availableDate: { type: Date, required: true },
     canTransport: { type: Boolean, default: false },
     deliveryMode: {

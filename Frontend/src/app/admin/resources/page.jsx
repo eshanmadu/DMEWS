@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, PackagePlus, RefreshCw, Trash2 } from "lucide-react";
+import { ClipboardList, History, Loader2, PackageCheck, PackagePlus, RefreshCw, Trash2 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 export default function AdminResourcesPage() {
@@ -9,6 +9,13 @@ export default function AdminResourcesPage() {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submissionsLoading, setSubmissionsLoading] = useState(true);
+  const [inventory, setInventory] = useState([]);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [inventoryForm, setInventoryForm] = useState({ resourceType: "", unit: "units", storageLocation: "", district: "", expiryDate: "" });
+  const [activeInventoryId, setActiveInventoryId] = useState(null);
+  const [transactionRows, setTransactionRows] = useState([]);
+  const [transactionLoading, setTransactionLoading] = useState(false);
+  const [transactionForm, setTransactionForm] = useState({ type: "receipt", quantity: "", reference: "", notes: "" });
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState({
@@ -84,10 +91,81 @@ export default function AdminResourcesPage() {
     }
   }, []);
 
+  const loadInventory = useCallback(async () => {
+    const token = window.localStorage.getItem("dmews_token");
+    if (!token) { setInventoryLoading(false); return; }
+    setInventoryLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/resource-inventory/admin/list`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const data = await res.json().catch(() => []);
+      if (!res.ok) throw new Error(data?.message || "Could not load inventory.");
+      setInventory(Array.isArray(data) ? data : []);
+    } catch (loadError) {
+      setError(loadError?.message || "Network error while loading inventory.");
+      setInventory([]);
+    } finally { setInventoryLoading(false); }
+  }, []);
+
   useEffect(() => {
     loadPrograms();
     loadSubmissions();
-  }, [loadPrograms, loadSubmissions]);
+    loadInventory();
+  }, [loadPrograms, loadSubmissions, loadInventory]);
+
+  async function createInventoryItem(event) {
+    event.preventDefault();
+    const token = window.localStorage.getItem("dmews_token");
+    if (!token) return setError("Please login with an admin-enabled account.");
+    setBusyId("inventory-create");
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/resource-inventory/admin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(inventoryForm),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Could not create inventory item.");
+      setInventory((previous) => [...previous, data]);
+      setInventoryForm({ resourceType: "", unit: "units", storageLocation: "", district: "", expiryDate: "" });
+    } catch (createError) { setError(createError?.message || "Could not create inventory item."); }
+    finally { setBusyId(null); }
+  }
+
+  async function loadTransactions(inventoryId) {
+    const token = window.localStorage.getItem("dmews_token");
+    if (!token) return;
+    setActiveInventoryId(inventoryId);
+    setTransactionLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/resource-inventory/admin/${inventoryId}/transactions`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const data = await res.json().catch(() => []);
+      if (!res.ok) throw new Error(data?.message || "Could not load transaction history.");
+      setTransactionRows(Array.isArray(data) ? data : []);
+    } catch (historyError) { setError(historyError?.message || "Could not load transaction history."); }
+    finally { setTransactionLoading(false); }
+  }
+
+  async function recordTransaction(event) {
+    event.preventDefault();
+    if (!activeInventoryId) return;
+    const token = window.localStorage.getItem("dmews_token");
+    setBusyId("transaction");
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/resource-inventory/admin/${activeInventoryId}/transactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(transactionForm),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Could not record transaction.");
+      setInventory((previous) => previous.map((item) => item.id === activeInventoryId ? data.inventory : item));
+      setTransactionRows((previous) => [data.transaction, ...previous]);
+      setTransactionForm({ type: "receipt", quantity: "", reference: "", notes: "" });
+    } catch (transactionError) { setError(transactionError?.message || "Could not record transaction."); }
+    finally { setBusyId(null); }
+  }
 
   async function createProgram(e) {
     e.preventDefault();
@@ -190,6 +268,7 @@ export default function AdminResourcesPage() {
           onClick={() => {
             loadPrograms();
             loadSubmissions();
+            loadInventory();
           }}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
         >
@@ -263,6 +342,24 @@ export default function AdminResourcesPage() {
           </button>
         </form>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
+          <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-slate-900"><PackageCheck className="h-5 w-5 text-emerald-600" />Confirmed stock inventory</h2>
+          <p className="mt-1 text-sm text-slate-600">Pledges become stock only after an administrator records a receipt transaction.</p>
+        </div>
+        <form onSubmit={createInventoryItem} className="grid gap-3 border-b border-slate-100 p-6 sm:grid-cols-2 lg:grid-cols-5">
+          <input required value={inventoryForm.resourceType} onChange={(e) => setInventoryForm((p) => ({ ...p, resourceType: e.target.value }))} placeholder="Resource type" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm" />
+          <select value={inventoryForm.unit} onChange={(e) => setInventoryForm((p) => ({ ...p, unit: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="units">Units</option><option value="kg">kg</option><option value="liters">Liters</option><option value="boxes">Boxes</option><option value="cartons">Cartons</option><option value="packs">Packs</option><option value="kits">Kits</option><option value="pairs">Pairs</option></select>
+          <input required value={inventoryForm.storageLocation} onChange={(e) => setInventoryForm((p) => ({ ...p, storageLocation: e.target.value }))} placeholder="Storage location" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm" />
+          <input required value={inventoryForm.district} onChange={(e) => setInventoryForm((p) => ({ ...p, district: e.target.value }))} placeholder="District" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm" />
+          <input type="date" value={inventoryForm.expiryDate} onChange={(e) => setInventoryForm((p) => ({ ...p, expiryDate: e.target.value }))} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm" />
+          <button type="submit" disabled={busyId === "inventory-create"} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60 sm:col-span-2 lg:col-span-5 lg:justify-self-start"><PackagePlus className="h-4 w-4" />Create stock bucket</button>
+        </form>
+        {inventoryLoading ? <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-emerald-600" /></div> : inventory.length === 0 ? <p className="px-6 py-10 text-center text-sm text-slate-500">No confirmed stock buckets yet.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Resource</th><th className="px-4 py-3">Storage</th><th className="px-4 py-3">Received</th><th className="px-4 py-3">Available</th><th className="px-4 py-3">Reserved</th><th className="px-4 py-3">Dispatched</th><th className="px-4 py-3">Damaged</th><th className="px-4 py-3">Expiry</th><th className="px-4 py-3">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{inventory.map((item) => <tr key={item.id}><td className="px-4 py-3"><div className="font-semibold text-slate-900">{item.resourceType}</div><div className="text-xs text-slate-500">{item.district} · {item.unit}</div></td><td className="px-4 py-3 text-slate-700">{item.storageLocation}</td><td className="px-4 py-3 text-slate-700">{item.receivedQuantity}</td><td className="px-4 py-3 font-semibold text-emerald-700">{item.availableQuantity}</td><td className="px-4 py-3 text-amber-700">{item.reservedQuantity}</td><td className="px-4 py-3 text-slate-700">{item.dispatchedQuantity}</td><td className="px-4 py-3 text-rose-700">{item.damagedQuantity}</td><td className="px-4 py-3 text-slate-700">{item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : "—"}</td><td className="px-4 py-3"><button type="button" onClick={() => loadTransactions(item.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><History className="h-3.5 w-3.5" />Manage stock</button></td></tr>)}</tbody></table></div>}
+      </section>
+
+      {activeInventoryId && <section className="rounded-2xl border border-emerald-200 bg-emerald-50/30 shadow-sm"><div className="border-b border-emerald-100 px-6 py-4"><h2 className="inline-flex items-center gap-2 text-lg font-semibold text-slate-900"><ClipboardList className="h-5 w-5 text-emerald-700" />Record stock transaction</h2><p className="mt-1 text-sm text-slate-600">Receipt, reservation, dispatch, damage, and release actions are recorded in the audit history.</p></div><form onSubmit={recordTransaction} className="grid gap-3 p-6 sm:grid-cols-2 lg:grid-cols-5"><select value={transactionForm.type} onChange={(e) => setTransactionForm((p) => ({ ...p, type: e.target.value }))} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="receipt">Stock receipt</option><option value="reservation">Reserve stock</option><option value="reservation_release">Release reservation</option><option value="dispatch">Dispatch stock</option><option value="damage">Record damage</option><option value="adjustment">Positive adjustment</option></select><input required min="0.01" type="number" step="0.01" value={transactionForm.quantity} onChange={(e) => setTransactionForm((p) => ({ ...p, quantity: e.target.value }))} placeholder="Quantity" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm" /><input value={transactionForm.reference} onChange={(e) => setTransactionForm((p) => ({ ...p, reference: e.target.value }))} placeholder="Reference / delivery ID" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm" /><input value={transactionForm.notes} onChange={(e) => setTransactionForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Notes" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm" /><button type="submit" disabled={busyId === "transaction"} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60">Record transaction</button></form><div className="border-t border-emerald-100 px-6 py-4"><h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Transaction history</h3>{transactionLoading ? <div className="py-6 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-emerald-600" /></div> : transactionRows.length === 0 ? <p className="py-6 text-sm text-slate-500">No transactions recorded.</p> : <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="border-b border-emerald-100 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Type</th><th className="px-3 py-2">Quantity</th><th className="px-3 py-2">Reference</th><th className="px-3 py-2">Notes</th><th className="px-3 py-2">When</th></tr></thead><tbody className="divide-y divide-emerald-100">{transactionRows.map((row) => <tr key={row.id}><td className="px-3 py-2 font-medium text-slate-800">{row.type}</td><td className="px-3 py-2 text-slate-700">{row.quantity} {row.unit}</td><td className="px-3 py-2 text-slate-700">{row.reference || "—"}</td><td className="px-3 py-2 text-slate-700">{row.notes || "—"}</td><td className="px-3 py-2 text-slate-700">{row.occurredAt ? new Date(row.occurredAt).toLocaleString() : "—"}</td></tr>)}</tbody></table></div>}</div></section>}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
