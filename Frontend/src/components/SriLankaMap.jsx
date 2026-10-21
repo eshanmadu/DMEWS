@@ -13,9 +13,9 @@ const SRI_LANKA_CENTER = [7.87, 80.77];
 const DEFAULT_ZOOM = 7;
 const SRI_LANKA_GEOJSON_URL = "/sri-lanka-districts.geojson";
 
-// CartoDB Positron base tiles
+// OpenStreetMap base tiles do not require a client API key.
 const BASE_TILE_URL =
-  "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 // Simple list of Sri Lankan districts with approximate centroids
 // (enough for visualising weather by district)
@@ -125,7 +125,7 @@ export function SriLankaMap({ onData, onHover, onSelect, selectedDistrict } = {}
 
       L.tileLayer(BASE_TILE_URL, {
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         subdomains: "abcd",
         maxZoom: 19,
       }).addTo(map);

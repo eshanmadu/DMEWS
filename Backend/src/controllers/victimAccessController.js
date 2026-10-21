@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const { connectDb } = require("../db");
 const { User } = require("../models/User");
-const { VictimAccessRequest } = require("../models/VictimAccessRequest");
+const { VictimAccessRequest, VICTIM_ACCESS_ROLES } = require("../models/VictimAccessRequest");
 const { uploadDocumentBuffer } = require("../services/cloudinaryUpload");
 
 function payload(row) {
@@ -9,6 +9,7 @@ function payload(row) {
     id: row._id.toString(),
     status: row.status,
     requestedRole: row.requestedRole,
+    approvedRole: row.approvedRole || "",
     organization: row.organization,
     employeeId: row.employeeId,
     documentUrl: row.documentUrl,
@@ -79,10 +80,15 @@ async function adminSetStatus(req, res) {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: "Invalid request id." });
     const status = String(req.body?.status || "");
     if (!["pending", "approved", "rejected"].includes(status)) return res.status(400).json({ message: "Invalid status." });
+    const approvedRole = String(req.body?.approvedRole || "").trim();
+    if (status === "approved" && !VICTIM_ACCESS_ROLES.includes(approvedRole)) {
+      return res.status(400).json({ message: "A predefined approved role is required." });
+    }
     await connectDb();
     const row = await VictimAccessRequest.findById(req.params.id).exec();
     if (!row) return res.status(404).json({ message: "Access request not found." });
     row.status = status;
+    row.approvedRole = status === "approved" ? approvedRole : "";
     row.reviewedAt = new Date();
     row.reviewedBy = String(req.authEmail || "").trim();
     await row.save();

@@ -1,6 +1,7 @@
 const { connectDb } = require("../db");
 const { VictimCase } = require("../models/VictimCase");
 const { VictimCaseCounter } = require("../models/VictimCaseCounter");
+const { VictimAccessRequest } = require("../models/VictimAccessRequest");
 const { uploadDocumentBuffer } = require("../services/cloudinaryUpload");
 
 function casePayload(row) {
@@ -13,6 +14,22 @@ function casePayload(row) {
     evidenceUrl: row.evidenceUrl,
     evidenceFormat: row.evidenceFormat || "",
     createdAt: row.createdAt,
+  };
+}
+
+function adminCasePayload(row) {
+  return {
+    ...casePayload(row),
+    owner: row.ownerUserId ? {
+      id: row.ownerUserId._id.toString(),
+      name: row.ownerUserId.name || "",
+      email: row.ownerUserId.email || "",
+      district: row.ownerUserId.district || "",
+    } : null,
+    approvedRole: row.accessRequest?.approvedRole || "",
+    requestedRole: row.accessRequest?.requestedRole || "",
+    organization: row.accessRequest?.organization || "",
+    employeeId: row.accessRequest?.employeeId || "",
   };
 }
 
@@ -70,4 +87,24 @@ async function listMyCases(req, res) {
   }
 }
 
-module.exports = { createCase, listMyCases };
+async function listAllCases(req, res) {
+  try {
+    await connectDb();
+    const rows = await VictimCase.find({})
+      .sort({ createdAt: -1 })
+      .populate("ownerUserId", "name email district")
+      .lean()
+      .exec();
+    const requests = await VictimAccessRequest.find({ userId: { $in: rows.map((row) => row.ownerUserId?._id).filter(Boolean) } })
+      .select("userId requestedRole approvedRole organization employeeId")
+      .lean()
+      .exec();
+    const requestByUserId = new Map(requests.map((request) => [request.userId.toString(), request]));
+    return res.json({ cases: rows.map((row) => adminCasePayload({ ...row, accessRequest: row.ownerUserId ? requestByUserId.get(row.ownerUserId._id.toString()) : null })) });
+  } catch (error) {
+    console.error("Victim case admin list error", error);
+    return res.status(500).json({ message: "Failed to load all victim cases." });
+  }
+}
+
+module.exports = { createCase, listMyCases, listAllCases };

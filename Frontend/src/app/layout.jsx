@@ -1,14 +1,7 @@
 import "./globals.css";
-import { Plus_Jakarta_Sans } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
 import { I18nInitializer } from "@/components/I18nInitializer";
-
-const sans = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
-});
 
 export const metadata = {
   title: "DMEWS - Disaster Management & Early Warning System",
@@ -21,7 +14,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={sans.variable}>
+    <html lang="en">
       <body className="flex min-h-screen flex-col font-sans">
         <I18nInitializer>
           <Nav />

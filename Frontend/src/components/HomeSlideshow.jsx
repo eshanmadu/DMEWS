@@ -95,7 +95,7 @@ export function HomeSlideshow() {
   const isSinhala = i18n.language?.startsWith("si");
 
   return (
-    <section className="relative mb-12 overflow-hidden rounded-3xl bg-slate-900 shadow-2xl">
+    <section className={`${savenirsans.className} relative mb-12 overflow-hidden rounded-3xl bg-slate-900 shadow-2xl`}>
       <div className="relative h-[320px] sm:h-[420px] lg:h-[520px]">
         <Swiper
           modules={[Autoplay, Pagination, A11y, Mousewheel]}
