@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, MapPin, X } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
-const TILE_URL = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 export default function RouteModal({ shelter, userLocation, onClose }) {
   const mapContainerRef = useRef(null);
@@ -31,8 +31,7 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
     const map = L.map(mapContainerRef.current, { center: origin, zoom: 12 });
     mapRef.current = map;
     L.tileLayer(TILE_URL, {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; CARTO',
-      subdomains: "abcd",
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     }).addTo(map);
     L.marker(origin).addTo(map).bindPopup("Your current location");

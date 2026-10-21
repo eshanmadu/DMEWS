@@ -373,21 +373,84 @@ export default function SheltersPage() {
       let distanceKm = null;
       if (
         userHasCoords &&
-        typeof s.cityLatitude === "number" &&
-        typeof s.cityLongitude === "number" &&
-        Number.isFinite(s.cityLatitude) &&
-        Number.isFinite(s.cityLongitude)
+        Number.isFinite(Number(s.latitude ?? s.cityLatitude)) &&
+        Number.isFinite(Number(s.longitude ?? s.cityLongitude))
       ) {
         distanceKm = haversineKm(
           userCityLatitude,
           userCityLongitude,
-          s.cityLatitude,
-          s.cityLongitude
+          Number(s.latitude ?? s.cityLatitude),
+          Number(s.longitude ?? s.cityLongitude)
         );
       }
       return { ...s, distanceKm };
     });
   }, [filteredByDistrict, userHasCoords, userCityLatitude, userCityLongitude]);
+
+  const recommendedShelter = useMemo(() => {
+    const recommendationLatitude = browserLocation?.latitude ?? userCityLatitude;
+    const recommendationLongitude = browserLocation?.longitude ?? userCityLongitude;
+    const hasRecommendationCoords =
+      Number.isFinite(recommendationLatitude) &&
+      Number.isFinite(recommendationLongitude);
+    const conditionRank = {
+      good: 0,
+      fair: 1,
+      "needs-attention": 2,
+      critical: 3,
+    };
+
+    return shelters
+      .map((shelter) => {
+        const capacity = Number(shelter.capacity);
+        const occupied = Number(shelter.occupied || 0);
+        const hasKnownCapacity = Number.isFinite(capacity) && capacity > 0;
+        const availableSpaces = hasKnownCapacity
+          ? Math.max(0, capacity - occupied)
+          : 0;
+        const isOpen =
+          (shelter.availability ||
+            (shelter.status === "inactive" ? "closed" : "open")) === "open";
+        const latitude = Number(shelter.latitude ?? shelter.cityLatitude);
+        const longitude = Number(shelter.longitude ?? shelter.cityLongitude);
+        const distanceKm =
+          hasRecommendationCoords &&
+          Number.isFinite(latitude) &&
+          Number.isFinite(longitude)
+            ? haversineKm(
+                recommendationLatitude,
+                recommendationLongitude,
+                latitude,
+                longitude
+              )
+            : null;
+
+        return {
+          ...shelter,
+          recommendationDistanceKm: distanceKm,
+          recommendationAvailableSpaces: availableSpaces,
+          recommendationEligible: isOpen && availableSpaces > 0,
+          recommendationConditionRank:
+            conditionRank[shelter.condition || "good"] ?? conditionRank.good,
+        };
+      })
+      .sort((a, b) => {
+        if (a.recommendationEligible !== b.recommendationEligible) {
+          return a.recommendationEligible ? -1 : 1;
+        }
+        if (
+          a.recommendationConditionRank !== b.recommendationConditionRank
+        ) {
+          return a.recommendationConditionRank - b.recommendationConditionRank;
+        }
+        const ad = a.recommendationDistanceKm;
+        const bd = b.recommendationDistanceKm;
+        if (ad != null && bd != null && ad !== bd) return ad - bd;
+        if (ad != null && bd == null) return -1;
+        if (ad == null && bd != null) return 1;
+        return (a.name || "").localeCompare(b.name || "");
+      })[0] || null;
+  }, [browserLocation, shelters, userCityLatitude, userCityLongitude]);
 
   const handleResetFilter = () => setSelectedDistrict("");
 
@@ -638,6 +701,45 @@ export default function SheltersPage() {
                 </div>
               ) : (
                 <>
+                  {recommendedShelter && (
+                    <div className="mb-6 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-sky-50 p-5 shadow-sm">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">
+                            {si ? "ඔබ සඳහා නිර්දේශිත කඳවුර" : "Recommended shelter for you"}
+                          </p>
+                          <h3 className="mt-1 text-xl font-bold text-slate-900">
+                            {recommendedShelter.name}
+                          </h3>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {recommendedShelter.location}, {recommendedShelter.district}
+                          </p>
+                        </div>
+                        <CheckCircle2 className="h-8 w-8 shrink-0 text-emerald-600" />
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+                        <span className="rounded-full bg-white px-3 py-1.5 text-emerald-800">
+                          {recommendedShelter.recommendationAvailableSpaces}{" "}
+                          {si ? "ඉඩ ඇත" : "spaces available"}
+                        </span>
+                        <span className="rounded-full bg-white px-3 py-1.5 text-slate-700">
+                          {recommendedShelter.condition === "needs-attention"
+                            ? "Needs attention"
+                            : `Condition: ${recommendedShelter.condition || "good"}`}
+                        </span>
+                        {recommendedShelter.recommendationDistanceKm != null && (
+                          <span className="rounded-full bg-white px-3 py-1.5 text-indigo-700">
+                            {formatDistanceKm(recommendedShelter.recommendationDistanceKm)} away
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-3 text-xs text-slate-600">
+                        {si
+                          ? "විවෘතව ඇති, ඉඩ සහ හොඳ තත්ත්වය ඇති කඳවුරු අතරින් ආසන්නතම කඳවුර තෝරා ඇත."
+                          : "Selected from open shelters with available space, prioritising safer condition and then proximity. Route safety will be added later."}
+                      </p>
+                    </div>
+                  )}
                   {shelters.length > 0 && (
                     <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm border border-slate-200">
                       <div className="flex items-center gap-2">
@@ -768,7 +870,10 @@ export default function SheltersPage() {
                                     <ShelterCard
                                       key={s.id}
                                       shelter={s}
-                                      highlight={isUserDistrict}
+                                      highlight={
+                                        isUserDistrict ||
+                                        s.id === recommendedShelter?.id
+                                      }
                                       distanceLabel={formatDistanceKm(
                                         s.distanceKm
                                       )}
