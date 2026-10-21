@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cascade | Kalu Basin Research Map</title>
+  <link rel="stylesheet" href="/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="/leaflet/leaflet.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <header><div><span class="eyebrow">CASCADE DISASTER PREDICTION SYSTEM</span>
+    <h1>Kalu basin research atlas</h1><p>AI-Integrated Disaster Management System for Flood and Landslide Resilience in Sri Lanka</p></div>
+    <div class="header-actions"><span class="badge">PROVISIONAL WATERSHED · 02</span>
+      <a class="history-jump" href="#historical-stage">Historical river stage ↓</a></div></header>
+  <div class="notice">Research prototype — provisional outlet; present-day Ratnapura gauge cross-section unverified.</div>
+  <main>
+    <aside class="sidebar">
+      <section><h2>Explore the study area</h2><p>Compare the DEM-derived provisional watershed, reference geography and station positions. All layers are local; no external basemap is requested.</p>
+        <div class="buttons"><button id="fit-kalu" disabled>Fit Kalu basin</button><button id="fit-ratnapura" disabled>Fit Ratnapura reference</button><button id="fit-v2-watershed" disabled>Fit V2 Watershed</button><button id="fit-v2" disabled>Fit V2 Marker</button></div>
+      </section>
+      <section><h2>Map layers</h2><fieldset id="layers"><legend class="sr-only">Visible layers</legend></fieldset></section>
+      <section><h2>Legend</h2><ul class="legend">
+        <li><i class="line gray"></i>Kalu HydroBASINS reference</li>
+        <li><i class="line amber"></i>Ratnapura HydroBASINS reference</li>
+        <li><i class="watershed-key"></i>Provisional V2 Watershed — DEM-derived</li>
+        <li><i class="line blue"></i>HydroRIVERS reference rivers</li>
+        <li><i class="dot annual"></i>Ratnapura annual coordinate</li>
+        <li><i class="dot dmc"></i>Ratnapura alternative coordinate</li>
+        <li><i class="dot ellagawa"></i>Ellagawa station marker</li>
+        <li><i class="dot v2"></i>V2 provisional modeled outlet</li></ul></section>
+      <section class="area"><h2>Two different area references</h2>
+        <div><strong>603 <small>km²</small></strong><span>Published Ratnapura drainage area</span></div>
+        <div><strong>644.1525 <small>km²</small></strong><span>DEM-derived V2 area — reproduced and export-validated; 715,725 cells at 30 m</span></div>
+        <p>Difference: 41.1525 km², approximately 6.82% above the published value. The discrepancy remains unresolved; it is not a confirmed DEM routing error.</p>
+      </section>
+    </aside>
+    <section class="map-column" aria-label="Interactive research map">
+      <div class="map-heading"><span>PROVISIONAL WATERSHED &amp; REFERENCES</span><span id="load-status" role="status">Loading local layers…</span></div>
+      <div id="map" aria-label="Kalu River Basin interactive map"></div>
+      <div class="map-note">Purple: exact provisional DEM-derived V2 watershed. Dashed amber: six-polygon HydroBASINS reference, <strong>not</strong> the modeled watershed. Computed connectivity is validated; the present-day gauge cross-section remains unverified.</div>
+    </section>
+    <aside class="details-column">
+      <section><h2>Feature details</h2><div id="details" aria-live="polite"><p>Select a basin, river or station marker to inspect its source attributes.</p></div></section>
+      <section><h2>Reading this map</h2><ul class="notes"><li>HydroBASINS is approximate reference geography.</li><li>HydroRIVERS is reference river geometry, not a validated DEM channel alignment.</li><li>V2 is a provisional modeled outlet marker, not a verified gauge cross-section.</li><li>Published station coordinates have location and datum uncertainties.</li><li>River-to-coast routing remains unresolved.</li></ul>
+        <p class="no-live">No live flood predictions are available in this prototype.</p></section>
+      <section><h2>Sources &amp; licence</h2><p>HydroSHEDS / WWF; HydroBASINS Level 12 v1c; HydroRIVERS Asia v1.0.</p>
+        <p><a href="https://www.hydrosheds.org" target="_blank" rel="noopener">HydroSHEDS</a> · <a href="https://data.hydrosheds.org/file/technical-documentation/HydroSHEDS_TechDoc_v1_4.pdf" target="_blank" rel="noopener">Licence and required attribution</a></p>
+        <details><summary>Full HydroSHEDS attribution</summary><p id="attribution">Loading attribution…</p></details>
+        <p id="provenance" class="muted"></p></section>
+    </aside>
+  </main>
+  <section id="historical-stage" class="historical-section" aria-labelledby="history-title">
+    <details class="history-panel" open>
+      <summary><span id="history-title">Historical River Stage</span><span class="history-status">Historical observations — no forecasts</span></summary>
+      <div class="history-content">
+        <p class="history-period"><strong>Ratnapura public archive · 11 September–10 October 2026</strong><br>Archive reporting/edit time · Asia/Colombo (UTC+05:30)</p>
+        <dl class="history-metrics" aria-label="Historical archive QA summary">
+          <div><dt>Original reports</dt><dd>723</dd></div>
+          <div><dt>Source-labelled stage range</dt><dd>0.66–6.86 <small>m</small></dd></div>
+          <div><dt>Reporting gaps over 90 min</dt><dd>24</dd></div>
+          <div><dt>Close-event pairs within 5 min</dt><dd>10</dd></div>
+        </dl>
+        <p class="history-warning"><strong>Reporting/edit times are not verified physical measurement times.</strong> Gauge datum and equivalence to official station 003HD007 remain unverified. Reporting gaps do not establish missing physical measurements; large changes are not confirmed flood events.</p>
+        <div class="history-tools" aria-label="Full-resolution historical charts">
+          <a href="/charts/ratnapura_stage_month_hydrograph.svg" target="_blank" rel="noopener">Open full-resolution SVG ↗</a>
+          <a href="/charts/ratnapura_stage_month_hydrograph.png" target="_blank" rel="noopener">Open full-resolution PNG ↗</a>
+        </div>
+        <p id="history-chart-help" class="history-help">Scroll or swipe <strong>inside the chart</strong> on smaller screens, or open a full-resolution version and zoom to read every label. The page and map keep their normal width.</p>
+        <figure class="history-chart">
+          <div class="history-chart-viewport" tabindex="0" role="region" aria-label="Historical hydrograph; horizontally scrollable on smaller screens" aria-describedby="history-chart-help">
+            <a class="history-chart-link" href="/charts/ratnapura_stage_month_hydrograph.svg" target="_blank" rel="noopener" aria-label="Open the validated historical hydrograph SVG at full resolution in a new tab">
+              <img src="/charts/ratnapura_stage_month_hydrograph.svg" width="1296" height="864" loading="lazy" alt="Validated Ratnapura historical reported river-stage hydrograph, 11 September to 10 October 2026. All 723 reports are retained; 24 reporting gaps break the line and ten close-event pairs are flagged and detailed in the chart table. No forecasts.">
+            </a>
+          </div>
+          <figcaption>Original validated chart, displayed unchanged. All 723 observations are retained; no resampling, smoothing, interpolation, merging or deletion.</figcaption>
+        </figure>
+        <ul class="history-reading" aria-label="How to read the historical hydrograph">
+          <li><i class="history-key history-key-reports" aria-hidden="true"></i><span>Blue points: all original reports. Lines connect consecutive reports only when the interval is ≤90 minutes.</span></li>
+          <li><i class="history-key history-key-gaps" aria-hidden="true"></i><span>Amber bands G01–G24: reporting gaps over 90 minutes; no line crosses a gap.</span></li>
+          <li><i class="history-key history-key-close" aria-hidden="true"></i><span>Orange diamonds C01–C10: close-event pairs. Both reports remain; the chart table lists their exact reporting times and values.</span></li>
+        </ul>
+        <p class="history-source"><strong>Source:</strong> public Rathnapura / Kalu Ganga stage archive, nuuuwan/lk_irrigation; pinned revision <code>baffd0a5fea232d05de7bcb80f3405740f1a1851</code>. Primary archive values use the source metre convention. Public availability does not establish an official station crosswalk, verified gauge datum or unrestricted redistribution rights.</p>
+      </div>
+    </details>
+  </section>
+</body>
+</html>
