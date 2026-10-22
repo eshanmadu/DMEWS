@@ -47,6 +47,25 @@ transitive dependencies. Installation on Windows and other Python versions has
 not been validated. Future model/API packages are not included until used.
 No flood, landslide, or cascade prediction model has been trained here.
 
+## Shelter risk training
+
+`src/train_shelter_risk_model.py` trains a Random Forest shelter-readiness
+classifier from an operational Excel or CSV shelter dataset and the river
+observations stored in `Backend/data/river_water_level.json`. The trainer
+accepts flexible column names for capacity, occupancy, latitude, and longitude.
+If a reviewed `risk`/`risk_level` column is not present, it derives provisional
+labels from occupancy and current river-level change; those labels should be
+replaced before production decisions are made.
+
+```powershell
+python ML-Service/src/train_shelter_risk_model.py `
+  --shelters "path\to\badulla-shelters.xlsx" `
+  --river-levels Backend/data/river_water_level.json
+```
+
+The admin shelter page displays the same river observations alongside live
+shelter capacity records, with Badulla selected by default.
+
 From the repository root, create an environment and install the snapshot:
 
 macOS/Linux:

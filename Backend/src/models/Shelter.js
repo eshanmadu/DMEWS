@@ -64,6 +64,15 @@ const ShelterSchema = new Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+    lastCapacityMeasurementAt: {
+      type: Date,
+      default: null,
+    },
+    lastCapacityMeasuredBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
     timestamps: true,

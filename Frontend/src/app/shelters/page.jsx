@@ -38,6 +38,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 /** Hero background image – evacuation / shelter context (Unsplash) */
 const HERO_BG = "/img/shelter.png";
+const MAX_RECOMMENDED_SHELTERS = 6;
 
 /** Haversine formula for distance calculation */
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -301,24 +302,49 @@ export default function SheltersPage() {
   useEffect(() => {
     setSheltersError(null);
     setSheltersLoading(true);
-    fetch(`${API_BASE}/shelters`, { cache: "no-store" })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
+    Promise.all([
+      fetch(`${API_BASE}/shelters`, { cache: "no-store" }),
+      fetch(`${API_BASE}/shelters/safe-centres`, { cache: "no-store" }),
+    ])
+      .then(async ([sheltersRes, centresRes]) => {
+        const data = await sheltersRes.json().catch(() => ({}));
+        const centresPayload = await centresRes.json().catch(() => ({}));
+        if (!sheltersRes.ok) {
           setShelters([]);
           setDistricts([]);
           setSheltersError(
             data?.message ||
               (si
-                ? `සහන කඳවුරු පූරණය කළ නොහැක (HTTP ${res.status})`
-                : `Could not load shelters (HTTP ${res.status})`)
+                ? `සහන කඳවුරු පූරණය කළ නොහැක (HTTP ${sheltersRes.status})`
+                : `Could not load shelters (HTTP ${sheltersRes.status})`)
           );
           return;
         }
         if (Array.isArray(data)) {
-          setShelters(data);
+          const centres = Array.isArray(centresPayload?.safe_centres)
+            ? centresPayload.safe_centres.map((centre) => ({
+                id: `safe-centre-${centre.no}`,
+                name: centre.safe_centre_name,
+                location: centre.ds_division,
+                district: "Badulla",
+                city: centre.ds_division,
+                capacity: null,
+                occupied: 0,
+                availableSpaces: null,
+                availability: "open",
+                condition: centre.highlighted_green ? "good" : "fair",
+                contact: centre.contact_no ? `0${centre.contact_no}` : "",
+                notes: `Historical report: ${centre.families || 0} families and ${centre.persons || 0} persons. Current occupancy is not available. Coordinating officer: ${centre.coordinating_officer || "Not specified"}.`,
+                source: "Badulla safe centres dataset",
+                reportedPersons: Number(centre.persons) || 0,
+                historical: true,
+                highlightedGreen: Boolean(centre.highlighted_green),
+              }))
+            : [];
+          const combined = [...data, ...centres];
+          setShelters(combined);
           const uniqueDistricts = [
-            ...new Set(data.map((s) => s.district).filter(Boolean)),
+            ...new Set(combined.map((s) => s.district).filter(Boolean)),
           ].sort();
           setDistricts(uniqueDistricts);
         } else {
@@ -400,14 +426,24 @@ export default function SheltersPage() {
       critical: 3,
     };
 
-    return shelters
+    const preferredDistrict = selectedDistrict || userDistrict;
+    const districtShelters = preferredDistrict
+      ? shelters.filter(
+          (shelter) =>
+            String(shelter.district || "").trim().toLowerCase() ===
+            String(preferredDistrict).trim().toLowerCase()
+        )
+      : shelters;
+    const candidates = districtShelters.length > 0 ? districtShelters : shelters;
+
+    return candidates
       .map((shelter) => {
         const capacity = Number(shelter.capacity);
         const occupied = Number(shelter.occupied || 0);
         const hasKnownCapacity = Number.isFinite(capacity) && capacity > 0;
         const availableSpaces = hasKnownCapacity
           ? Math.max(0, capacity - occupied)
-          : 0;
+          : null;
         const isOpen =
           (shelter.availability ||
             (shelter.status === "inactive" ? "closed" : "open")) === "open";
@@ -429,7 +465,7 @@ export default function SheltersPage() {
           ...shelter,
           recommendationDistanceKm: distanceKm,
           recommendationAvailableSpaces: availableSpaces,
-          recommendationEligible: isOpen && availableSpaces > 0,
+          recommendationEligible: isOpen && (!hasKnownCapacity || availableSpaces > 0),
           recommendationConditionRank:
             conditionRank[shelter.condition || "good"] ?? conditionRank.good,
         };
@@ -450,7 +486,14 @@ export default function SheltersPage() {
         if (ad == null && bd != null) return 1;
         return (a.name || "").localeCompare(b.name || "");
       })[0] || null;
-  }, [browserLocation, shelters, userCityLatitude, userCityLongitude]);
+  }, [
+    browserLocation,
+    selectedDistrict,
+    shelters,
+    userCityLatitude,
+    userCityLongitude,
+    userDistrict,
+  ]);
 
   const handleResetFilter = () => setSelectedDistrict("");
 
@@ -511,8 +554,42 @@ export default function SheltersPage() {
 
   // Group shelters by district for accordion display
   const sheltersByDistrict = useMemo(() => {
+    const conditionRank = {
+      good: 0,
+      fair: 1,
+      "needs-attention": 2,
+      critical: 3,
+    };
+    const rankedShelters = [...sheltersWithDistance].sort((a, b) => {
+      const aOpen =
+        (a.availability ||
+          (a.status === "inactive" ? "closed" : "open")) === "open";
+      const bOpen =
+        (b.availability ||
+          (b.status === "inactive" ? "closed" : "open")) === "open";
+      const aAvailable =
+        a.availableSpaces == null && a.capacity == null
+          ? true
+          : Number(a.availableSpaces ?? Number(a.capacity || 0) - Number(a.occupied || 0)) > 0;
+      const bAvailable =
+        b.availableSpaces == null && b.capacity == null
+          ? true
+          : Number(b.availableSpaces ?? Number(b.capacity || 0) - Number(b.occupied || 0)) > 0;
+      if (aOpen !== bOpen) return aOpen ? -1 : 1;
+      if (aAvailable !== bAvailable) return aAvailable ? -1 : 1;
+      const aCondition = conditionRank[a.condition || "good"] ?? conditionRank.good;
+      const bCondition = conditionRank[b.condition || "good"] ?? conditionRank.good;
+      if (aCondition !== bCondition) return aCondition - bCondition;
+      if (a.distanceKm != null && b.distanceKm != null && a.distanceKm !== b.distanceKm) {
+        return a.distanceKm - b.distanceKm;
+      }
+      if (a.distanceKm != null) return -1;
+      if (b.distanceKm != null) return 1;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+    const limitedShelters = rankedShelters.slice(0, MAX_RECOMMENDED_SHELTERS);
     const groups = {};
-    sheltersWithDistance.forEach((shelter) => {
+    limitedShelters.forEach((shelter) => {
       const dist = shelter.district || "Unknown";
       if (!groups[dist]) groups[dist] = [];
       groups[dist].push(shelter);
@@ -534,7 +611,12 @@ export default function SheltersPage() {
       if (userDistrict && b === userDistrict) return 1;
       return a.localeCompare(b);
     });
-    return { groups, districtNames };
+    return {
+      groups,
+      districtNames,
+      totalCount: sheltersWithDistance.length,
+      shownCount: limitedShelters.length,
+    };
   }, [sheltersWithDistance, userDistrict]);
 
   // Smooth scroll to shelters section
@@ -719,8 +801,9 @@ export default function SheltersPage() {
                       </div>
                       <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
                         <span className="rounded-full bg-white px-3 py-1.5 text-emerald-800">
-                          {recommendedShelter.recommendationAvailableSpaces}{" "}
-                          {si ? "ඉඩ ඇත" : "spaces available"}
+                          {recommendedShelter.recommendationAvailableSpaces == null
+                            ? `${recommendedShelter.reportedPersons || recommendedShelter.occupied || 0} ${si ? "දෙනා වාර්තා වී ඇත" : "people reported"}`
+                            : `${recommendedShelter.recommendationAvailableSpaces} ${si ? "ඉඩ ඇත" : "spaces available"}`}
                         </span>
                         <span className="rounded-full bg-white px-3 py-1.5 text-slate-700">
                           {recommendedShelter.condition === "needs-attention"
@@ -799,6 +882,14 @@ export default function SheltersPage() {
                           )}
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {sheltersByDistrict.totalCount > sheltersByDistrict.shownCount && (
+                    <div className="mb-5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                      {si
+                        ? `ඔබට වඩාත් සුදුසු සහ ආසන්න කඳවුරු ${sheltersByDistrict.shownCount}ක් පමණක් පෙන්වයි.`
+                        : `Showing the ${sheltersByDistrict.shownCount} most suitable shelters from ${sheltersByDistrict.totalCount}. Open shelters with space, safer condition, and proximity are prioritised.`}
                     </div>
                   )}
 
@@ -882,6 +973,15 @@ export default function SheltersPage() {
                                         else setRouteShelter(s);
                                       }}
                                       directionsReady={Boolean(browserLocation)}
+                                      onLiveCapacityUpdated={(updated) => {
+                                        setShelters((current) =>
+                                          current.map((item) =>
+                                            item.id === updated.shelterId
+                                              ? { ...item, ...updated }
+                                              : item
+                                          )
+                                        );
+                                      }}
                                     />
                                   ))}
                                 </div>
@@ -1340,7 +1440,17 @@ export default function SheltersPage() {
 }
 
 // Shelter Card Component
-function ShelterCard({ shelter, highlight, distanceLabel, onDirections, directionsReady }) {
+function ShelterCard({
+  shelter,
+  highlight,
+  distanceLabel,
+  onDirections,
+  directionsReady,
+  onLiveCapacityUpdated,
+}) {
+  const [measurement, setMeasurement] = useState(String(shelter.occupied || 0));
+  const [measurementBusy, setMeasurementBusy] = useState(false);
+  const [measurementMessage, setMeasurementMessage] = useState("");
   const occupied = Number(shelter.occupied || 0);
   const capacity = Number(shelter.capacity || 0);
   const isFull = Boolean(shelter.isFull || (capacity > 0 && occupied >= capacity));
@@ -1355,6 +1465,49 @@ function ShelterCard({ shelter, highlight, distanceLabel, onDirections, directio
         : condition === "fair"
           ? "bg-yellow-100 text-yellow-800"
           : "bg-emerald-100 text-emerald-800";
+
+  async function submitCapacityMeasurement(event) {
+    event.preventDefault();
+    const token =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("dmews_token")
+        : null;
+    const value = Number(measurement);
+    if (!token) {
+      setMeasurementMessage("Sign in with your district account to report live capacity.");
+      return;
+    }
+    if (!Number.isInteger(value) || value < 0 || value > capacity) {
+      setMeasurementMessage(`Enter a whole number from 0 to ${capacity}.`);
+      return;
+    }
+    setMeasurementBusy(true);
+    setMeasurementMessage("");
+    try {
+      const response = await fetch(
+        `${API_BASE}/shelters/${encodeURIComponent(shelter.id)}/capacity-measurement`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ occupied: value }),
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMeasurementMessage(data?.message || "Could not save the live measurement.");
+        return;
+      }
+      onLiveCapacityUpdated?.(data);
+      setMeasurementMessage("Report submitted successfully.");
+    } catch {
+      setMeasurementMessage("Network error while saving the measurement.");
+    } finally {
+      setMeasurementBusy(false);
+    }
+  }
 
   return (
     <div
@@ -1380,7 +1533,7 @@ function ShelterCard({ shelter, highlight, distanceLabel, onDirections, directio
           </span>
           <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${isFull ? "bg-red-100 text-red-800" : "bg-sky-100 text-sky-800"}`}>
             {isFull ? <AlertTriangle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-            {isFull ? "FULL" : `${Math.max(0, capacity - occupied)} spaces available`}
+            {shelter.capacity == null ? `${shelter.reportedPersons || 0} reported historically` : isFull ? "FULL" : `${Math.max(0, capacity - occupied)} spaces available`}
           </span>
           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${conditionClass}`}>
             Condition: {conditionLabel}
@@ -1409,7 +1562,7 @@ function ShelterCard({ shelter, highlight, distanceLabel, onDirections, directio
             )}
             <span className="flex items-center gap-1.5">
               <Users className="h-3.5 w-3.5" />
-              {occupied}/{capacity} occupied
+              {shelter.capacity == null ? `${shelter.reportedPersons || 0} people reported historically` : `${occupied}/${capacity} occupied`}
             </span>
           </div>
           {shelter.contact && (
@@ -1429,6 +1582,34 @@ function ShelterCard({ shelter, highlight, distanceLabel, onDirections, directio
               <div className={`h-full ${isFull ? "bg-red-500" : "bg-sky-500"}`} style={{ width: `${Math.min(100, Math.max(0, (occupied / capacity) * 100))}%` }} />
             </div>
           </div>
+        )}
+        {capacity > 0 && !shelter.historical && (
+          <form onSubmit={submitCapacityMeasurement} className="mt-4 rounded-lg border border-sky-100 bg-sky-50/60 p-3">
+            <label className="block text-xs font-semibold text-slate-700">
+              Report live occupied count
+              <div className="mt-2 flex gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max={capacity}
+                  step="1"
+                  value={measurement}
+                  onChange={(event) => setMeasurement(event.target.value)}
+                  className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+                  disabled={measurementBusy}
+                />
+                <button
+                  type="submit"
+                  disabled={measurementBusy}
+                  className="rounded-md bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
+                >
+                  {measurementBusy ? "Saving…" : "Submit"}
+                </button>
+              </div>
+            </label>
+            <p className="mt-1 text-[11px] text-slate-500">Only authenticated users assigned to this district can submit measurements.</p>
+            {measurementMessage && <p className="mt-1 text-xs font-medium text-slate-700">{measurementMessage}</p>}
+          </form>
         )}
         {shelter.contact && (
           <div className="mt-4 border-t border-slate-100 pt-3">

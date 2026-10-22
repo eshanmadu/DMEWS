@@ -54,6 +54,7 @@ export function AdminShelters() {
   const [form, setForm] = useState(initialForm);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [newShelterName, setNewShelterName] = useState("");
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const [districtsList, setDistrictsList] = useState([]);
   const [formCitiesList, setFormCitiesList] = useState([]);
@@ -340,6 +341,128 @@ export function AdminShelters() {
         setShelters((prev) => prev.filter((x) => x.id !== id));
         if (editingId === id) cancelEdit();
       }
+
+      async function updateManagement(shelter) {
+        const token =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("dmews_token")
+            : null;
+        if (!token) {
+          setError("Sign in as an administrator to update shelter management details.");
+          return;
+        }
+        const occupiedInput = window.prompt(
+          `Apply reviewed occupied count for ${shelter.name}.\nAverage from ${shelter.capacityVoteCount || 0} user measurement(s): ${shelter.capacityVoteAverage ?? "no votes"}`,
+          shelter.capacityVoteAverage == null
+            ? String(shelter.occupied || 0)
+            : String(Math.round(shelter.capacityVoteAverage))
+        );
+        if (occupiedInput === null) return;
+        const occupied = Number(occupiedInput);
+        if (!Number.isInteger(occupied) || occupied < 0 || occupied > Number(shelter.capacity)) {
+          setError("Occupied places must be a whole number between 0 and capacity.");
+          return;
+        }
+        const condition = window.prompt(
+          "Condition: good, fair, needs-attention, or critical",
+          shelter.condition || "good"
+        );
+        if (!["good", "fair", "needs-attention", "critical"].includes(condition)) {
+          setError("Select a valid shelter condition.");
+          return;
+        }
+        setRowBusyId(shelter.id);
+        setError(null);
+        try {
+          const res = await fetch(`${API_BASE}/shelters/${shelter.id}/management`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              occupied,
+              capacity: Number(shelter.capacity),
+              availability: occupied >= Number(shelter.capacity) ? "closed" : "open",
+              condition,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            setError(data?.message || "Failed to update shelter management details.");
+          } else {
+            setShelters((prev) => prev.map((item) => (item.id === shelter.id ? data : item)));
+          }
+        } catch {
+          setError("Network error.");
+        } finally {
+          setRowBusyId(null);
+        }
+      }
+    } catch {
+      setError("Network error.");
+    } finally {
+      setRowBusyId(null);
+    }
+  }
+
+  async function updateManagement(shelter) {
+    const token = window.localStorage.getItem("dmews_token");
+    if (!token) {
+      setError("Sign in as an administrator to review shelter votes.");
+      return;
+    }
+    setRowBusyId(shelter.id);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE}/shelters/${shelter.id}/capacity-votes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const review = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(review?.message || "Failed to load shelter reviews.");
+        return;
+      }
+      const details = review.votes.length
+        ? review.votes.map((vote) => `${vote.user.name}: ${vote.occupied} people`).join("\n")
+        : "No user reviews yet.";
+      const occupiedInput = window.prompt(
+        `${review.shelterName}\n\n${details}\n\nAverage: ${review.average ?? "—"}\nEnter reviewed official occupied count:`,
+        review.average == null ? String(shelter.occupied || 0) : String(Math.round(review.average))
+      );
+      if (occupiedInput === null) return;
+      const occupied = Number(occupiedInput);
+      if (!Number.isInteger(occupied) || occupied < 0 || occupied > Number(shelter.capacity)) {
+        setError("Occupied places must be a whole number between 0 and capacity.");
+        return;
+      }
+      const condition = window.prompt(
+        "Condition: good, fair, needs-attention, or critical",
+        shelter.condition || "good"
+      );
+      if (!["good", "fair", "needs-attention", "critical"].includes(condition)) {
+        setError("Select a valid shelter condition.");
+        return;
+      }
+      const saveResponse = await fetch(`${API_BASE}/shelters/${shelter.id}/management`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          occupied,
+          capacity: Number(shelter.capacity),
+          availability: occupied >= Number(shelter.capacity) ? "closed" : "open",
+          condition,
+        }),
+      });
+      const saved = await saveResponse.json().catch(() => ({}));
+      if (!saveResponse.ok) {
+        setError(saved?.message || "Failed to update shelter management details.");
+      } else {
+        setShelters((prev) => prev.map((item) => (item.id === shelter.id ? saved : item)));
+      }
     } catch {
       setError("Network error.");
     } finally {
@@ -365,7 +488,18 @@ export function AdminShelters() {
           </div>
         )}
 
-        {/* Add Shelter Form */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShowAddForm((visible) => !visible)}
+            className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700"
+          >
+            {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {showAddForm ? "Close form" : "Add shelter"}
+          </button>
+        </div>
+
+        {showAddForm && (
         <section className="rounded-2xl border border-slate-200/80 bg-white/70 p-6 shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
           <div className="flex items-center gap-2">
             <div className="rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 p-2 shadow-md">
@@ -544,6 +678,7 @@ export function AdminShelters() {
             </div>
           </form>
         </section>
+        )}
 
         {/* Shelters Table */}
         <section className="rounded-2xl border border-slate-200/80 bg-white/70 shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
@@ -732,7 +867,14 @@ export function AdminShelters() {
                                 className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-sm"
                               />
                             ) : (
-                              s.capacity
+                              <div>
+                                <div>{s.capacity}</div>
+                                {s.capacityVoteCount > 0 && (
+                                  <div className="mt-1 text-xs text-amber-700">
+                                    Vote avg: {s.capacityVoteAverage} ({s.capacityVoteCount})
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </td>
                           <td className="py-3 px-3 text-slate-600">
@@ -790,6 +932,14 @@ export function AdminShelters() {
                                     className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 shadow-sm hover:bg-sky-100"
                                   >
                                     <Pencil className="h-3.5 w-3.5" /> Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={rowBusyId === s.id}
+                                    onClick={() => updateManagement(s)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100"
+                                  >
+                                    <Save className="h-3.5 w-3.5" /> Review votes
                                   </button>
                                   <button
                                     type="button"

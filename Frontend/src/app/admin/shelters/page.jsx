@@ -1,4 +1,5 @@
 import { AdminShelters } from "@/components/AdminShelters";
+import { AdminShelterDashboard } from "@/components/AdminShelterDashboard";
 
 export const metadata = {
   title: "Shelters | Admin | DMEWS",
@@ -15,6 +16,7 @@ export default function AdminSheltersPage() {
           Add and manage evacuation shelters. Name, location, district, capacity, and optional contact and notes are stored in the database.
         </p>
       </div>
+      <AdminShelterDashboard />
       <AdminShelters />
     </div>
   );

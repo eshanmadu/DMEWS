@@ -1,6 +1,9 @@
 const { connectDb } = require("../db");
 const { Shelter } = require("../models/Shelter");
 const { User } = require("../models/User");
+const { ShelterCapacityVote } = require("../models/ShelterCapacityVote");
+const riverWaterLevels = require("../../data/river_water_level.json");
+const safeCentres = require("../../data/safe_centres_2025-12-06.json");
 
 function toApiShelter(s) {
   const latitude = typeof s.latitude === "number" ? s.latitude : s.cityLatitude;
@@ -26,7 +29,38 @@ function toApiShelter(s) {
     status: s.status || "active",
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
+    lastCapacityMeasurementAt: s.lastCapacityMeasurementAt,
+    capacityVoteAverage: s.capacityVoteAverage ?? null,
+    capacityVoteCount: s.capacityVoteCount || 0,
+    capacityVotesUpdatedAt: s.capacityVotesUpdatedAt || null,
   };
+}
+
+async function addCapacityVoteSummary(shelters) {
+  const ids = shelters.map((shelter) => shelter._id);
+  const summaries = await ShelterCapacityVote.aggregate([
+    { $match: { shelter: { $in: ids } } },
+    {
+      $group: {
+        _id: "$shelter",
+        average: { $avg: "$occupied" },
+        count: { $sum: 1 },
+        updatedAt: { $max: "$updatedAt" },
+      },
+    },
+  ]).exec();
+  const byShelter = new Map(summaries.map((summary) => [String(summary._id), summary]));
+  return shelters.map((shelter) => {
+    const summary = byShelter.get(String(shelter._id));
+    return summary
+      ? {
+          ...shelter,
+          capacityVoteAverage: Number(summary.average.toFixed(2)),
+          capacityVoteCount: summary.count,
+          capacityVotesUpdatedAt: summary.updatedAt,
+        }
+      : shelter;
+  });
 }
 
 function validateShelterPayload(payload) {
@@ -102,11 +136,20 @@ async function getShelters(_req, res) {
       .lean()
       .exec();
 
-    return res.json(shelters.map((s) => toApiShelter(s)));
+    const withVotes = await addCapacityVoteSummary(shelters);
+    return res.json(withVotes.map((s) => toApiShelter(s)));
   } catch (error) {
     console.error("Shelters fetch error", error);
     return res.status(500).json({ message: "Failed to load shelters." });
   }
+}
+
+function getRiverWaterLevels(_req, res) {
+  return res.json(riverWaterLevels);
+}
+
+function getSafeCentres(_req, res) {
+  return res.json(safeCentres);
 }
 
 async function createShelter(req, res) {
@@ -209,6 +252,7 @@ async function updateShelterManagement(req, res) {
       if (String(user.district || "").trim() !== String(shelter.district || "").trim()) {
         return res.status(403).json({ message: "You can only manage shelters in your district." });
       }
+
     }
 
     const { capacity, occupied, availability, condition } = req.body || {};
@@ -217,6 +261,7 @@ async function updateShelterManagement(req, res) {
       if (!Number.isInteger(value) || value <= 0) {
         return res.status(400).json({ message: "Capacity must be a positive integer." });
       }
+
       shelter.capacity = value;
     }
     if (occupied !== undefined) {
@@ -247,12 +292,142 @@ async function updateShelterManagement(req, res) {
   }
 }
 
+async function getShelterCapacityVotes(req, res) {
+  try {
+    await connectDb();
+    const shelter = await Shelter.findById(req.params.id).lean().exec();
+    if (!shelter) return res.status(404).json({ message: "Shelter not found." });
+    if (!req.isDevAdmin) {
+      const user = await User.findById(req.userId).select("district").lean().exec();
+      if (!user) return res.status(401).json({ message: "User account not found." });
+      if (String(user.district || "").trim().toLowerCase() !== String(shelter.district || "").trim().toLowerCase()) {
+        return res.status(403).json({ message: "You can only review votes for shelters in your district." });
+      }
+    }
+    const votes = await ShelterCapacityVote.find({ shelter: shelter._id })
+      .populate("user", "name email")
+      .sort({ updatedAt: -1 })
+      .lean()
+      .exec();
+    return res.json({
+      shelterId: String(shelter._id),
+      shelterName: shelter.name,
+      capacity: shelter.capacity,
+      average: votes.length
+        ? Number((votes.reduce((sum, vote) => sum + vote.occupied, 0) / votes.length).toFixed(2))
+        : null,
+      count: votes.length,
+      votes: votes.map((vote) => ({
+        id: String(vote._id),
+        occupied: vote.occupied,
+        updatedAt: vote.updatedAt,
+        user: { name: vote.user?.name || "User", email: vote.user?.email || "" },
+      })),
+    });
+  } catch (error) {
+    console.error("Shelter capacity votes fetch error", error);
+    return res.status(500).json({ message: "Failed to load shelter capacity reviews." });
+  }
+}
+
+async function updateShelterCapacityMeasurement(req, res) {
+  try {
+    const occupied = Number(req.body?.occupied);
+    if (!Number.isInteger(occupied) || occupied < 0) {
+      return res.status(400).json({ message: "Live occupied count must be a non-negative integer." });
+    }
+
+    async function getShelterCapacityVotes(req, res) {
+      try {
+        await connectDb();
+        const shelter = await Shelter.findById(req.params.id).lean().exec();
+        if (!shelter) return res.status(404).json({ message: "Shelter not found." });
+        if (!req.isDevAdmin) {
+          const user = await User.findById(req.userId).select("district").lean().exec();
+          if (!user) return res.status(401).json({ message: "User account not found." });
+          if (String(user.district || "").trim().toLowerCase() !== String(shelter.district || "").trim().toLowerCase()) {
+            return res.status(403).json({ message: "You can only review votes for shelters in your district." });
+          }
+        }
+        const votes = await ShelterCapacityVote.find({ shelter: shelter._id })
+          .populate("user", "name email district")
+          .sort({ updatedAt: -1 })
+          .lean()
+          .exec();
+        return res.json({
+          shelterId: String(shelter._id),
+          shelterName: shelter.name,
+          capacity: shelter.capacity,
+          average: votes.length
+            ? Number((votes.reduce((sum, vote) => sum + vote.occupied, 0) / votes.length).toFixed(2))
+            : null,
+          count: votes.length,
+          votes: votes.map((vote) => ({
+            id: String(vote._id),
+            occupied: vote.occupied,
+            updatedAt: vote.updatedAt,
+            user: vote.user
+              ? { name: vote.user.name || "User", email: vote.user.email || "" }
+              : { name: "User", email: "" },
+          })),
+        });
+      } catch (error) {
+        console.error("Shelter capacity votes fetch error", error);
+        return res.status(500).json({ message: "Failed to load shelter capacity reviews." });
+      }
+    }
+
+    await connectDb();
+    const shelter = await Shelter.findById(req.params.id).exec();
+    if (!shelter) return res.status(404).json({ message: "Shelter not found." });
+    if (req.isDevAdmin) {
+      return res.status(403).json({ message: "Admin tokens cannot submit public capacity votes." });
+    }
+    if (occupied > shelter.capacity) {
+      return res.status(400).json({ message: "Live occupied count cannot exceed shelter capacity." });
+    }
+
+    const user = await User.findById(req.userId).select("district").lean().exec();
+    if (!user) return res.status(401).json({ message: "User account not found." });
+    if (String(user.district || "").trim().toLowerCase() !== String(shelter.district || "").trim().toLowerCase()) {
+      return res.status(403).json({ message: "You can only vote for shelters in your district." });
+    }
+
+    await ShelterCapacityVote.findOneAndUpdate(
+      { shelter: shelter._id, user: req.userId },
+      { occupied },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+    ).exec();
+    const [withSummary] = await addCapacityVoteSummary([shelter]);
+    const summary = withSummary.capacityVoteAverage == null
+      ? { average: null, count: 0, updatedAt: null }
+      : {
+          average: withSummary.capacityVoteAverage,
+          count: withSummary.capacityVoteCount,
+          updatedAt: withSummary.capacityVotesUpdatedAt,
+        };
+    return res.json({
+      shelterId: shelter.id,
+      capacityVoteAverage: summary.average,
+      capacityVoteCount: summary.count,
+      capacityVotesUpdatedAt: summary.updatedAt,
+      message: "Your measurement was recorded for admin review.",
+    });
+  } catch (error) {
+    console.error("Shelter capacity measurement error", error);
+    return res.status(500).json({ message: "Failed to update live shelter capacity." });
+  }
+}
+
 module.exports = {
   getShelters,
+  getRiverWaterLevels,
+  getSafeCentres,
   createShelter,
   updateShelter,
   updateShelterStatus,
   updateShelterManagement,
+  updateShelterCapacityMeasurement,
+  getShelterCapacityVotes,
   deleteShelter,
 };
-
