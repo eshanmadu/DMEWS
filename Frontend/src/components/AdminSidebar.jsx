@@ -19,6 +19,7 @@ import {
   Sparkles,
   HandHeart,
   BadgeCheck,
+  Route,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -32,6 +33,7 @@ const navItems = [
   { href: "/admin/risk", label: "Risk management", icon: ShieldAlert },
   { href: "/admin/risk-prediction", label: "Risk prediction", icon: Sparkles },
   { href: "/admin/shelters", label: "Shelters", icon: Building2 },
+  { href: "/admin/routing-system", label: "Routing system", icon: Route },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/volunteers", label: "Volunteers", icon: Heart },
   { href: "/admin/victim-access", label: "Officer Access", icon: BadgeCheck },

@@ -39,6 +39,7 @@ const RESOURCE_TYPES = [
     icon: Package,
     color: "from-amber-500 to-orange-500",
     examples: "Rice, dhal, milk powder, canned food",
+    requiresCondition: false,
   },
   {
     id: "medicines",
@@ -46,6 +47,7 @@ const RESOURCE_TYPES = [
     icon: Pill,
     color: "from-emerald-500 to-teal-500",
     examples: "First-aid kits, antiseptic, ORS, masks",
+    requiresCondition: false,
   },
   {
     id: "clothes",
@@ -53,6 +55,7 @@ const RESOURCE_TYPES = [
     icon: Shirt,
     color: "from-indigo-500 to-violet-500",
     examples: "Children's wear, blankets, raincoats",
+    requiresCondition: true,
   },
   {
     id: "water",
@@ -60,10 +63,11 @@ const RESOURCE_TYPES = [
     icon: Droplets,
     color: "from-sky-500 to-blue-500",
     examples: "Bottled water and purification supplies",
+    requiresCondition: false,
   },
 ];
 const OTHER_RESOURCE_ID = "other";
-const OTHER_RESOURCE = { id: OTHER_RESOURCE_ID, title: "Other essentials", icon: HandHeart, color: "from-slate-500 to-slate-700", examples: "Hygiene items, tools, and other urgent needs" };
+const OTHER_RESOURCE = { id: OTHER_RESOURCE_ID, title: "Other essentials", icon: HandHeart, color: "from-slate-500 to-slate-700", examples: "Hygiene items, tools, and other urgent needs", requiresCondition: true };
 const ALL_RESOURCE_TYPES = [...RESOURCE_TYPES, OTHER_RESOURCE];
 const CONDITION_OPTIONS = [
   ["new", "New"],
@@ -71,6 +75,10 @@ const CONDITION_OPTIONS = [
   ["used", "Used"],
   ["needs-review", "Needs review"],
 ];
+
+function resourceNeedsCondition(resourceId) {
+  return ALL_RESOURCE_TYPES.find((resource) => resource.id === resourceId)?.requiresCondition === true;
+}
 
 export default function ResourcesPage() {
   const { i18n } = useTranslation();
@@ -157,9 +165,13 @@ export default function ResourcesPage() {
       if (!form.resourceTypes.length) return "Select at least one resource category.";
       const invalid = form.resourceTypes.some((id) => {
         const item = resourceItems[id];
-        return !item || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) < 1 || !item.unit || !item.condition;
+        return !item
+          || !Number.isFinite(Number(item.quantity))
+          || Number(item.quantity) < 1
+          || !item.unit
+          || (resourceNeedsCondition(id) && !item.condition);
       });
-      if (invalid) return "Add a valid quantity, unit, and condition for each selected resource.";
+      if (invalid) return "Add a valid quantity and unit for each selected resource, plus a condition where requested.";
     }
     if (nextStep === 3) {
       if (!form.availableDate) return "Choose when your resources will be available.";
@@ -379,7 +391,7 @@ export default function ResourcesPage() {
                 {tr("Choose resources to contribute", "දායක කිරීමට සම්පත් තෝරන්න")}
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                {tr("Select one or more categories, then add the quantity and condition for each.", "එක් හෝ වැඩි සම්පත් වර්ග තෝරා එක් එක් වර්ගයට ප්‍රමාණය සහ තත්ත්වය එක් කරන්න.")}
+                {tr("Select one or more categories, then add the quantity and relevant details for each.", "එක් හෝ වැඩි සම්පත් වර්ග තෝරා එක් එක් වර්ගයට ප්‍රමාණය සහ අදාළ විස්තර එක් කරන්න.")}
               </p>
             </div>
             <div className="grid gap-4 p-5 sm:grid-cols-2">
@@ -397,7 +409,7 @@ export default function ResourcesPage() {
                       <span className="min-w-0 flex-1"><span className="block font-semibold text-slate-900">{resource.title}</span><span className="mt-1 block text-sm text-slate-600">{resource.examples}</span></span>
                       <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? "border-rose-600 bg-rose-600 text-white" : "border-slate-300 bg-white"}`}>{selected ? "✓" : ""}</span>
                     </button>
-                    {selected && <div className="mt-4 grid grid-cols-2 gap-2 border-t border-rose-100 pt-3"><label className="text-xs font-semibold text-slate-600">Quantity<input required min="1" type="number" step="0.01" value={item.quantity} onChange={(e) => updateResourceItem(resource.id, "quantity", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900" /></label><label className="text-xs font-semibold text-slate-600">Unit<select value={item.unit} onChange={(e) => updateResourceItem(resource.id, "unit", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900"><option value="units">Units</option><option value="kg">kg</option><option value="liters">Liters</option><option value="boxes">Boxes</option><option value="cartons">Cartons</option><option value="packs">Packs</option><option value="kits">Kits</option><option value="pairs">Pairs</option></select></label><label className="col-span-2 text-xs font-semibold text-slate-600">Condition<select value={item.condition} onChange={(e) => updateResourceItem(resource.id, "condition", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900">{CONDITION_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{resource.id === OTHER_RESOURCE_ID && <label className="col-span-2 text-xs font-semibold text-slate-600">Describe essential<input required value={form.otherResource} onChange={(e) => setField("otherResource", e.target.value)} placeholder="e.g. hygiene kits" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900" /></label>}</div>}
+                    {selected && <div className="mt-4 grid grid-cols-2 gap-2 border-t border-rose-100 pt-3"><label className="text-xs font-semibold text-slate-600">Quantity<input required min="1" type="number" step="0.01" value={item.quantity} onChange={(e) => updateResourceItem(resource.id, "quantity", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900" /></label><label className="text-xs font-semibold text-slate-600">Unit<select value={item.unit} onChange={(e) => updateResourceItem(resource.id, "unit", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900"><option value="units">Units</option><option value="kg">kg</option><option value="liters">Liters</option><option value="boxes">Boxes</option><option value="cartons">Cartons</option><option value="packs">Packs</option><option value="kits">Kits</option><option value="pairs">Pairs</option></select></label>{resourceNeedsCondition(resource.id) && <label className="col-span-2 text-xs font-semibold text-slate-600">Condition<select value={item.condition} onChange={(e) => updateResourceItem(resource.id, "condition", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900">{CONDITION_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}{resource.id === OTHER_RESOURCE_ID && <label className="col-span-2 text-xs font-semibold text-slate-600">Describe essential<input required value={form.otherResource} onChange={(e) => setField("otherResource", e.target.value)} placeholder="e.g. hygiene kits" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900" /></label>}</div>}
                   </article>
                 );
               })}
@@ -479,7 +491,7 @@ export default function ResourcesPage() {
                   return <div key={label} className={`border-t-2 pt-2 text-[11px] font-semibold ${step >= number ? "border-rose-600 text-rose-700" : "border-slate-200 text-slate-400"}`}><span>{number}. </span>{tr(label, ["සම්පත් තෝරන්න", "බෙදාහැරීම සකසන්න", "ඔබගේ විස්තර"][index])}</div>;
                 })}
               </div>
-              {step === 1 && <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-3 text-sm text-slate-700"><p className="font-semibold text-slate-900">{tr("Choose resources", "සම්පත් තෝරන්න")}</p><p className="mt-1 text-xs text-slate-600">{tr("Select cards on the left and add quantity, unit, and condition for each selected item.", "වම් පස ඇති කාඩ්පත් තෝරා එක් එක් සම්පතට ප්‍රමාණය, ඒකකය සහ තත්ත්වය එක් කරන්න.")}</p>{selectedResources.length > 0 && <ul className="mt-3 space-y-1 text-xs">{selectedResources.map((resource) => <li key={resource.id} className="flex items-center justify-between"><span>{resource.title}</span><span className="font-semibold">{resourceItems[resource.id]?.quantity || "—"} {resourceItems[resource.id]?.unit || ""}</span></li>)}</ul>}</div>}
+              {step === 1 && <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-3 text-sm text-slate-700"><p className="font-semibold text-slate-900">{tr("Choose resources", "සම්පත් තෝරන්න")}</p><p className="mt-1 text-xs text-slate-600">{tr("Select cards on the left and add quantity, unit, and any requested condition details for each selected item. Food, medical supplies, and water are recorded as new/unused.", "වම් පස ඇති කාඩ්පත් තෝරා එක් එක් සම්පතට ප්‍රමාණය, ඒකකය සහ ඉල්ලා ඇති තත්ත්ව විස්තර එක් කරන්න. ආහාර, වෛද්‍ය සැපයුම් සහ ජලය නව/භාවිත නොකළ ලෙස සටහන් වේ.")}</p>{selectedResources.length > 0 && <ul className="mt-3 space-y-1 text-xs">{selectedResources.map((resource) => <li key={resource.id} className="flex items-center justify-between"><span>{resource.title}</span><span className="font-semibold">{resourceItems[resource.id]?.quantity || "—"} {resourceItems[resource.id]?.unit || ""}</span></li>)}</ul>}</div>}
               {step === 3 && <>
               <input
                 required
