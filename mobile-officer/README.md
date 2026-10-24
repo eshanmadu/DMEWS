@@ -15,13 +15,21 @@ Quick start
 
 3. Start the app
    npm run start
-   - Scan the QR code with Expo Go (SDK 57).
-   - This project uses Expo SDK 57 so it matches current Expo Go. Older SDKs fail with "incompatible" or "legacy manifests".
+   - Scan the QR code with Expo Go (SDK 58).
+   - This project uses Expo SDK 58. The installed Expo Go version must also support SDK 58.
 
 Notes
 
 - The form validates the same fields enforced by the backend: name, location, district and capacity are required; capacity must be a positive integer; contact must be 10 digits if provided. If city is set, cityLatitude and cityLongitude must be provided.
 - The app posts JSON to POST {API_URL}/shelters and expects the backend responses already present in this repository.
+
+Victim identification
+
+- Authenticated officers can open Victim Identification from the shelter dashboard.
+- Camera access is requested only when the camera screen is opened. Captures remain local and are not uploaded automatically.
+- The camera includes positioning and quality guidance, plus retake and cancel actions.
+- The backend exposes a protected scan and scan-history endpoint. Results are ranked potential matches only and must be verified by an officer; the app never claims a definitive identity.
+- Install the SDK-compatible camera package with `npx expo install expo-camera`.
 
 Extending
 

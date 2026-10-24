@@ -15,6 +15,7 @@ import {
   Modal,
 } from 'react-native';
 import Constants from 'expo-constants';
+import VictimIdentification from './VictimIdentification';
 
 function resolveApiUrl() {
   const configured =
@@ -254,6 +255,7 @@ function DropdownField({ label, value, placeholder, options, onChange, disabled 
 export default function App() {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
+  const [activeSection, setActiveSection] = useState('shelters');
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
   const [province, setProvince] = useState('');
@@ -305,6 +307,10 @@ export default function App() {
 
   if (!token) {
     return <AuthScreen onAuthenticated={(nextToken, nextUser) => { setToken(nextToken); setUser(nextUser); }} />;
+  }
+
+  if (activeSection === 'victim-identification') {
+    return <VictimIdentification apiUrl={API_URL} token={token} onBack={() => setActiveSection('shelters')} />;
   }
 
   function loadShelters() {
@@ -577,6 +583,14 @@ export default function App() {
             <Text style={styles.headerDescription}>
               Register a new emergency shelter
             </Text>
+
+            <Pressable
+              style={styles.victimEntry}
+              onPress={() => setActiveSection('victim-identification')}
+            >
+              <Text style={styles.victimEntryTitle}>Victim Identification</Text>
+              <Text style={styles.victimEntryText}>Capture a face for authorised review</Text>
+            </Pressable>
           </View>
 
           {/* ================= MAIN CARD ================= */}
@@ -1086,6 +1100,26 @@ const styles = StyleSheet.create({
     color: '#D5E6FA',
     fontSize: 14,
     marginTop: 4,
+  },
+
+  victimEntry: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    marginTop: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+
+  victimEntryTitle: {
+    color: COLORS.primaryDark,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+
+  victimEntryText: {
+    color: COLORS.secondaryText,
+    fontSize: 12,
+    marginTop: 3,
   },
 
   /* ================= CARD ================= */

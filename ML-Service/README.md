@@ -47,6 +47,25 @@ transitive dependencies. Installation on Windows and other Python versions has
 not been validated. Future model/API packages are not included until used.
 No flood, landslide, or cascade prediction model has been trained here.
 
+## Victim face-analysis service
+
+`face_recognition/service.py` is an isolated HTTP service used by the protected
+DMEWS victim-identification scan endpoint. It compares one captured image with
+photos already stored on missing-person records and returns ranked **potential**
+matches only. It does not confirm identity. Optional location, age, gender, and
+notes are stored with the scan and used only as supporting context.
+
+Install its separate dependencies and run it from the repository root:
+
+```powershell
+python -m pip install -r ML-Service/face_recognition/requirements.txt
+python -m uvicorn service:app --app-dir ML-Service/face_recognition --host 127.0.0.1 --port 8010
+```
+
+Set `FACE_RECOGNITION_URL=http://127.0.0.1:8010` in `Backend/.env`. If the
+service is not configured or its model dependencies are unavailable, the
+backend records an unavailable scan and does not invent matches.
+
 ## Shelter risk training
 
 `src/train_shelter_risk_model.py` trains a Random Forest shelter-readiness

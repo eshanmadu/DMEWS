@@ -5,6 +5,7 @@ const { adminMiddleware } = require("../middleware/adminMiddleware");
 const { victimIdentificationMiddleware } = require("../middleware/victimIdentificationMiddleware");
 const { submit, me, adminList, adminSetStatus } = require("../controllers/victimAccessController");
 const { createCase, listMyCases, listAllCases } = require("../controllers/victimCasesController");
+const { createScan, listMyScans, listAllScans } = require("../controllers/victimIdentificationController");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -24,5 +25,8 @@ router.get("/admin/cases", adminMiddleware, listAllCases);
 router.get("/protected", victimIdentificationMiddleware, (_req, res) => res.json({ allowed: true }));
 router.post("/cases", victimIdentificationMiddleware, upload.single("evidence"), createCase);
 router.get("/cases", victimIdentificationMiddleware, listMyCases);
+router.post("/scans", victimIdentificationMiddleware, upload.single("image"), createScan);
+router.get("/scans", victimIdentificationMiddleware, listMyScans);
+router.get("/admin/scans", adminMiddleware, listAllScans);
 
 module.exports = router;

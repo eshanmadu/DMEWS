@@ -41,6 +41,18 @@ cp .env.example .env.local   # optional: set NEXT_PUBLIC_API_URL if backend is n
 npm run dev
 ```
 
+### Run Python
+
+cd DMEWS.worktrees
+python -m pip install -r ML-Service\face_recognition\requirements.txt
+
+Start the service
+python -m uvicorn service:app `
+  --app-dir ML-Service\face_recognition `
+  --host 127.0.0.1 `
+  --port 8010
+
+
 Open **http://localhost:3000**. The app fetches data from the Backend API (`NEXT_PUBLIC_API_URL`, default `http://localhost:4000`).
 
 ## Running both
