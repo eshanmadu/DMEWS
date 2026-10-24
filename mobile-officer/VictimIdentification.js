@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 const COLORS = {
   primary: '#1976D2',
   primaryDark: '#0D47A1',
