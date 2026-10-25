@@ -91,18 +91,26 @@ def reference_encoding(candidate: Candidate) -> Any:
     return encoding
 
 
-def compare(query_encoding: Any, candidate: Candidate) -> float | None:
+def compare_with_stats(query_encoding: Any, candidate: Candidate) -> tuple[dict[str, Any] | None, str]:
+    if not candidate.photoUrl:
+        return None, "missing_url"
     try:
-        if query_encoding is None:
-            return None
         reference = reference_encoding(candidate)
         if reference is None:
-            return None
+            return None, "no_face"
         distance = float(face_recognition.face_distance([reference], query_encoding)[0])
         confidence = max(0.0, min(1.0, 1.0 - distance))
-        return confidence if distance <= float(os.getenv("FACE_MATCH_THRESHOLD", "0.55")) else None
+        if distance > float(os.getenv("FACE_MATCH_THRESHOLD", "0.55")):
+            return None, "below_threshold"
+        return {
+            "personId": candidate.id,
+            "matchType": "face",
+            "confidence": round(confidence, 4),
+            "metadataScore": metadata_score({}, candidate),
+            "reason": "Potential face similarity; verify against official records.",
+        }, "matched"
     except (OSError, ValueError, TimeoutError):
-        return None
+        return None, "download_or_decode_error"
 
 
 @app.get("/health")
@@ -127,11 +135,16 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
     except (OSError, ValueError):
         query_faces = []
 
-    def score_candidate(candidate: Candidate) -> dict[str, Any] | None:
+    def score_candidate(candidate: Candidate) -> tuple[dict[str, Any] | None, str]:
         score = metadata_score(request.optionalInfo, candidate)
-        confidence = compare(query_faces[0], candidate) if len(query_faces) == 1 else None
+        face_match, face_status = (
+            compare_with_stats(query_faces[0], candidate)
+            if len(query_faces) == 1
+            else (None, "no_query_face")
+        )
+        confidence = face_match["confidence"] if face_match else None
         if confidence is None and score == 0:
-            return None
+            return None, face_status
         return {
             "personId": candidate.id,
             "matchType": "face" if confidence is not None else "metadata",
@@ -142,10 +155,17 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
                 if confidence is not None
                 else "Potential details-based match only; no face similarity passed the threshold."
             ),
-        }
+        }, face_status
 
     with ThreadPoolExecutor(max_workers=min(8, max(1, len(request.candidates)))) as executor:
-        matches = [match for match in executor.map(score_candidate, request.candidates) if match]
+        scored = list(executor.map(score_candidate, request.candidates))
+    matches = [match for match, _status in scored if match]
+    reference_stats = {
+        "candidates": len(request.candidates),
+        "withPhotoUrl": sum(1 for candidate in request.candidates if candidate.photoUrl),
+        "downloadOrDecodeErrors": sum(1 for _match, status in scored if status == "download_or_decode_error"),
+        "processedReferences": sum(1 for _match, status in scored if status in {"matched", "below_threshold", "no_face"}),
+    }
     matches.sort(
         key=lambda item: (
             item["matchType"] == "face",
@@ -162,4 +182,5 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
             if len(query_faces) == 1
             else "No clear face was detected. Details-based potential matches are shown for officer review."
         ),
+        "referenceStats": reference_stats,
     }

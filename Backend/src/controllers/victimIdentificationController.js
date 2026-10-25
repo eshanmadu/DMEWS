@@ -10,6 +10,7 @@ function payload(row, peopleById = new Map()) {
     status: row.status,
     optionalInfo: row.optionalInfo,
     candidateCount: row.candidateCount,
+    analysisStats: row.analysisStats || {},
     serviceMessage: row.serviceMessage,
     completedAt: row.completedAt,
     createdAt: row.createdAt,
@@ -102,6 +103,7 @@ async function createScan(req, res) {
       optionalInfo,
       candidateCount: candidates.length,
       serviceMessage: String(result.message || "").slice(0, 500),
+      analysisStats: result.referenceStats || {},
       matches: matches.map((match) => ({
         personId: match.personId,
         matchType: match.matchType === "face" ? "face" : "metadata",

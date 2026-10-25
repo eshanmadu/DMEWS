@@ -336,6 +336,14 @@ function ResultScreen({ photo, result, error, onRetake, onBack }) {
         <View style={[styles.noticeIcon, !available && styles.noticeIconWarning]}>
           <Text style={[styles.noticeIconText, !available && { color: COLORS.danger }]}>{available ? 'i' : '!'}</Text>
         </View>
+        {result?.analysisStats ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Reference photo check</Text>
+            <Text style={styles.cardText}>
+              {result.analysisStats.withPhotoUrl || 0} candidate photo(s) supplied; {result.analysisStats.processedReferences || 0} processed reference(s); {result.analysisStats.downloadOrDecodeErrors || 0} unavailable or unreadable.
+            </Text>
+          </View>
+        ) : null}
         <View style={{ flex: 1 }}>
           <Text style={styles.noticeTitle}>
             {error ? 'Request error' : available ? 'Officer review required' : 'Recognition service unavailable'}

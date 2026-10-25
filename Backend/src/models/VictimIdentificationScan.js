@@ -20,6 +20,7 @@ const VictimIdentificationScanSchema = new Schema(
       reason: { type: String, trim: true, maxlength: 500, default: "" },
     }],
     candidateCount: { type: Number, min: 0, default: 0 },
+    analysisStats: { type: Schema.Types.Mixed, default: {} },
     serviceMessage: { type: String, trim: true, maxlength: 500, default: "" },
     completedAt: { type: Date },
   },
