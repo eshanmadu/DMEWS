@@ -7,13 +7,11 @@ import {
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
-  CheckCircle2,
   Clock3,
   Droplets,
   ExternalLink,
   Gauge,
   MapPin,
-  Radio,
   RefreshCw,
   Search,
   TrendingUp,
@@ -26,21 +24,6 @@ const IRRIGATION_SOURCE =
 const IRRIGATION_DASHBOARD =
   "https://www.arcgis.com/apps/dashboards/2cffe83c9ff5497d97375498bdf3ff38";
 const REFRESH_INTERVAL = 60_000;
-
-const RISK_LEVELS = [
-  { value: "safe", label: "Safe" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
-
-// Static class names so Tailwind can see them.
-const RISK_STYLES = {
-  safe: { active: "bg-emerald-600 text-white shadow-sm", dot: "bg-emerald-500", card: "border-emerald-200 bg-emerald-50/40" },
-  low: { active: "bg-yellow-500 text-white shadow-sm", dot: "bg-yellow-500", card: "border-yellow-200 bg-yellow-50/40" },
-  medium: { active: "bg-orange-500 text-white shadow-sm", dot: "bg-orange-500", card: "border-orange-200 bg-orange-50/40" },
-  high: { active: "bg-red-600 text-white shadow-sm", dot: "bg-red-600", card: "border-red-200 bg-red-50/40" },
-};
 
 /* ------------------------------------------------------------------ */
 /* Data helpers                                                        */
@@ -474,7 +457,6 @@ export default function AdminRiskPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState("");
-  const [savingDistrict, setSavingDistrict] = useState("");
   const [query, setQuery] = useState("");
 
   const loadData = useCallback(async (background = false) => {
@@ -540,26 +522,6 @@ export default function AdminRiskPage() {
   const basinCount = new Set(stations.map((station) => station.basin)).size;
   const risingCount = stations.filter((station) => station.change > 0.005).length;
   const highRiskCount = Object.values(riskLevels).filter((level) => level === "high").length;
-
-  async function updateRisk(district, level) {
-    setSavingDistrict(district);
-    setError("");
-    try {
-      const response = await fetch(`${API_BASE}/risk-levels`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ district, level }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || "Could not update risk level.");
-      setRiskLevels((current) => ({ ...current, [district]: data.level }));
-      window.dispatchEvent(new Event("dmews-risk-changed"));
-    } catch (saveError) {
-      setError(saveError?.message || "Could not update risk level.");
-    } finally {
-      setSavingDistrict("");
-    }
-  }
 
   if (loading) return <PageSkeleton />;
 
@@ -738,62 +700,6 @@ export default function AdminRiskPage() {
           </div>
         </section>
       </div>
-
-      {/* Publish risk */}
-      <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Publish district risk levels</h2>
-            <p className="text-xs text-slate-500">These values drive the public DMEWS risk map and alerts.</p>
-          </div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
-            <Radio className="h-3.5 w-3.5" /> Auto-refresh every 60 seconds
-          </span>
-        </div>
-
-        {Object.keys(riskLevels).length === 0 ? (
-          <p className="mt-4 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">No district risk levels have been published yet.</p>
-        ) : (
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {Object.entries(riskLevels).map(([district, level]) => {
-              const style = RISK_STYLES[level] || RISK_STYLES.safe;
-              const saving = savingDistrict === district;
-              return (
-                <div key={district} className={`rounded-2xl border p-3.5 transition ${style.card}`}>
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <i className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.dot}`} />
-                      <span className="truncate text-sm font-semibold text-slate-800">{district}</span>
-                    </span>
-                    {level === "high" ? (
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                    )}
-                  </div>
-                  <div role="group" aria-label={`Risk level for ${district}`} className="grid grid-cols-4 gap-1 rounded-xl bg-white p-1 ring-1 ring-slate-200">
-                    {RISK_LEVELS.map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        disabled={saving}
-                        aria-pressed={level === item.value}
-                        onClick={() => level !== item.value && updateRisk(district, item.value)}
-                        className={`rounded-lg px-1 py-1.5 text-[11px] font-semibold transition disabled:opacity-60 ${
-                          level === item.value ? RISK_STYLES[item.value].active : "text-slate-500 hover:bg-slate-100"
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                  {saving && <p className="mt-2 text-[11px] text-slate-500">Saving…</p>}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
 
       <footer className="flex flex-wrap items-center justify-between gap-2 pb-2 text-xs text-slate-500">
         <span>Feed checked {updatedAt ? formatDate(updatedAt) : "—"} · Live ArcGIS gauge records</span>

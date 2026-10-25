@@ -1,5 +1,6 @@
 const { connectDb } = require("../db");
 const { RiskLevel } = require("../models/RiskLevel");
+const { NotificationSetting } = require("../models/NotificationSetting");
 const { sendHighRiskSmsForDistrict } = require("../services/notifyService");
 
 async function getRiskLevels(_req, res) {
@@ -16,6 +17,36 @@ async function getRiskLevels(_req, res) {
   } catch (error) {
     console.error("Risk levels fetch error", error);
     return res.status(500).json({ message: "Failed to load risk levels." });
+  }
+
+}
+
+async function getSmsSetting(_req, res) {
+  try {
+    await connectDb();
+    const setting = await NotificationSetting.findOne({ key: "risk-sms" }).lean().exec();
+    return res.json({ enabled: setting?.smsEnabled !== false });
+  } catch (error) {
+    console.error("Risk SMS setting fetch error", error);
+    return res.status(500).json({ message: "Failed to load SMS setting." });
+  }
+}
+
+async function updateSmsSetting(req, res) {
+  try {
+    if (typeof req.body?.enabled !== "boolean") {
+      return res.status(400).json({ message: "enabled must be a boolean." });
+    }
+    await connectDb();
+    const setting = await NotificationSetting.findOneAndUpdate(
+      { key: "risk-sms" },
+      { $set: { smsEnabled: req.body.enabled } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean().exec();
+    return res.json({ enabled: setting.smsEnabled });
+  } catch (error) {
+    console.error("Risk SMS setting update error", error);
+    return res.status(500).json({ message: "Failed to update SMS setting." });
   }
 }
 
@@ -42,7 +73,6 @@ async function upsertRiskLevel(req, res) {
     const existing = await RiskLevel.findOne({
       district: trimmedDistrict,
     }).exec();
-
     const previousLevel = existing?.level || null;
 
     let updated;
@@ -56,7 +86,6 @@ async function upsertRiskLevel(req, res) {
       });
     }
 
-    // Fire-and-forget SMS sending when level transitions to high
     if (normalizedLevel === "high" && previousLevel !== "high") {
       sendHighRiskSmsForDistrict(trimmedDistrict);
     }
@@ -72,5 +101,9 @@ async function upsertRiskLevel(req, res) {
   }
 }
 
-module.exports = { getRiskLevels, upsertRiskLevel };
-
+module.exports = {
+  getRiskLevels,
+  upsertRiskLevel,
+  getSmsSetting,
+  updateSmsSetting,
+};

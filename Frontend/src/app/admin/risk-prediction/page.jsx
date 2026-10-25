@@ -1,1138 +1,840 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import "leaflet/dist/leaflet.css";
 import {
-  Calendar,
-  ChevronDown,
-  Gauge,
-  Loader2,
+  AlertTriangle,
+  Bell,
+  BellOff,
+  CheckCircle2,
+  Clock3,
+  Droplets,
   MapPin,
   RefreshCw,
   ShieldAlert,
-  Sparkles,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle,
-  HelpCircle,
-  BarChart3,
-  Activity,
-  PieChart as PieChartIcon,
+  Waves,
+  Zap,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  ComposedChart,
-  Line,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const IRRIGATION_SOURCE =
+  "https://services3.arcgis.com/J7ZFXmR8rSmQ3FGf/arcgis/rest/services/gauges_2_view/FeatureServer/0/query";
+const DISTRICTS_GEOJSON = "/sri-lanka-districts.geojson";
+const REFRESH_INTERVAL = 60_000;
 
-const DISTRICTS = [
-  "Colombo", "Gampaha", "Kalutara", "Kandy", "Matale", "Nuwara Eliya",
-  "Galle", "Matara", "Hambantota", "Jaffna", "Kilinochchi", "Mannar",
-  "Vavuniya", "Mullaitivu", "Batticaloa", "Ampara", "Trincomalee",
-  "Kurunegala", "Puttalam", "Anuradhapura", "Polonnaruwa", "Badulla",
-  "Monaragala", "Ratnapura", "Kegalle",
-];
-
-function fmtYMD(d) {
-  const x = new Date(d);
-  if (Number.isNaN(x.getTime())) return "—";
-  return x.toISOString().slice(0, 10);
-}
-
-function fmtYMDHM(d) {
-  const x = new Date(d);
-  if (Number.isNaN(x.getTime())) return "—";
-  // YYYY-MM-DD HH:mm (UTC)
-  return x.toISOString().slice(0, 16).replace("T", " ");
-}
-
-function getWeekday(dateStr) {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", { weekday: "short" });
-}
-
-function getHour(dateStr) {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(11, 16);
-}
-
-function levelTone(level) {
-  if (level === "high") return "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200";
-  if (level === "medium") return "bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-200";
-  if (level === "low") return "bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200";
-  return "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200";
-}
-
-function confBarTone(level) {
-  if (level === "high") return "from-rose-500 to-fuchsia-500";
-  if (level === "medium") return "from-orange-500 to-amber-500";
-  if (level === "low") return "from-amber-400 to-yellow-400";
-  return "from-emerald-500 to-teal-500";
-}
-
-function riskToNumber(level) {
-  if (level === "high") return 3;
-  if (level === "medium") return 2;
-  if (level === "low") return 1;
-  return 0;
-}
-
-function ConfidenceBar({ level, confidence }) {
-  const c = Number(confidence ?? 0);
-  const pct = Number.isFinite(c) ? Math.max(0, Math.min(100, Math.round(c * 100))) : 0;
-  return (
-    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-200/70 dark:bg-slate-700/60">
-      <div 
-        className={`h-full rounded-full bg-gradient-to-r ${confBarTone(level)} transition-all duration-500 ease-out`} 
-        style={{ width: `${pct}%` }} 
-      />
-    </div>
-  );
-}
-
-const LEVEL_COLORS = {
-  safe: "#10b981",
-  low: "#fbbf24",
-  medium: "#f97316",
-  high: "#e11d48",
+const LEVELS = {
+  safe: { label: "Safe", color: "#16a34a", fill: "#bbf7d0" },
+  low: { label: "Low", color: "#ca8a04", fill: "#fef08a" },
+  medium: { label: "Medium", color: "#ea580c", fill: "#fed7aa" },
+  high: { label: "High", color: "#dc2626", fill: "#fecaca" },
 };
 
-const SOURCE_PALETTE = [
-  "#0ea5e9",
-  "#8b5cf6",
-  "#ec4899",
-  "#14b8a6",
-  "#f59e0b",
-  "#64748b",
-];
+// Static class names so Tailwind can see them.
+const RISK_STYLES = {
+  safe: { active: "bg-emerald-600 text-white shadow-sm", dot: "bg-emerald-500", card: "border-emerald-200 bg-emerald-50/40" },
+  low: { active: "bg-yellow-500 text-white shadow-sm", dot: "bg-yellow-500", card: "border-yellow-200 bg-yellow-50/40" },
+  medium: { active: "bg-orange-500 text-white shadow-sm", dot: "bg-orange-500", card: "border-orange-200 bg-orange-50/40" },
+  high: { active: "bg-red-600 text-white shadow-sm", dot: "bg-red-600", card: "border-red-200 bg-red-50/40" },
+};
 
-function ChartCard({ title, subtitle, icon: Icon, children, emptyHint, chartHeightClass = "h-[280px]", className = "" }) {
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
+
+function normalizeDistrict(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\bdistrict\b/g, "")
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function districtName(feature) {
   return (
-    <div
-      className={`rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-lg backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80 ${className}`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            {Icon ? <Icon className="h-3.5 w-3.5 text-sky-500" /> : null}
-            {title}
-          </h3>
-          {subtitle ? (
-            <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{subtitle}</p>
-          ) : null}
+    feature?.properties?.shapeName ||
+    feature?.properties?.NAME_2 ||
+    feature?.properties?.name ||
+    ""
+  );
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatNumber(value, digits = 2) {
+  return Number.isFinite(value) ? value.toFixed(digits) : "—";
+}
+
+function parseStations(payload) {
+  const byGauge = new Map();
+  for (const feature of payload?.features || []) {
+    const a = feature?.attributes || {};
+    const name = String(a.gauge || "").trim();
+    const level = Number(a.water_level);
+    if (!name || !Number.isFinite(level)) continue;
+    const reading = {
+      name,
+      basin: String(a.basin || "Unknown basin").trim(),
+      level,
+      rainfall: Number(a.rain_fall),
+      alert: Number(a.alertpull),
+      minor: Number(a.minorpull),
+      major: Number(a.majorpull),
+      timestamp: new Date(Number(a.EditDate || a.CreationDate)),
+      lat: Number(feature?.geometry?.y),
+      lng: Number(feature?.geometry?.x),
+    };
+    const previous = byGauge.get(name);
+    if (!previous || reading.timestamp > previous.timestamp) byGauge.set(name, reading);
+  }
+  return [...byGauge.values()].sort((a, b) => b.timestamp - a.timestamp);
+}
+
+function stationStatus(station) {
+  if (station.level >= station.major)
+    return { label: "Major flood", color: "#dc2626", badge: "bg-red-100 text-red-700" };
+  if (station.level >= station.minor)
+    return { label: "Minor flood", color: "#ea580c", badge: "bg-orange-100 text-orange-700" };
+  if (station.level >= station.alert)
+    return { label: "Alert", color: "#eab308", badge: "bg-yellow-100 text-yellow-800" };
+  return { label: "Normal", color: "#16a34a", badge: "bg-emerald-100 text-emerald-700" };
+}
+
+function pointInRing(point, ring) {
+  let inside = false;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const [x, y] = ring[index];
+    const [previousX, previousY] = ring[previous];
+    const intersects =
+      y > point[1] !== previousY > point[1] &&
+      point[0] < ((previousX - x) * (point[1] - y)) / (previousY - y) + x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInGeometry(point, geometry) {
+  if (!geometry) return false;
+  if (geometry.type === "Polygon") {
+    return geometry.coordinates[0]?.length > 3 && pointInRing(point, geometry.coordinates[0]);
+  }
+  if (geometry.type === "MultiPolygon") {
+    return geometry.coordinates.some(
+      (polygon) => polygon[0]?.length > 3 && pointInRing(point, polygon[0])
+    );
+  }
+  return false;
+}
+
+function inferDistrictLevels(geoJson, stations) {
+  const inferred = {};
+  const rank = { safe: 0, low: 1, medium: 2, high: 3 };
+  for (const station of stations) {
+    if (!Number.isFinite(station.lat) || !Number.isFinite(station.lng)) continue;
+    const feature = geoJson?.features?.find((item) =>
+      pointInGeometry([station.lng, station.lat], item.geometry)
+    );
+    if (!feature) continue;
+    const name = districtName(feature);
+    if (!name) continue;
+    const key = normalizeDistrict(name);
+    const status = stationStatus(station);
+    const level =
+      status.label === "Major flood"
+        ? "high"
+        : status.label === "Minor flood"
+          ? "medium"
+          : status.label === "Alert"
+            ? "low"
+            : "safe";
+    const currentRank = rank[inferred[key]] ?? -1;
+    if (rank[level] > currentRank) inferred[key] = level;
+  }
+  return inferred;
+}
+
+function formatDate(value) {
+  if (!value || Number.isNaN(value.getTime())) return "No reading";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Colombo",
+  }).format(value);
+}
+
+function gaugePopup(station, status) {
+  return `
+    <div style="min-width:220px;font-family:inherit">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <strong style="font-size:14px;color:#0f172a">${escapeHtml(station.name)}</strong>
+        <span style="background:${status.color}1a;color:${status.color};font-weight:700;font-size:11px;padding:2px 8px;border-radius:9999px">${status.label}</span>
+      </div>
+      <div style="margin-top:2px;font-size:12px;color:#64748b">${escapeHtml(station.basin)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+        <div style="background:#f0f9ff;border-radius:10px;padding:8px">
+          <div style="font-size:10px;color:#0369a1">Water level</div>
+          <div style="font-size:15px;font-weight:700;color:#0c4a6e">${formatNumber(station.level)} m</div>
+        </div>
+        <div style="background:#f8fafc;border-radius:10px;padding:8px">
+          <div style="font-size:10px;color:#64748b">Rainfall</div>
+          <div style="font-size:15px;font-weight:700;color:#0f172a">${formatNumber(station.rainfall)} mm</div>
         </div>
       </div>
-      <div className={`relative mt-3 w-full min-h-[200px] ${chartHeightClass}`}>
-        {emptyHint ? (
-          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-400">
-            {emptyHint}
-          </div>
-        ) : (
-          children
-        )}
+      <div style="margin-top:8px;font-size:11px;color:#64748b">
+        Alert ${formatNumber(station.alert)} · Minor ${formatNumber(station.minor)} · Major ${formatNumber(station.major)} m
+      </div>
+      <div style="margin-top:2px;font-size:11px;color:#94a3b8">${formatDate(station.timestamp)}</div>
+    </div>
+  `;
+}
+
+function gaugeIcon(L, color, selected) {
+  const size = selected ? 24 : 18;
+  return L.divIcon({
+    className: "dmews-prediction-gauge",
+    html: `<span class="${selected ? "is-selected" : ""}" style="background:${color}"></span>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Map                                                                 */
+/* ------------------------------------------------------------------ */
+
+function DistrictGaugeMap({ geoJson, riskLevels, stations, selectedStation, onSelectStation }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const geoLayerRef = useRef(null);
+  const markerLayerRef = useRef(null);
+  const markersRef = useRef(new Map());
+  const fittedRef = useRef(false);
+  const riskRef = useRef(riskLevels);
+  const selectedRef = useRef(selectedStation);
+  const selectRef = useRef(onSelectStation);
+  const [wheelZoom, setWheelZoom] = useState(false);
+
+  riskRef.current = riskLevels;
+  selectedRef.current = selectedStation;
+  selectRef.current = onSelectStation;
+
+  // Create the map once.
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    const L = require("leaflet");
+    const map = L.map(containerRef.current, {
+      center: [7.87, 80.77],
+      zoom: 7,
+      minZoom: 6,
+      maxZoom: 12,
+      maxBounds: [[5.4, 79.0], [10.4, 82.5]],
+      maxBoundsViscosity: 0.8,
+      // Page scrolling must win: the wheel only zooms after the map is clicked.
+      scrollWheelZoom: false,
+      // On touch screens one finger scrolls the page; two fingers move the map.
+      dragging: !L.Browser.mobile,
+      tap: false,
+      zoomControl: false,
+    });
+    L.control.zoom({ position: "topright" }).addTo(map);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(map);
+    markerLayerRef.current = L.layerGroup().addTo(map);
+
+    map.on("click", () => {
+      map.scrollWheelZoom.enable();
+      setWheelZoom(true);
+    });
+    const container = containerRef.current;
+    const leave = () => {
+      map.scrollWheelZoom.disable();
+      setWheelZoom(false);
+    };
+    container.addEventListener("mouseleave", leave);
+    mapRef.current = map;
+
+    return () => {
+      container.removeEventListener("mouseleave", leave);
+      map.remove();
+      mapRef.current = null;
+      geoLayerRef.current = null;
+      markerLayerRef.current = null;
+      markersRef.current = new Map();
+      fittedRef.current = false;
+    };
+  }, []);
+
+  // District polygons: built once per GeoJSON; later risk changes only restyle them.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !geoJson) return;
+    const L = require("leaflet");
+    if (geoLayerRef.current) map.removeLayer(geoLayerRef.current);
+
+    const styleFor = (feature) => {
+      const level = riskRef.current[normalizeDistrict(districtName(feature))] || "safe";
+      return { color: "#ffffff", weight: 1.2, fillColor: LEVELS[level].fill, fillOpacity: 0.72 };
+    };
+
+    const geoLayer = L.geoJSON(geoJson, {
+      style: styleFor,
+      onEachFeature: (feature, layer) => {
+        layer.bindPopup(() => {
+          const name = districtName(feature) || "District";
+          const level = riskRef.current[normalizeDistrict(name)] || "safe";
+          const info = LEVELS[level];
+          return `
+            <div style="min-width:170px;font-family:inherit">
+              <strong style="font-size:14px;color:#0f172a">${escapeHtml(name)}</strong>
+              <div style="margin-top:6px;display:inline-block;background:${info.fill};color:${info.color};font-weight:700;font-size:11px;padding:2px 10px;border-radius:9999px;border:1px solid ${info.color}55">
+                ${info.label} risk
+              </div>
+              <div style="margin-top:6px;font-size:11px;color:#64748b">Published DMEWS level</div>
+            </div>`;
+        });
+        layer.on("mouseover", () => layer.setStyle({ weight: 2.5, fillOpacity: 0.88 }));
+        layer.on("mouseout", () => geoLayer.resetStyle(layer));
+      },
+    }).addTo(map);
+    geoLayer.bringToBack();
+    geoLayerRef.current = geoLayer;
+
+    // Fit once on first load; never re-zoom on background refreshes.
+    if (!fittedRef.current && geoLayer.getBounds().isValid()) {
+      map.fitBounds(geoLayer.getBounds().pad(0.04), { maxZoom: 8 });
+      fittedRef.current = true;
+    }
+  }, [geoJson]);
+
+  useEffect(() => {
+    if (geoLayerRef.current) {
+      geoLayerRef.current.setStyle((feature) => {
+        const level = riskLevels[normalizeDistrict(districtName(feature))] || "safe";
+        return { color: "#ffffff", weight: 1.2, fillColor: LEVELS[level].fill, fillOpacity: 0.72 };
+      });
+    }
+  }, [riskLevels, geoJson]);
+
+  // Station dots: reuse markers so open popups survive refreshes.
+  useEffect(() => {
+    const layer = markerLayerRef.current;
+    if (!layer) return;
+    const L = require("leaflet");
+    const valid = stations.filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng));
+    const seen = new Set();
+
+    valid.forEach((station) => {
+      const status = stationStatus(station);
+      const isSelected = station.name === selectedRef.current;
+      seen.add(station.name);
+      const existing = markersRef.current.get(station.name);
+      if (existing) {
+        existing.marker.setLatLng([station.lat, station.lng]);
+        existing.marker.setIcon(gaugeIcon(L, status.color, isSelected));
+        existing.marker.setPopupContent(gaugePopup(station, status));
+        existing.color = status.color;
+        return;
+      }
+      const marker = L.marker([station.lat, station.lng], {
+        icon: gaugeIcon(L, status.color, isSelected),
+        title: station.name,
+        riseOnHover: true,
+      });
+      marker.bindPopup(gaugePopup(station, status), { autoPanPadding: [24, 24] });
+      marker.on("click", () => selectRef.current(station.name));
+      marker.addTo(layer);
+      markersRef.current.set(station.name, { marker, color: status.color });
+    });
+
+    markersRef.current.forEach((entry, key) => {
+      if (!seen.has(key)) {
+        layer.removeLayer(entry.marker);
+        markersRef.current.delete(key);
+      }
+    });
+  }, [stations]);
+
+  // Highlight the selected dot and bring it into view.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const L = require("leaflet");
+    markersRef.current.forEach((entry, key) => {
+      const isSelected = key === selectedStation;
+      entry.marker.setIcon(gaugeIcon(L, entry.color, isSelected));
+      entry.marker.setZIndexOffset(isSelected ? 1000 : 0);
+    });
+    const current = markersRef.current.get(selectedStation);
+    if (current && !map.getBounds().contains(current.marker.getLatLng())) {
+      map.panTo(current.marker.getLatLng());
+    }
+  }, [selectedStation]);
+
+  return (
+    // `isolate` keeps Leaflet's high z-index panes from overlapping page headers and menus.
+    <div className="relative isolate h-[400px] overflow-hidden rounded-2xl ring-1 ring-slate-200 sm:h-[540px]">
+      <div ref={containerRef} className="h-full w-full bg-slate-100" />
+      <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-medium text-slate-600 shadow-md backdrop-blur">
+        {wheelZoom ? "Scroll to zoom · move the mouse out to scroll the page" : "Click the map to zoom with the scroll wheel"}
       </div>
     </div>
   );
 }
 
-const axisStroke = "#94a3b8";
+/* ------------------------------------------------------------------ */
+/* Small UI pieces                                                     */
+/* ------------------------------------------------------------------ */
 
-function ForecastDataTable({ rows }) {
+function StatCard({ icon: Icon, label, value, detail, tone = "sky" }) {
+  const tones = {
+    sky: "from-sky-500 to-sky-600 shadow-sky-200",
+    green: "from-emerald-500 to-emerald-600 shadow-emerald-200",
+    amber: "from-amber-400 to-amber-500 shadow-amber-200",
+    red: "from-red-500 to-red-600 shadow-red-200",
+  };
   return (
-    <table className="w-full min-w-[280px] text-left text-sm">
-      <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-950/60 dark:text-slate-400">
-        <tr>
-          <th className="px-3 py-3">Date</th>
-          <th className="px-3 py-3">Risk</th>
-          <th className="px-3 py-3">Confidence</th>
-          <th className="px-3 py-3">Source</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-        {rows.map((r, idx) => (
-          <tr
-            key={r.id}
-            className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-950/40"
-            style={{ animationDelay: `${idx * 15}ms` }}
-          >
-            <td className="px-3 py-3">
-              <div className="font-mono text-[11px] font-medium text-slate-700 dark:text-slate-200">
-                {fmtYMDHM(r.date)}
-              </div>
-              <div className="text-[10px] text-slate-400">
-                {getWeekday(r.date)} · {getHour(r.date)}
-              </div>
-            </td>
-            <td className="px-3 py-3">
-              <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold shadow-sm ${levelTone(r.level)}`}>
-                {String(r.level || "safe").toUpperCase()}
-              </span>
-            </td>
-            <td className="px-3 py-3 w-36">
-              <div className="flex items-center justify-between text-[11px] font-semibold">
-                <span>{Math.round((Number(r.confidence ?? 0) || 0) * 100)}%</span>
-              </div>
-              <ConfidenceBar level={r.level} confidence={r.confidence} />
-            </td>
-            <td className="px-3 py-3 text-[11px]">
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                {r.source || "ensemble"}
-              </span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function RiskTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0]?.payload;
-  if (!p) return null;
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs shadow-lg dark:border-slate-600 dark:bg-slate-900/95">
-      {p.at ? (
-        <p className="font-mono font-semibold text-slate-800 dark:text-slate-100">{p.at}</p>
-      ) : null}
-      <p className="mt-1 text-rose-600 dark:text-rose-400">
-        Risk index: <span className="font-bold">{p.risk}</span>{" "}
-        <span className="text-slate-500 dark:text-slate-400">(0–3)</span>
-      </p>
-      <p className="text-sky-600 dark:text-sky-400">
-        Confidence: <span className="font-bold">{p.confidence}%</span>
-      </p>
-      {p.levelLabel ? (
-        <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
-          Level: {p.levelLabel}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function DistributionTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const item = payload[0];
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs shadow-lg dark:border-slate-600 dark:bg-slate-900/95">
-      <span className="font-semibold text-slate-800 dark:text-slate-100">{item.name}</span>
-      <span className="ml-2 text-slate-600 dark:text-slate-300">{item.value} slots</span>
-    </div>
-  );
-}
-
-function StatCard({ title, value, icon: Icon, color, subtitle }) {
-  return (
-    <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900/80">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">{title}</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{value}</p>
-          {subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}
-        </div>
-        <div className={`rounded-xl ${color} p-2 text-white shadow-lg`}>
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition hover:shadow-md">
+      <div className="flex items-center gap-3">
+        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white shadow-lg ${tones[tone] || tones.sky}`}>
           <Icon className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-2xl font-bold leading-tight tracking-tight text-slate-900">{value}</p>
+          <p className="truncate text-sm font-semibold text-slate-700">{label}</p>
         </div>
       </div>
-      <div className="absolute -right-6 -top-6 h-16 w-16 rounded-full bg-gradient-to-br from-white/20 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+      <p className="mt-3 truncate text-xs text-slate-500">{detail}</p>
     </div>
   );
 }
 
-export default function RiskPredictionPage() {
-  const [district, setDistrict] = useState("Colombo");
-  const [windowKey, setWindowKey] = useState("7d");
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [timelineExpanded, setTimelineExpanded] = useState(false);
+function Toggle({ checked, onChange, disabled, label, description, icon: Icon, onColor = "bg-indigo-600" }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3.5 py-2.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <Icon className={`h-4 w-4 shrink-0 ${checked ? "text-indigo-600" : "text-slate-400"}`} />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-slate-800">{label}</p>
+          <p className="truncate text-[11px] text-slate-500" title={description}>{description}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={onChange}
+        className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-60 ${checked ? onColor : "bg-slate-300"}`}
+      >
+        <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : ""}`} />
+      </button>
+    </div>
+  );
+}
 
-  const load = useCallback(async () => {
-    setLoading(true);
+function PageSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true">
+      <div className="h-36 animate-pulse rounded-3xl bg-slate-200" />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-28 animate-pulse rounded-2xl bg-slate-200" />
+        ))}
+      </div>
+      <div className="h-[460px] animate-pulse rounded-2xl bg-slate-200" />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+
+export default function AdminRiskPredictionPage() {
+  const [geoJson, setGeoJson] = useState(null);
+  const [riskLevels, setRiskLevels] = useState({});
+  const [stations, setStations] = useState([]);
+  const [selectedStation, setSelectedStation] = useState("");
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true);
+  const [smsEnabled, setSmsEnabled] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [savingRisk, setSavingRisk] = useState("");
+  const [savingSms, setSavingSms] = useState(false);
+  const [autoUpdatedDistricts, setAutoUpdatedDistricts] = useState([]);
+  const [error, setError] = useState("");
+  const [updatedAt, setUpdatedAt] = useState(null);
+
+  const loadData = useCallback(async (background = false) => {
+    if (background) setRefreshing(true);
+    else setLoading(true);
     setError("");
     try {
-      const res = await fetch(
-        `${API_BASE}/risk-predictions?district=${encodeURIComponent(district)}&window=${windowKey}`,
-        { cache: "no-store" }
+      const [geoResponse, riskResponse, smsResponse, stationResponse] = await Promise.all([
+        fetch(DISTRICTS_GEOJSON, { cache: "no-store" }),
+        fetch(`${API_BASE}/risk-levels`, { cache: "no-store" }),
+        fetch(`${API_BASE}/risk-levels/sms-settings`, { cache: "no-store" }),
+        fetch(
+          `${IRRIGATION_SOURCE}?where=1%3D1&outFields=basin%2Cgauge%2Cwater_level%2Crain_fall%2Calertpull%2Cminorpull%2Cmajorpull%2CCreationDate%2CEditDate&orderByFields=CreationDate%20DESC&resultRecordCount=1000&returnGeometry=true&f=json&refresh=${Date.now()}`,
+          { cache: "no-store" }
+        ),
+      ]);
+      const [geo, risk, sms, stationFeed] = await Promise.all([
+        geoResponse.json(),
+        riskResponse.json(),
+        smsResponse.json(),
+        stationResponse.json(),
+      ]);
+      if (!geoResponse.ok || !Array.isArray(geo?.features)) throw new Error("District map is unavailable.");
+      if (!riskResponse.ok) throw new Error(risk?.message || "Could not load district risk.");
+      if (!smsResponse.ok) throw new Error(sms?.message || "Could not load SMS setting.");
+      if (!stationResponse.ok || stationFeed?.error) throw new Error("Irrigation gauge feed is unavailable.");
+      setGeoJson((current) => current || geo);
+      setSmsEnabled(sms?.enabled !== false);
+      const publishedLevels = Object.fromEntries(
+        (Array.isArray(risk) ? risk : [])
+          .filter((item) => item?.district && item?.level)
+          .map((item) => [normalizeDistrict(item.district), String(item.level).toLowerCase()])
       );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || "Failed to load predictions.");
-      setRows(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setRows([]);
-      setError(e?.message || "Failed to load predictions.");
+      const nextStations = parseStations(stationFeed);
+      const inferredLevels = inferDistrictLevels(geo, nextStations);
+      const changed = [];
+      if (autoUpdateEnabled) {
+        await Promise.all(
+          Object.entries(inferredLevels)
+            .filter(([district, level]) => publishedLevels[district] !== level)
+            .map(async ([district, level]) => {
+              const feature = geo.features.find(
+                (item) => normalizeDistrict(districtName(item)) === district
+              );
+              const original = districtName(feature);
+              if (!original) return;
+              const response = await fetch(`${API_BASE}/risk-levels`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ district: original, level }),
+              });
+              if (!response.ok) throw new Error(`Could not automatically update ${original}.`);
+              changed.push(original);
+              publishedLevels[district] = level;
+            })
+        );
+      }
+      setAutoUpdatedDistricts(changed);
+      setRiskLevels(publishedLevels);
+      setStations(nextStations);
+      setSelectedStation((current) => current || nextStations[0]?.name || "");
+      setUpdatedAt(new Date());
+    } catch (loadError) {
+      setError(loadError?.message || "Could not load risk prediction data.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [district, windowKey]);
+  }, [autoUpdateEnabled]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadData();
+    const timer = window.setInterval(() => loadData(true), REFRESH_INTERVAL);
+    return () => window.clearInterval(timer);
+  }, [loadData]);
 
-  useEffect(() => {
-    setTimelineExpanded(false);
-  }, [district, windowKey]);
-
-  const sortedRows = useMemo(() => {
-    return [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [rows]);
-
-  const summary = useMemo(() => {
-    const counts = { safe: 0, low: 0, medium: 0, high: 0 };
-    let totalConfidence = 0;
-    for (const r of rows) {
-      if (r?.level && r.level in counts) counts[r.level] += 1;
-      totalConfidence += Number(r?.confidence ?? 0);
+  async function updateRisk(district, level) {
+    setSavingRisk(district);
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE}/risk-levels`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ district, level }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Could not update district risk.");
+      setRiskLevels((current) => ({ ...current, [normalizeDistrict(district)]: data.level }));
+    } catch (updateError) {
+      setError(updateError?.message || "Could not update district risk.");
+    } finally {
+      setSavingRisk("");
     }
-    const avgConfidence = rows.length ? (totalConfidence / rows.length) * 100 : 0;
-    const highestRisk = rows.reduce((max, r) => {
-      const val = riskToNumber(r?.level);
-      return val > max ? val : max;
-    }, 0);
-    const riskLevels = ["safe", "low", "medium", "high"];
-    const peakRisk = riskLevels[highestRisk] || "safe";
-    return { ...counts, avgConfidence: Math.round(avgConfidence), peakRisk, totalDays: rows.length };
-  }, [rows]);
+  }
 
-  const dominantMixLevel = useMemo(() => {
-    const pairs = [
-      ["safe", summary.safe],
-      ["low", summary.low],
-      ["medium", summary.medium],
-      ["high", summary.high],
-    ];
-    pairs.sort((a, b) => b[1] - a[1]);
-    return pairs[0]?.[0] || "safe";
-  }, [summary]);
-
-  // Sparkline data for risk trend
-  const riskTrendData = useMemo(() => {
-    if (sortedRows.length === 0) return [];
-    return sortedRows.map(r => riskToNumber(r.level));
-  }, [sortedRows]);
-
-  const sparklinePath = useMemo(() => {
-    if (riskTrendData.length < 2) return "";
-    const width = 100;
-    const height = 40;
-    const step = width / (riskTrendData.length - 1);
-    const maxRisk = 3;
-    const points = riskTrendData.map((val, idx) => {
-      const x = idx * step;
-      const y = height - (val / maxRisk) * height;
-      return `${x},${y}`;
-    }).join(" ");
-    return points;
-  }, [riskTrendData]);
-
-  const areaPoints = useMemo(() => {
-    if (riskTrendData.length < 2) return "";
-    const width = 100;
-    const height = 40;
-    const step = width / (riskTrendData.length - 1);
-    const maxRisk = 3;
-    let points = riskTrendData.map((val, idx) => {
-      const x = idx * step;
-      const y = height - (val / maxRisk) * height;
-      return `${x},${y}`;
-    }).join(" ");
-    points += ` ${width},${height} 0,${height}`;
-    return points;
-  }, [riskTrendData]);
-
-  const weeklyDailySummary = useMemo(() => {
-    if (windowKey !== "7d" || sortedRows.length === 0) return [];
-    const byDay = new Map();
-    for (const r of sortedRows) {
-      const key = fmtYMD(r.date);
-      if (!byDay.has(key)) byDay.set(key, []);
-      byDay.get(key).push(r);
+  async function toggleSms() {
+    setSavingSms(true);
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE}/risk-levels/sms-settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !smsEnabled }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Could not update SMS setting.");
+      setSmsEnabled(data.enabled !== false);
+    } catch (toggleError) {
+      setError(toggleError?.message || "Could not update SMS setting.");
+    } finally {
+      setSavingSms(false);
     }
-    return Array.from(byDay.entries()).map(([day, items]) => {
-      const counts = { safe: 0, low: 0, medium: 0, high: 0 };
-      let conf = 0;
-      let peak = "safe";
-      for (const it of items) {
-        if (it.level in counts) counts[it.level] += 1;
-        conf += Number(it.confidence ?? 0);
-        if (riskToNumber(it.level) > riskToNumber(peak)) peak = it.level;
-      }
-      const avgConfidence = items.length ? Math.round((conf / items.length) * 100) : 0;
-      return {
-        day,
-        weekday: getWeekday(day),
-        peak,
-        avgConfidence,
-        counts,
-        samples: items.length,
-      };
-    });
-  }, [sortedRows, windowKey]);
+  }
 
-  const lineComposedData = useMemo(() => {
-    return sortedRows.map((r, idx) => ({
-      idx: idx + 1,
-      shortLabel:
-        sortedRows.length > 32
-          ? String(idx + 1)
-          : `${getHour(r.date)}`,
-      at: fmtYMDHM(r.date),
-      risk: riskToNumber(r.level),
-      confidence: Math.round((Number(r.confidence) || 0) * 100),
-      levelLabel: String(r.level || "safe").toUpperCase(),
-    }));
-  }, [sortedRows]);
+  const selected = stations.find((station) => station.name === selectedStation) || stations[0];
+  const selectedState = selected ? stationStatus(selected) : null;
+  const highDistricts = Object.values(riskLevels).filter((level) => level === "high").length;
+  const floodStations = stations.filter((station) => station.level >= station.minor).length;
+  const alertStations = stations.filter((station) => station.level >= station.alert).length;
 
-  const distributionPieData = useMemo(() => {
-    const d = [
-      { name: "Safe", value: summary.safe, fill: LEVEL_COLORS.safe },
-      { name: "Low", value: summary.low, fill: LEVEL_COLORS.low },
-      { name: "Medium", value: summary.medium, fill: LEVEL_COLORS.medium },
-      { name: "High", value: summary.high, fill: LEVEL_COLORS.high },
-    ];
-    return d.filter((x) => x.value > 0);
-  }, [summary]);
-
-  const sourceBarData = useMemo(() => {
-    const m = new Map();
-    for (const r of rows) {
-      const s = (r.source && String(r.source).trim()) || "ensemble";
-      m.set(s, (m.get(s) || 0) + 1);
-    }
-    return Array.from(m.entries())
-      .map(([name, count]) => ({
-        name: name.length > 18 ? `${name.slice(0, 16)}…` : name,
-        count,
-      }))
-      .sort((a, b) => b.count - a.count);
-  }, [rows]);
-
-  const dailyPeakBarData = useMemo(() => {
-    if (sortedRows.length === 0) return [];
-    const byDay = new Map();
-    for (const r of sortedRows) {
-      const key = fmtYMD(r.date);
-      const val = riskToNumber(r.level);
-      const prev = byDay.get(key);
-      if (!prev || val > prev.peak) {
-        const wd = getWeekday(key);
-        byDay.set(key, {
-          day: key,
-          label: key.slice(5),
-          tickLabel: wd ? `${wd} ${key.slice(5)}` : key.slice(5),
-          weekday: wd,
-          peak: val,
-          peakLevel: String(r.level || "safe").toUpperCase(),
-        });
-      }
-    }
-    return Array.from(byDay.values()).sort((a, b) => a.day.localeCompare(b.day));
-  }, [sortedRows]);
-
-  const confidenceBandData = useMemo(() => {
-    return sortedRows.map((r, idx) => ({
-      slot: sortedRows.length > 24 ? `#${idx + 1}` : getHour(r.date),
-      confidence: Math.round((Number(r.confidence) || 0) * 100),
-      fill:
-        r.level === "high"
-          ? LEVEL_COLORS.high
-          : r.level === "medium"
-            ? LEVEL_COLORS.medium
-            : r.level === "low"
-              ? LEVEL_COLORS.low
-              : LEVEL_COLORS.safe,
-    }));
-  }, [sortedRows]);
-
-  const xAxisDense =
-    lineComposedData.length > 16
-      ? {
-          angle: -40,
-          textAnchor: "end",
-          height: 52,
-          interval: Math.max(0, Math.floor(lineComposedData.length / 7) - 1),
-        }
-      : {
-          angle: 0,
-          textAnchor: "middle",
-          height: 28,
-          interval: 0,
-        };
-
-  const timelinePreviewLimit = windowKey === "7d" ? 6 : 10;
-  const timelineTotalItems = windowKey === "7d" ? weeklyDailySummary.length : sortedRows.length;
-  const timelineHiddenCount = Math.max(0, timelineTotalItems - timelinePreviewLimit);
-  const visibleWeeklyCards = timelineExpanded
-    ? weeklyDailySummary
-    : weeklyDailySummary.slice(0, timelinePreviewLimit);
-  const visibleTableRows = timelineExpanded
-    ? sortedRows
-    : sortedRows.slice(0, timelinePreviewLimit);
-
-  const timelineTableHalves = useMemo(() => {
-    const r = visibleTableRows;
-    const mid = Math.ceil(r.length / 2);
-    return [r.slice(0, mid), r.slice(mid)];
-  }, [visibleTableRows]);
-
-  const composedChartBottomMargin = xAxisDense.angle ? xAxisDense.height + 16 : 40;
-  const confidenceChartBottomMargin = confidenceBandData.length > 14 ? 56 : 40;
+  if (loading) return <PageSkeleton />;
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      {/* Decorative blobs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-sky-200/20 blur-3xl dark:bg-sky-900/20" />
-        <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-amber-200/20 blur-3xl dark:bg-amber-900/20" />
-      </div>
+    <div className="space-y-6">
+      <style jsx global>{`
+        .dmews-prediction-gauge {
+          background: transparent;
+          border: 0;
+        }
+        .dmews-prediction-gauge span {
+          display: block;
+          width: 100%;
+          height: 100%;
+          border: 3px solid #fff;
+          border-radius: 9999px;
+          box-sizing: border-box;
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.4);
+          transition: transform 0.15s ease;
+        }
+        .dmews-prediction-gauge:hover span {
+          transform: scale(1.15);
+        }
+        .dmews-prediction-gauge span.is-selected {
+          box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.5), 0 2px 10px rgba(15, 23, 42, 0.45);
+        }
+        .leaflet-popup-content-wrapper {
+          border-radius: 16px;
+          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.2);
+        }
+        .leaflet-popup-content {
+          margin: 14px 16px;
+        }
+      `}</style>
 
-      <div className="relative mx-auto w-full max-w-[min(100%,88rem)] px-4 py-6 sm:px-6 lg:px-8">
-        {/* Header bar */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <Link
-            href="/admin"
-            className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-sky-600 dark:bg-slate-800/70 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-sky-400"
-          >
-            ← Admin dashboard
-          </Link>
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-full bg-white/70 px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:shadow-md disabled:opacity-50 dark:bg-slate-800/70 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh Forecast
-          </button>
-        </div>
-
-        {/* Main hero card */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-sky-600 to-indigo-600 p-6 text-white shadow-xl mb-8">
-          <div className="absolute right-0 top-0 -mr-16 -mt-16 h-40 w-40 rounded-full bg-white/20 blur-2xl" />
-          <div className="relative flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-6 w-6 text-yellow-200" />
-                <h1 className="font-oswald text-3xl font-bold tracking-tight">Risk Prediction Engine</h1>
-              </div>
-              <p className="mt-1 max-w-2xl text-sm text-sky-100">
-                AI-powered flood & disaster risk forecasts using ensemble models. Confidence scores indicate prediction reliability.
-              </p>
+      {/* Hero */}
+      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-700 via-indigo-600 to-sky-500 p-6 text-white shadow-lg sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
+        <div className="pointer-events-none absolute -bottom-20 right-24 h-48 w-48 rounded-full bg-white/10" />
+        <div className="relative flex flex-wrap items-end justify-between gap-5">
+          <div>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur">
+              <ShieldAlert className="h-3.5 w-3.5" /> District risk prediction
             </div>
-            <div className="rounded-2xl bg-white/20 px-4 py-2 backdrop-blur-sm">
-              <div className="text-xs font-medium uppercase tracking-wider">District</div>
-              <div className="text-lg font-bold">{district}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-8 rounded-2xl border border-indigo-200/80 bg-indigo-50/90 p-4 shadow-sm dark:border-indigo-900/50 dark:bg-indigo-950/40">
-          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-900 dark:text-indigo-200">
-            Power BI and REST
-          </p>
-          <p className="mt-1 text-xs text-indigo-800/90 dark:text-indigo-300/90">
-            Each URL returns exactly 25 rows (one per district): peak risk within the time window; if levels tie, the latest hour is used.
-          </p>
-          <ul className="mt-3 space-y-1.5 font-mono text-[11px] text-slate-800 break-all dark:text-slate-200">
-            <li>{`GET ${API_BASE}/api/predict?range=6h`}</li>
-            <li>{`GET ${API_BASE}/api/predict?range=24h`}</li>
-            <li>{`GET ${API_BASE}/api/predict?range=7d`}</li>
-          </ul>
-        </div>
-
-        <div className="space-y-10">
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-md backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80 sm:p-5">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div className="min-w-0 flex-1">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  <Gauge className="h-4 w-4 text-sky-500" />
-                  Forecast scope
-                </h2>
-                <div className="mt-3 flex flex-wrap gap-3">
-                  <div className="min-w-[140px] flex-1 sm:max-w-xs">
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      <MapPin className="mr-1 inline h-3 w-3" /> District
-                    </label>
-                    <div className="relative mt-1">
-                      <select
-                        value={district}
-                        onChange={(e) => setDistrict(e.target.value)}
-                        className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-4 pr-10 text-sm text-slate-900 shadow-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-100"
-                      >
-                        {DISTRICTS.map((d) => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
-                  <div className="min-w-[140px] flex-1 sm:max-w-xs">
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      <Calendar className="mr-1 inline h-3 w-3" /> Forecast horizon
-                    </label>
-                    <div className="relative mt-1">
-                      <select
-                        value={windowKey}
-                        onChange={(e) => setWindowKey(e.target.value)}
-                        className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-4 pr-10 text-sm text-slate-900 shadow-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-200 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-100"
-                      >
-                        <option value="6h">Upcoming 6 hours</option>
-                        <option value="1d">Upcoming day</option>
-                        <option value="7d">Upcoming week</option>
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {!loading && sortedRows.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-100 bg-slate-50/90 px-3 py-2 text-[11px] dark:border-slate-800 dark:bg-slate-950/50">
-                  <span className="text-slate-500 dark:text-slate-400">Samples</span>
-                  <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{sortedRows.length}</span>
-                  <span className="hidden text-slate-300 sm:inline dark:text-slate-600" aria-hidden>|</span>
-                  <span className="font-mono text-slate-700 dark:text-slate-300">{fmtYMDHM(sortedRows[0]?.date)}</span>
-                  <span className="text-slate-400">→</span>
-                  <span className="font-mono text-slate-700 dark:text-slate-300">{fmtYMDHM(sortedRows[sortedRows.length - 1]?.date)}</span>
-                  <span className="hidden text-slate-300 sm:inline dark:text-slate-600" aria-hidden>|</span>
-                  <span className="text-slate-500 dark:text-slate-400">Common</span>
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${levelTone(dominantMixLevel)}`}>
-                    {String(dominantMixLevel).toUpperCase()}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <StatCard
-                title="Safe Days"
-                value={summary.safe}
-                icon={CheckCircle}
-                color="bg-emerald-500"
-                subtitle="No risk expected"
-              />
-              <StatCard
-                title="High Risk"
-                value={summary.high}
-                icon={AlertTriangle}
-                color="bg-rose-500"
-                subtitle="Urgent attention"
-              />
-              <StatCard
-                title="Avg Confidence"
-                value={`${summary.avgConfidence}%`}
-                icon={Activity}
-                color="bg-sky-500"
-                subtitle="Model certainty"
-              />
-              <StatCard
-                title="Peak Risk"
-                value={summary.peakRisk.toUpperCase()}
-                icon={TrendingUp}
-                color="bg-amber-500"
-                subtitle="Maximum level"
-              />
-            </div>
-          </div>
-
-          {!loading && sortedRows.length > 0 ? (
-            <section aria-labelledby="viz-heading" className="space-y-4">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h2
-                    id="viz-heading"
-                    className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100"
-                  >
-                    <PieChartIcon className="h-4 w-4 text-sky-500" />
-                    Forecast visualizations
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Risk trend and main series share one row (30% / 70%). More charts follow below.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid min-w-0 grid-cols-[minmax(0,3fr)_minmax(0,7fr)] items-stretch gap-3">
-                <div className="flex min-h-[140px] min-w-0 flex-col justify-center gap-2 rounded-2xl border border-slate-200 bg-white/80 px-2 py-2 shadow-md backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80 sm:min-h-[180px] sm:px-3 sm:py-3">
-                  <div className="flex min-w-0 items-center gap-x-1.5 overflow-x-auto whitespace-nowrap text-[8px] text-slate-600 dark:text-slate-400 sm:text-[9px]">
-                    <span className="shrink-0 font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Risk Trend
-                    </span>
-                    <span className="shrink-0 text-slate-300 dark:text-slate-600" aria-hidden>
-                      ·
-                    </span>
-                    <span className="inline-flex items-center gap-0.5">
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" /> S
-                    </span>
-                    <span className="inline-flex items-center gap-0.5">
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" /> L
-                    </span>
-                    <span className="inline-flex items-center gap-0.5">
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" /> M
-                    </span>
-                    <span className="inline-flex items-center gap-0.5">
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" /> H
-                    </span>
-                  </div>
-                  <div className="flex min-h-0 min-w-0 flex-1 items-center gap-1">
-                    <span className="w-5 shrink-0 text-[7px] leading-none text-slate-400 sm:w-6 sm:text-[8px] dark:text-slate-500">
-                      Now
-                    </span>
-                    <svg
-                      viewBox="0 0 100 40"
-                      className="h-11 min-h-[44px] w-0 min-w-0 flex-1 sm:h-14 sm:min-h-[52px]"
-                      aria-hidden
-                    >
-                      <defs>
-                        <linearGradient id="riskGradientSpark" x1="0%" y1="0%" x2="0%" y2="100%">
-                          <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.55" />
-                          <stop offset="100%" stopColor="#f43f5e" stopOpacity="0" />
-                        </linearGradient>
-                      </defs>
-                      {areaPoints ? (
-                        <polygon points={areaPoints} fill="url(#riskGradientSpark)" className="transition-all duration-500" />
-                      ) : null}
-                      {sparklinePath ? (
-                        <polyline
-                          points={sparklinePath}
-                          fill="none"
-                          stroke="#f43f5e"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      ) : null}
-                    </svg>
-                    <span className="w-7 shrink-0 text-right text-[7px] leading-none text-slate-400 sm:w-8 sm:text-[8px] dark:text-slate-500">
-                      {windowKey === "6h" ? "6h" : windowKey === "1d" ? "1d" : "1wk"}
-                    </span>
-                  </div>
-                </div>
-
-                <ChartCard
-                  className="min-h-0 min-w-0"
-                  title="Risk & confidence over time"
-                  subtitle="Left: risk 0–3 · Right: confidence %"
-                  icon={Activity}
-                  chartHeightClass="h-[200px] sm:h-[220px]"
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart
-                      data={lineComposedData}
-                      margin={{
-                        top: 8,
-                        right: 18,
-                        left: 4,
-                        bottom: composedChartBottomMargin,
-                      }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="#e2e8f0"
-                        className="dark:stroke-slate-700"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="shortLabel"
-                        tick={{ fontSize: 9, fill: "#64748b" }}
-                        axisLine={{ stroke: axisStroke }}
-                        tickLine={{ stroke: axisStroke }}
-                        {...xAxisDense}
-                      />
-                      <YAxis
-                        yAxisId="risk"
-                        domain={[0, 3]}
-                        tick={{ fontSize: 10, fill: "#64748b" }}
-                        axisLine={{ stroke: axisStroke }}
-                        tickLine={{ stroke: axisStroke }}
-                        width={32}
-                        tickCount={4}
-                      />
-                      <YAxis
-                        yAxisId="conf"
-                        orientation="right"
-                        domain={[0, 100]}
-                        tick={{ fontSize: 10, fill: "#64748b" }}
-                        axisLine={{ stroke: axisStroke }}
-                        tickLine={{ stroke: axisStroke }}
-                        width={36}
-                        unit="%"
-                      />
-                      <Tooltip content={<RiskTooltip />} />
-                      <Legend
-                        wrapperStyle={{ fontSize: 10 }}
-                        formatter={(value) =>
-                          value === "risk" ? "Risk index" : "Confidence %"
-                        }
-                      />
-                      <Area
-                        yAxisId="conf"
-                        type="monotone"
-                        dataKey="confidence"
-                        name="confidence"
-                        fill="#38bdf8"
-                        fillOpacity={0.2}
-                        stroke="#0ea5e9"
-                        strokeWidth={1}
-                      />
-                      <Line
-                        yAxisId="risk"
-                        type="stepAfter"
-                        dataKey="risk"
-                        name="risk"
-                        stroke="#e11d48"
-                        strokeWidth={2}
-                        dot={{ r: 2, strokeWidth: 1, fill: "#fff" }}
-                        activeDot={{ r: 4 }}
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </ChartCard>
-              </div>
-
-              <div
-                className={`grid gap-4 sm:grid-cols-2 ${sourceBarData.length > 1 ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}
-              >
-                <ChartCard
-                  title="Risk level mix"
-                  subtitle="Share of forecast slots."
-                  icon={PieChartIcon}
-                  chartHeightClass="h-[260px]"
-                  emptyHint={
-                    distributionPieData.length === 0
-                      ? "No level breakdown for this range."
-                      : null
-                  }
-                >
-                  {distributionPieData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 0, right: 8, bottom: 8, left: 8 }}>
-                        <Pie
-                          data={distributionPieData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={48}
-                          outerRadius={82}
-                          paddingAngle={2}
-                          label={({ name, percent }) =>
-                            `${name} ${(percent * 100).toFixed(0)}%`
-                          }
-                          labelLine={{ stroke: "#94a3b8", strokeWidth: 1 }}
-                        >
-                          {distributionPieData.map((entry, i) => (
-                            <Cell key={`pie-${i}`} fill={entry.fill} stroke="rgba(255,255,255,0.65)" />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<DistributionTooltip />} />
-                        <Legend wrapperStyle={{ fontSize: 10 }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  ) : null}
-                </ChartCard>
-
-                <ChartCard
-                  title={dailyPeakBarData.length > 1 ? "Daily peak risk" : "Peak risk by day"}
-                  subtitle="Max risk index per day."
-                  icon={TrendingUp}
-                  chartHeightClass="h-[260px]"
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={dailyPeakBarData}
-                      margin={{ top: 12, right: 12, left: 8, bottom: 28 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="#e2e8f0"
-                        className="dark:stroke-slate-700"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="tickLabel"
-                        tick={{ fontSize: 10, fill: "#64748b" }}
-                        axisLine={{ stroke: axisStroke }}
-                        tickLine={{ stroke: axisStroke }}
-                      />
-                      <YAxis
-                        domain={[0, 3]}
-                        tick={{ fontSize: 11, fill: "#64748b" }}
-                        axisLine={{ stroke: axisStroke }}
-                        tickLine={{ stroke: axisStroke }}
-                        width={40}
-                        label={{ value: "Peak", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 10 }}
-                      />
-                      <Tooltip
-                        formatter={(val, _n, props) => [
-                          `${val} (${props?.payload?.peakLevel ?? ""})`,
-                          "Peak index",
-                        ]}
-                        labelFormatter={(label, payload) => {
-                          const p = payload?.[0]?.payload;
-                          return p ? `${p.day}${p.weekday ? ` (${p.weekday})` : ""}` : label;
-                        }}
-                        contentStyle={{
-                          borderRadius: 8,
-                          border: "1px solid #e2e8f0",
-                          fontSize: 12,
-                        }}
-                      />
-                      <Bar
-                        dataKey="peak"
-                        name="Peak risk"
-                        radius={[6, 6, 0, 0]}
-                        fill="#6366f1"
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartCard>
-
-                <ChartCard
-                  title="Confidence by time slot"
-                  subtitle="Bar color = risk level."
-                  icon={BarChart3}
-                  chartHeightClass="h-[260px]"
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={confidenceBandData}
-                      margin={{
-                        top: 12,
-                        right: 12,
-                        left: 8,
-                        bottom: confidenceChartBottomMargin,
-                      }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="#e2e8f0"
-                        className="dark:stroke-slate-700"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="slot"
-                        tick={{ fontSize: 9, fill: "#64748b" }}
-                        axisLine={{ stroke: axisStroke }}
-                        tickLine={{ stroke: axisStroke }}
-                        interval={confidenceBandData.length > 18 ? Math.floor(confidenceBandData.length / 8) : 0}
-                        angle={confidenceBandData.length > 14 ? -35 : 0}
-                        textAnchor={confidenceBandData.length > 14 ? "end" : "middle"}
-                        height={confidenceBandData.length > 14 ? 48 : 28}
-                      />
-                      <YAxis
-                        domain={[0, 100]}
-                        tick={{ fontSize: 11, fill: "#64748b" }}
-                        axisLine={{ stroke: axisStroke }}
-                        tickLine={{ stroke: axisStroke }}
-                        width={44}
-                        unit="%"
-                        label={{ value: "%", angle: -90, position: "insideLeft", fill: "#64748b", fontSize: 10 }}
-                      />
-                      <Tooltip
-                        formatter={(v) => [`${v}%`, "Confidence"]}
-                        labelFormatter={(l) => `Slot ${l}`}
-                        contentStyle={{
-                          borderRadius: 8,
-                          border: "1px solid #e2e8f0",
-                          fontSize: 12,
-                        }}
-                      />
-                      <Bar dataKey="confidence" radius={[4, 4, 0, 0]} maxBarSize={32}>
-                        {confidenceBandData.map((entry, i) => (
-                          <Cell key={`cb-${i}`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartCard>
-
-                {sourceBarData.length > 1 ? (
-                  <ChartCard
-                    title="Predictions by source"
-                    subtitle="Row count per source."
-                    icon={BarChart3}
-                    chartHeightClass="h-[260px]"
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={sourceBarData}
-                        layout="vertical"
-                        margin={{ top: 12, right: 20, left: 16, bottom: 12 }}
-                      >
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke="#e2e8f0"
-                          className="dark:stroke-slate-700"
-                          horizontal={false}
-                        />
-                        <XAxis
-                          type="number"
-                          tick={{ fontSize: 10, fill: "#64748b" }}
-                          axisLine={{ stroke: axisStroke }}
-                          tickLine={{ stroke: axisStroke }}
-                          allowDecimals={false}
-                        />
-                        <YAxis
-                          type="category"
-                          dataKey="name"
-                          width={112}
-                          tick={{ fontSize: 10, fill: "#64748b" }}
-                          axisLine={{ stroke: axisStroke }}
-                          tickLine={{ stroke: axisStroke }}
-                        />
-                        <Tooltip
-                          formatter={(v) => [v, "Rows"]}
-                          contentStyle={{
-                            borderRadius: 8,
-                            border: "1px solid #e2e8f0",
-                            fontSize: 12,
-                          }}
-                        />
-                        <Bar dataKey="count" radius={[0, 4, 4, 0]} maxBarSize={24}>
-                          {sourceBarData.map((_, i) => (
-                            <Cell key={`src-${i}`} fill={SOURCE_PALETTE[i % SOURCE_PALETTE.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </ChartCard>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
-
-          <div className="rounded-2xl border border-slate-200 bg-white/80 shadow-lg backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80 overflow-hidden">
-              <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                    <BarChart3 className="h-4 w-4 text-sky-500" />
-                    Detailed Forecast Timeline
-                  </h2>
-                  <div className="text-right">
-                    <span className="text-xs text-slate-500">
-                      {windowKey === "6h" ? "Upcoming 6 hours" : windowKey === "1d" ? "Upcoming day" : "Upcoming week"}
-                    </span>
-                    {timelineHiddenCount > 0 ? (
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => setTimelineExpanded((v) => !v)}
-                          className="mt-1 text-xs font-semibold text-sky-700 hover:text-sky-600 dark:text-sky-400 dark:hover:text-sky-300"
-                        >
-                          {timelineExpanded
-                            ? "Show less"
-                            : `Show all (${timelineTotalItems})`}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-
-              {error ? (
-                <div className="m-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-                  <ShieldAlert className="mb-2 inline-block h-5 w-5" /> {error}
-                </div>
-              ) : null}
-
-              {loading ? (
-                <div className="flex flex-col items-center justify-center py-20">
-                  <Loader2 className="h-10 w-10 animate-spin text-sky-500" />
-                  <p className="mt-3 text-sm text-slate-500">Fetching latest predictions...</p>
-                </div>
-              ) : sortedRows.length === 0 ? (
-                <div className="m-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950/30">
-                  No predictions available. Run the seed script on the backend.
-                </div>
-              ) : windowKey === "7d" ? (
-                <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
-                  {visibleWeeklyCards.map((d) => (
-                    <article
-                      key={d.day}
-                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-100">{d.day}</p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400">{d.weekday}</p>
-                        </div>
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${levelTone(d.peak)}`}>
-                          Peak {String(d.peak).toUpperCase()}
-                        </span>
-                      </div>
-
-                      <div className="mt-3">
-                        <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                          <span>Avg confidence</span>
-                          <span>{d.avgConfidence}%</span>
-                        </div>
-                        <ConfidenceBar level={d.peak} confidence={d.avgConfidence / 100} />
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-4 gap-1.5 text-[10px]">
-                        <span className="rounded bg-emerald-100 px-1.5 py-1 text-center font-semibold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200">
-                          S {d.counts.safe}
-                        </span>
-                        <span className="rounded bg-amber-100 px-1.5 py-1 text-center font-semibold text-amber-900 dark:bg-amber-500/20 dark:text-amber-200">
-                          L {d.counts.low}
-                        </span>
-                        <span className="rounded bg-orange-100 px-1.5 py-1 text-center font-semibold text-orange-800 dark:bg-orange-500/20 dark:text-orange-200">
-                          M {d.counts.medium}
-                        </span>
-                        <span className="rounded bg-rose-100 px-1.5 py-1 text-center font-semibold text-rose-800 dark:bg-rose-500/20 dark:text-rose-200">
-                          H {d.counts.high}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-[10px] text-slate-400 dark:text-slate-500">
-                        {d.samples} hourly samples
-                      </p>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div
-                  className={`grid gap-4 p-4 ${timelineTableHalves[1].length > 0 ? "lg:grid-cols-2" : ""}`}
-                >
-                  <div className="min-w-0 overflow-x-auto rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-950/30">
-                    <ForecastDataTable rows={timelineTableHalves[0]} />
-                  </div>
-                  {timelineTableHalves[1].length > 0 ? (
-                    <div className="min-w-0 overflow-x-auto rounded-xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-950/30">
-                      <ForecastDataTable rows={timelineTableHalves[1]} />
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-md backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
-              <HelpCircle className="h-4 w-4 text-sky-500" />
-              How to interpret
-            </div>
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-              Risk levels combine weather patterns, historical data, and real-time sensors.{" "}
-              <span className="font-medium text-slate-700 dark:text-slate-300">High confidence</span> means multiple models agree.
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">District risk command map</h1>
+            <p className="mt-2 max-w-3xl text-sm text-indigo-50/90">
+              Live river gauge conditions over the published district alert map. Districts are adjusted provisionally from the highest live gauge threshold found inside each one.
             </p>
           </div>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <button
+              type="button"
+              onClick={() => loadData(true)}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-indigo-800 shadow-md transition hover:bg-indigo-50 disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+            </button>
+            <span className="inline-flex items-center gap-1 text-xs text-indigo-100">
+              <Clock3 className="h-3.5 w-3.5" /> Checked {updatedAt ? formatDate(updatedAt) : "—"}
+            </span>
+          </div>
         </div>
+      </header>
+
+      {error && (
+        <div role="alert" className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{error}</span>
+        </div>
+      )}
+
+      {/* Stats */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard icon={ShieldAlert} label="High-risk districts" value={highDistricts} detail="Published DMEWS levels" tone="red" />
+        <StatCard icon={Waves} label="Live gauge stations" value={stations.length} detail="From Irrigation Department" />
+        <StatCard icon={AlertTriangle} label="Gauge alerts" value={alertStations} detail={`${floodStations} at minor flood or above`} tone="amber" />
+        <StatCard icon={autoUpdateEnabled ? CheckCircle2 : Clock3} label="Automatic adjustment" value={autoUpdateEnabled ? "On" : "Off"} detail="Rule-based live district updates" tone={autoUpdateEnabled ? "green" : "amber"} />
+      </div>
+
+      {/* Compact automation controls */}
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
+        <div className="grid gap-2 md:grid-cols-2">
+          <Toggle
+            icon={Zap}
+            label="Automatic adjustment"
+            description="Updates district levels from live gauges on every refresh. No SMS is sent by this alone."
+            checked={autoUpdateEnabled}
+            onChange={() => setAutoUpdateEnabled((current) => !current)}
+          />
+          <Toggle
+            icon={smsEnabled ? Bell : BellOff}
+            label="Automatic high-risk SMS"
+            description="SMS registered users in a district when it changes to High."
+            checked={smsEnabled}
+            disabled={savingSms}
+            onChange={toggleSms}
+            onColor="bg-emerald-600"
+          />
+        </div>
+        {autoUpdatedDistricts.length > 0 && (
+          <p className="mt-2 rounded-lg bg-indigo-50 px-3 py-1.5 text-[11px] text-indigo-800">
+            Updated automatically: {autoUpdatedDistricts.join(", ")}
+          </p>
+        )}
+      </section>
+
+      {/* Map */}
+      <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Sri Lanka district alert map</h2>
+            <p className="text-xs text-slate-500">District fills show published alerts. Dots are live gauges — click one for details.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-600">
+            {Object.entries(LEVELS).map(([key, item]) => (
+              <span key={key} className="inline-flex items-center gap-1.5">
+                <i className="h-3 w-3 rounded-sm" style={{ background: item.fill, border: `2px solid ${item.color}` }} />
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <DistrictGaugeMap
+          geoJson={geoJson}
+          riskLevels={riskLevels}
+          stations={stations}
+          selectedStation={selectedStation}
+          onSelectStation={setSelectedStation}
+        />
+      </section>
+
+      {/* Selected gauge */}
+      <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">Selected live gauge</h2>
+              {selectedState && (
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${selectedState.badge}`}>{selectedState.label}</span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">Click any map dot or pick a station.</p>
+          </div>
+          <div className="relative">
+            <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <select
+              value={selected?.name || ""}
+              onChange={(event) => setSelectedStation(event.target.value)}
+              className="max-w-[220px] appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            >
+              {stations.map((station) => (
+                <option key={station.name} value={station.name}>{station.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {selected ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["Gauge", selected.name],
+              ["River basin", selected.basin],
+              ["Water level", `${formatNumber(selected.level)} m`],
+              ["Rainfall", `${formatNumber(selected.rainfall)} mm`],
+              ["Alert threshold", `${formatNumber(selected.alert)} m`],
+              ["Minor flood", `${formatNumber(selected.minor)} m`],
+              ["Major flood", `${formatNumber(selected.major)} m`],
+              ["Updated", formatDate(selected.timestamp)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl bg-slate-50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+                <p className="mt-1 truncate text-sm font-bold text-slate-900" title={String(value)}>{value}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-5 text-sm text-slate-500">No live gauge records available.</p>
+        )}
+      </section>
+
+      {/* Publish risk */}
+      <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Publish district risk levels</h2>
+            <p className="mt-1 text-xs text-slate-500">Review or manually override the levels shown on the map. Automatic adjustment updates these from live gauge thresholds.</p>
+          </div>
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${smsEnabled ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+            {smsEnabled ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
+            SMS {smsEnabled ? "enabled" : "disabled"}
+          </span>
+        </div>
+
+        {Object.keys(riskLevels).length === 0 ? (
+          <p className="mt-4 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">No district risk levels have been published yet.</p>
+        ) : (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Object.entries(riskLevels).map(([district, level]) => {
+              const style = RISK_STYLES[level] || RISK_STYLES.safe;
+              const saving = savingRisk === district;
+              return (
+                <div key={district} className={`rounded-2xl border p-3.5 transition ${style.card}`}>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <i className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.dot}`} />
+                      <span className="truncate text-sm font-semibold capitalize text-slate-800">{district}</span>
+                    </span>
+                    {level === "high" ? (
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                    )}
+                  </div>
+                  <div role="group" aria-label={`Risk level for ${district}`} className="grid grid-cols-4 gap-1 rounded-xl bg-white p-1 ring-1 ring-slate-200">
+                    {Object.entries(LEVELS).map(([value, item]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        disabled={saving}
+                        aria-pressed={level === value}
+                        onClick={() => level !== value && updateRisk(district, value)}
+                        className={`rounded-lg px-1 py-1.5 text-[11px] font-semibold transition disabled:opacity-60 ${
+                          level === value ? RISK_STYLES[value].active : "text-slate-500 hover:bg-slate-100"
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                  {saving && <p className="mt-2 text-[11px] text-slate-500">Saving…</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 text-xs text-slate-500">
+        <span className="inline-flex items-center gap-1"><Droplets className="h-3.5 w-3.5 text-sky-600" /> Live water levels refresh every 60 seconds.</span>
+        <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Rule-based automation with admin-controlled SMS.</span>
       </div>
     </div>
   );
