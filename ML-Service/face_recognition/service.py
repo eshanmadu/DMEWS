@@ -11,6 +11,8 @@ from __future__ import annotations
 import base64
 import io
 import os
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from typing import Any
 from urllib.request import Request, urlopen
 
@@ -24,6 +26,8 @@ except ImportError:  # pragma: no cover - exercised by deployment configuration
 
 
 app = FastAPI(title="DMEWS Face Recognition Service", version="1.0.0")
+_reference_cache: dict[str, Any] = {}
+_reference_cache_lock = Lock()
 
 
 class Candidate(BaseModel):
@@ -67,22 +71,34 @@ def metadata_score(info: dict[str, Any], candidate: Candidate) -> int:
 
 def image_from_url(url: str) -> bytes:
     request = Request(url, headers={"User-Agent": "DMEWS-face-matching/1.0"})
-    with urlopen(request, timeout=8) as response:
+    with urlopen(request, timeout=4) as response:
         return response.read()
 
 
-def compare(query_raw: bytes, candidate: Candidate) -> float | None:
+def reference_encoding(candidate: Candidate) -> Any:
+    if not candidate.photoUrl:
+        return None
+    with _reference_cache_lock:
+        if candidate.photoUrl in _reference_cache:
+            return _reference_cache[candidate.photoUrl]
+    reference_raw = image_from_url(candidate.photoUrl)
+    reference_image = face_recognition.load_image_file(io.BytesIO(reference_raw))
+    reference_faces = face_recognition.face_encodings(reference_image)
+    encoding = reference_faces[0] if len(reference_faces) == 1 else None
+    if encoding is not None:
+        with _reference_cache_lock:
+            _reference_cache[candidate.photoUrl] = encoding
+    return encoding
+
+
+def compare(query_encoding: Any, candidate: Candidate) -> float | None:
     try:
-        query_image = face_recognition.load_image_file(io.BytesIO(query_raw))
-        query_faces = face_recognition.face_encodings(query_image)
-        if len(query_faces) != 1 or not candidate.photoUrl:
+        if query_encoding is None:
             return None
-        reference_raw = image_from_url(candidate.photoUrl)
-        reference_image = face_recognition.load_image_file(io.BytesIO(reference_raw))
-        reference_faces = face_recognition.face_encodings(reference_image)
-        if len(reference_faces) != 1:
+        reference = reference_encoding(candidate)
+        if reference is None:
             return None
-        distance = float(face_recognition.face_distance([reference_faces[0]], query_faces[0])[0])
+        distance = float(face_recognition.face_distance([reference], query_encoding)[0])
         confidence = max(0.0, min(1.0, 1.0 - distance))
         return confidence if distance <= float(os.getenv("FACE_MATCH_THRESHOLD", "0.55")) else None
     except (OSError, ValueError, TimeoutError):
@@ -104,20 +120,46 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
         }
 
     query_raw = decode_image(request.imageBase64)
-    matches = []
-    for candidate in request.candidates:
-        confidence = compare(query_raw, candidate)
-        if confidence is None:
-            continue
-        matches.append({
+    query_faces = []
+    try:
+        query_image = face_recognition.load_image_file(io.BytesIO(query_raw))
+        query_faces = face_recognition.face_encodings(query_image)
+    except (OSError, ValueError):
+        query_faces = []
+
+    def score_candidate(candidate: Candidate) -> dict[str, Any] | None:
+        score = metadata_score(request.optionalInfo, candidate)
+        confidence = compare(query_faces[0], candidate) if len(query_faces) == 1 else None
+        if confidence is None and score == 0:
+            return None
+        return {
             "personId": candidate.id,
-            "confidence": round(confidence, 4),
-            "metadataScore": metadata_score(request.optionalInfo, candidate),
-            "reason": "Potential face similarity; verify against official records.",
-        })
-    matches.sort(key=lambda item: (item["confidence"], item["metadataScore"]), reverse=True)
+            "matchType": "face" if confidence is not None else "metadata",
+            "confidence": round(confidence, 4) if confidence is not None else None,
+            "metadataScore": score,
+            "reason": (
+                "Potential face similarity with supporting details; verify against official records."
+                if confidence is not None
+                else "Potential details-based match only; no face similarity passed the threshold."
+            ),
+        }
+
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(request.candidates)))) as executor:
+        matches = [match for match in executor.map(score_candidate, request.candidates) if match]
+    matches.sort(
+        key=lambda item: (
+            item["matchType"] == "face",
+            item["confidence"] or 0,
+            item["metadataScore"],
+        ),
+        reverse=True,
+    )
     return {
         "status": "completed",
         "matches": matches[:10],
-        "message": "Potential matches ranked for officer review. No identity was confirmed.",
+        "message": (
+            "Potential matches ranked for officer review. Face and details are supporting signals only."
+            if len(query_faces) == 1
+            else "No clear face was detected. Details-based potential matches are shown for officer review."
+        ),
     }

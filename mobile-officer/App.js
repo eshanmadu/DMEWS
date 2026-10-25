@@ -17,6 +17,48 @@ import {
 import Constants from 'expo-constants';
 import VictimIdentification from './VictimIdentification';
 
+/* =====================================================
+   DMEWS THEME (same palette, extended with a few tints)
+===================================================== */
+
+const COLORS = {
+  primary: '#1976D2',
+  primaryDark: '#0D47A1',
+  primaryLight: '#E3F2FD',
+  primarySoft: '#F1F7FD',
+
+  background: '#F5F8FC',
+  white: '#FFFFFF',
+
+  text: '#172B4D',
+  secondaryText: '#5F6B7A',
+  placeholder: '#A5AFBC',
+
+  border: '#D9E1EA',
+  borderSoft: '#EEF2F6',
+
+  required: '#E53935',
+
+  success: '#2E7D32',
+  successLight: '#E8F5E9',
+
+  warning: '#B26A00',
+  warningLight: '#FFF4E0',
+
+  danger: '#C62828',
+  dangerLight: '#FFEBEE',
+
+  slate: '#64748B',
+  slateLight: '#EEF1F5',
+};
+
+const CONDITION_STYLES = {
+  good: { label: 'Good', fg: COLORS.success, bg: COLORS.successLight },
+  fair: { label: 'Fair', fg: COLORS.primary, bg: COLORS.primaryLight },
+  'needs-attention': { label: 'Needs attention', fg: COLORS.warning, bg: COLORS.warningLight },
+  critical: { label: 'Critical', fg: COLORS.danger, bg: COLORS.dangerLight },
+};
+
 function resolveApiUrl() {
   const configured =
     (Constants.expoConfig &&
@@ -73,12 +115,134 @@ const PROVINCES = [
   { value: '9', label: 'Northern Province' },
 ];
 
+/* =====================================================
+   SHARED COMPONENTS
+===================================================== */
+
+function Field({ label, required, hint, style, ...props }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>
+        {label}
+        {required ? <Text style={styles.required}> *</Text> : null}
+        {hint ? <Text style={styles.optional}> {hint}</Text> : null}
+      </Text>
+      <TextInput
+        {...props}
+        style={[styles.input, focused && styles.inputFocused, style]}
+        placeholderTextColor={COLORS.placeholder}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+      />
+    </View>
+  );
+}
+
+function DropdownField({ label, required, hint, value, placeholder, options, onChange, disabled }) {
+  const [visible, setVisible] = React.useState(false);
+  const selected = options.find((option) => option.value === value);
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>
+        {label}
+        {required ? <Text style={styles.required}> *</Text> : null}
+        {hint ? <Text style={styles.optional}> {hint}</Text> : null}
+      </Text>
+      <Pressable
+        style={({ pressed }) => [
+          styles.input,
+          styles.dropdown,
+          disabled && styles.dropdownDisabled,
+          pressed && !disabled && styles.inputFocused,
+        ]}
+        onPress={() => !disabled && setVisible(true)}
+        disabled={disabled}
+      >
+        <Text style={selected ? styles.inputText : styles.placeholderText} numberOfLines={1}>
+          {selected?.label || placeholder}
+        </Text>
+        <Text style={styles.dropdownArrow}>⌄</Text>
+      </Pressable>
+
+      <Modal visible={visible} transparent animationType="slide" onRequestClose={() => setVisible(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setVisible(false)}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>{label}</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {options.length === 0 ? (
+                <Text style={styles.emptyText}>No options available.</Text>
+              ) : (
+                options.map((option) => {
+                  const isSelected = option.value === value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      style={({ pressed }) => [
+                        styles.sheetOption,
+                        isSelected && styles.sheetOptionSelected,
+                        pressed && styles.pressed,
+                      ]}
+                      onPress={() => {
+                        onChange(option.value);
+                        setVisible(false);
+                      }}
+                    >
+                      <Text style={[styles.sheetOptionText, isSelected && styles.sheetOptionTextSelected]}>
+                        {option.label}
+                      </Text>
+                      {isSelected ? <Text style={styles.sheetCheck}>✓</Text> : null}
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+function PrimaryButton({ children, onPress, busy, disabled, style }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.button,
+        pressed && styles.buttonPressed,
+        (busy || disabled) && styles.buttonDisabled,
+        style,
+      ]}
+      onPress={onPress}
+      disabled={busy || disabled}
+    >
+      {busy ? <ActivityIndicator color={COLORS.white} size="small" /> : <Text style={styles.buttonText}>{children}</Text>}
+    </Pressable>
+  );
+}
+
+function Pill({ label, fg, bg }) {
+  return (
+    <View style={[styles.pill, { backgroundColor: bg }]}>
+      <View style={[styles.pillDot, { backgroundColor: fg }]} />
+      <Text style={[styles.pillText, { color: fg }]}>{label}</Text>
+    </View>
+  );
+}
+
+/* =====================================================
+   AUTH SCREEN
+===================================================== */
+
 function AuthScreen({ onAuthenticated }) {
   const [mode, setMode] = useState('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [province, setProvince] = useState('');
   const [districtId, setDistrictId] = useState('');
   const [district, setDistrict] = useState('');
@@ -164,45 +328,137 @@ function AuthScreen({ onAuthenticated }) {
     }
   }
 
+  function switchMode(next) {
+    setMode(next);
+    setError('');
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.authSafeArea}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryDark} />
       <KeyboardAvoidingView style={styles.keyboardContainer} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled">
-          <Text style={styles.authBrand}>DMEWS</Text>
-          <Text style={styles.authTitle}>Mobile Officer</Text>
-          <Text style={styles.authSubtitle}>Sign in to manage shelters in your assigned district.</Text>
-          <View style={styles.card}>
-            <View style={styles.authTabs}>
-              <Pressable style={[styles.authTab, mode === 'login' && styles.authTabActive]} onPress={() => { setMode('login'); setError(''); }}>
-                <Text style={styles.authTabText}>Log in</Text>
+        <ScrollView
+          style={styles.authScroll}
+          contentContainerStyle={styles.authContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.authHero}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoBadgeText}>D</Text>
+            </View>
+            <Text style={styles.authBrand}>DisasterWatch</Text>
+            <Text style={styles.authTitle}>Mobile Officer</Text>
+            <Text style={styles.authSubtitle}>
+              Sign in to manage shelters in your assigned district.
+            </Text>
+          </View>
+
+          <View style={[styles.card, styles.authCard]}>
+            <View style={styles.segment}>
+              <Pressable style={[styles.segmentItem, mode === 'login' && styles.segmentItemActive]} onPress={() => switchMode('login')}>
+                <Text style={[styles.segmentText, mode === 'login' && styles.segmentTextActive]}>Log in</Text>
               </Pressable>
-              <Pressable style={[styles.authTab, mode === 'signup' && styles.authTabActive]} onPress={() => { setMode('signup'); setError(''); }}>
-                <Text style={styles.authTabText}>Sign up</Text>
+              <Pressable style={[styles.segmentItem, mode === 'signup' && styles.segmentItemActive]} onPress={() => switchMode('signup')}>
+                <Text style={[styles.segmentText, mode === 'signup' && styles.segmentTextActive]}>Sign up</Text>
               </Pressable>
             </View>
+
+            {mode === 'signup' && (
+              <Field label="Full name" required value={name} onChangeText={setName} placeholder="Your name" />
+            )}
+
+            <Field
+              label="Email"
+              required
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder="officer@example.com"
+            />
+
             {mode === 'signup' && (
               <>
-                <Text style={styles.label}>Full name *</Text>
-                <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor={COLORS.placeholder} />
+                <Field
+                  label="Mobile"
+                  required
+                  value={mobile}
+                  onChangeText={(value) => setMobile(value.replace(/\D/g, '').slice(0, 10))}
+                  keyboardType="phone-pad"
+                  placeholder="10 digit mobile number"
+                />
+                <DropdownField
+                  label="Province"
+                  required
+                  value={province}
+                  placeholder="Select province"
+                  options={provinceOptions}
+                  onChange={(value) => {
+                    setProvince(value);
+                    setDistrictId('');
+                    setDistrict('');
+                    setCityId('');
+                    setCity('');
+                    setCities([]);
+                  }}
+                />
+                <DropdownField
+                  label="District"
+                  required
+                  value={districtId}
+                  placeholder={province ? 'Select district' : 'Select province first'}
+                  options={districtOptions}
+                  disabled={!province}
+                  onChange={(value) => {
+                    const selected = districts.find((item) => String(item.id) === value);
+                    setDistrictId(value);
+                    setDistrict(selected?.name_en || '');
+                    setCityId('');
+                    setCity('');
+                    setCityLatitude('');
+                    setCityLongitude('');
+                  }}
+                />
+                <DropdownField
+                  label="City"
+                  required
+                  value={cityId}
+                  placeholder={districtId ? 'Select city' : 'Select district first'}
+                  options={cityOptions}
+                  disabled={!districtId}
+                  onChange={(value) => {
+                    const selected = cities.find((item) => String(item.id) === value);
+                    setCityId(value);
+                    setCity(selected?.name_en || selected?.name || '');
+                    setCityLatitude(selected?.latitude == null ? '' : String(selected.latitude));
+                    setCityLongitude(selected?.longitude == null ? '' : String(selected.longitude));
+                  }}
+                />
               </>
             )}
-            <Text style={styles.label}>Email *</Text>
-            <TextInput style={styles.input} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="officer@example.com" placeholderTextColor={COLORS.placeholder} />
-            {mode === 'signup' && (
-              <>
-                <Text style={styles.label}>Mobile *</Text>
-                <TextInput style={styles.input} value={mobile} onChangeText={(value) => setMobile(value.replace(/\D/g, '').slice(0, 10))} keyboardType="phone-pad" placeholder="10 digit mobile number" placeholderTextColor={COLORS.placeholder} />
-                <DropdownField label="Province *" value={province} placeholder="Select province" options={provinceOptions} onChange={(value) => { setProvince(value); setDistrictId(''); setDistrict(''); setCityId(''); setCity(''); setCities([]); }} />
-                <DropdownField label="District *" value={districtId} placeholder={province ? 'Select district' : 'Select province first'} options={districtOptions} disabled={!province} onChange={(value) => { const selected = districts.find((item) => String(item.id) === value); setDistrictId(value); setDistrict(selected?.name_en || ''); setCityId(''); setCity(''); setCityLatitude(''); setCityLongitude(''); }} />
-                <DropdownField label="City *" value={cityId} placeholder={districtId ? 'Select city' : 'Select district first'} options={cityOptions} disabled={!districtId} onChange={(value) => { const selected = cities.find((item) => String(item.id) === value); setCityId(value); setCity(selected?.name_en || selected?.name || ''); setCityLatitude(selected?.latitude == null ? '' : String(selected.latitude)); setCityLongitude(selected?.longitude == null ? '' : String(selected.longitude)); }} />
-              </>
-            )}
-            <Text style={styles.label}>Password *</Text>
-            <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry placeholder="At least 6 characters" placeholderTextColor={COLORS.placeholder} />
-            {error ? <Text style={styles.authError}>{error}</Text> : null}
-            <Pressable style={[styles.button, busy && styles.buttonDisabled]} onPress={submit} disabled={busy}>
-              {busy ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.buttonText}>{mode === 'login' ? 'Log in' : 'Create officer account'}</Text>}
-            </Pressable>
+
+            <View style={styles.field}>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>
+                  Password<Text style={styles.required}> *</Text>
+                </Text>
+                <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
+                  <Text style={styles.linkText}>{showPassword ? 'Hide' : 'Show'}</Text>
+                </Pressable>
+              </View>
+              <PasswordInput value={password} onChangeText={setPassword} visible={showPassword} />
+            </View>
+
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.authError}>{error}</Text>
+              </View>
+            ) : null}
+
+            <PrimaryButton onPress={submit} busy={busy}>
+              {mode === 'login' ? 'Log in' : 'Create officer account'}
+            </PrimaryButton>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -210,52 +466,32 @@ function AuthScreen({ onAuthenticated }) {
   );
 }
 
-function DropdownField({ label, value, placeholder, options, onChange, disabled }) {
-  const [visible, setVisible] = React.useState(false);
-  const selected = options.find((option) => option.value === value);
-
+function PasswordInput({ value, onChangeText, visible }) {
+  const [focused, setFocused] = useState(false);
   return (
-    <>
-      <Text style={styles.label}>{label}</Text>
-      <Pressable
-        style={[styles.input, styles.dropdown, disabled && styles.dropdownDisabled]}
-        onPress={() => !disabled && setVisible(true)}
-        disabled={disabled}
-      >
-        <Text style={selected ? styles.inputText : styles.placeholderText}>
-          {selected?.label || placeholder}
-        </Text>
-        <Text style={styles.dropdownArrow}>⌄</Text>
-      </Pressable>
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setVisible(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setVisible(false)}>
-          <View style={styles.dropdownModal}>
-            <Text style={styles.dropdownModalTitle}>{label}</Text>
-            <ScrollView>
-              {options.map((option) => (
-                <Pressable
-                  key={option.value}
-                  style={styles.dropdownOption}
-                  onPress={() => {
-                    onChange(option.value);
-                    setVisible(false);
-                  }}
-                >
-                  <Text style={styles.dropdownOptionText}>{option.label}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
-    </>
+    <TextInput
+      style={[styles.input, focused && styles.inputFocused]}
+      value={value}
+      onChangeText={onChangeText}
+      secureTextEntry={!visible}
+      autoCapitalize="none"
+      placeholder="At least 6 characters"
+      placeholderTextColor={COLORS.placeholder}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+    />
   );
 }
+
+/* =====================================================
+   MAIN APP
+===================================================== */
 
 export default function App() {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [activeSection, setActiveSection] = useState('shelters');
+  const [tab, setTab] = useState('manage');
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
   const [province, setProvince] = useState('');
@@ -322,6 +558,13 @@ export default function App() {
       .finally(() => setSheltersLoading(false));
   }
 
+  function logout() {
+    setToken(null);
+    setUser(null);
+    setShelters([]);
+    setTab('manage');
+  }
+
   async function updateShelterStatus(id, status) {
     setStatusBusyId(id);
     try {
@@ -386,6 +629,14 @@ export default function App() {
     value: String(item.id),
     label: item.name_en || item.name || 'Unnamed city',
   }));
+
+  const mySheltersList = shelters.filter((shelter) => shelter.district === user?.district);
+  const openCount = mySheltersList.filter((s) => s.status !== 'inactive').length;
+  const spacesLeft = mySheltersList.reduce(
+    (sum, s) => sum + Math.max(0, (s.capacity || 0) - (s.occupied || 0)),
+    0
+  );
+  const initial = (user?.name || 'O').trim().charAt(0).toUpperCase();
 
   function validateAndBuild() {
     const payload = {
@@ -517,6 +768,10 @@ export default function App() {
       setCapacity('');
       setContact('');
       setNotes('');
+
+      // Show the new shelter in the list
+      loadShelters();
+      setTab('manage');
     } catch (err) {
       console.error(
         'Create shelter error:',
@@ -542,11 +797,7 @@ export default function App() {
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={
-          Platform.OS === 'ios'
-            ? 'padding'
-            : undefined
-        }
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           style={styles.container}
@@ -557,368 +808,361 @@ export default function App() {
           {/* ================= HEADER ================= */}
           <View style={styles.header}>
             <View style={styles.headerTop}>
-              <View>
-                <Text style={styles.brand}>
-                  DMEWS
-                </Text>
-
-                <Text style={styles.brandSubtitle}>
-                  Disaster Management & Early Warning System
-                </Text>
+              <View style={styles.headerUser}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{initial}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.greeting}>Welcome back</Text>
+                  <Text style={styles.userName} numberOfLines={1}>{user?.name || 'Local Officer'}</Text>
+                </View>
               </View>
-
-              <View style={styles.headerIcon}>
-                <Text style={styles.headerIconText}>
-                  ⚙
-                </Text>
-              </View>
+              <Pressable style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]} onPress={logout}>
+                <Text style={styles.logoutText}>Log out</Text>
+              </Pressable>
             </View>
 
-            <View style={styles.headerDivider} />
+            <View style={styles.districtChip}>
+              <Text style={styles.districtChipText}>
+                {user?.district ? `${user.district} district` : 'DMEWS Local Officer'}
+              </Text>
+            </View>
 
-            <Text style={styles.headerTitle}>
-              Local Officer
-            </Text>
+            {/* Stats */}
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{sheltersLoading ? '–' : mySheltersList.length}</Text>
+                <Text style={styles.statLabel}>Shelters</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{sheltersLoading ? '–' : openCount}</Text>
+                <Text style={styles.statLabel}>Open now</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{sheltersLoading ? '–' : spacesLeft}</Text>
+                <Text style={styles.statLabel}>Places free</Text>
+              </View>
+            </View>
+          </View>
 
-            <Text style={styles.headerDescription}>
-              Register a new emergency shelter
-            </Text>
-
-            <Pressable
-              style={styles.victimEntry}
-              onPress={() => setActiveSection('victim-identification')}
-            >
-              <Text style={styles.victimEntryTitle}>Victim Identification</Text>
+          {/* ================= VICTIM IDENTIFICATION ENTRY ================= */}
+          <Pressable
+            style={({ pressed }) => [styles.victimEntry, pressed && styles.pressed]}
+            onPress={() => setActiveSection('victim-identification')}
+          >
+            <View style={styles.victimIcon}>
+              <Text style={styles.victimIconText}>◉</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.victimEntryTitle}>Victim identification</Text>
               <Text style={styles.victimEntryText}>Capture a face for authorised review</Text>
-            </Pressable>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+
+          {/* ================= TABS ================= */}
+          <View style={styles.tabsWrap}>
+            <View style={styles.segment}>
+              <Pressable style={[styles.segmentItem, tab === 'manage' && styles.segmentItemActive]} onPress={() => setTab('manage')}>
+                <Text style={[styles.segmentText, tab === 'manage' && styles.segmentTextActive]}>Manage shelters</Text>
+              </Pressable>
+              <Pressable style={[styles.segmentItem, tab === 'add' && styles.segmentItemActive]} onPress={() => setTab('add')}>
+                <Text style={[styles.segmentText, tab === 'add' && styles.segmentTextActive]}>Add shelter</Text>
+              </Pressable>
+            </View>
           </View>
 
-          {/* ================= MAIN CARD ================= */}
-          <View style={styles.card}>
-
-            {/* Section title */}
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionIcon}>
-                <Text style={styles.sectionIconText}>
-                  +
-                </Text>
+          {/* ================= ADD SHELTER ================= */}
+          {tab === 'add' && (
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionIcon}>
+                  <Text style={styles.sectionIconText}>+</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Add shelter</Text>
+                  <Text style={styles.sectionSubtitle}>Register a new emergency shelter</Text>
+                </View>
               </View>
 
-              <View>
-                <Text style={styles.sectionTitle}>
-                  Add Shelter
-                </Text>
+              <Text style={styles.groupTitle}>Shelter details</Text>
 
-                <Text style={styles.sectionSubtitle}>
-                  Enter shelter information below
-                </Text>
-              </View>
-            </View>
+              <Field
+                label="Shelter name"
+                required
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter shelter name"
+                returnKeyType="next"
+              />
 
-            {/* ================= SHELTER INFORMATION ================= */}
+              <Field
+                label="Location"
+                required
+                value={location}
+                onChangeText={setLocation}
+                placeholder="Enter address or description"
+                returnKeyType="next"
+              />
 
-            <Text style={styles.label}>
-              Shelter Name
-              <Text style={styles.required}> *</Text>
-            </Text>
+              <Text style={styles.groupTitle}>Area</Text>
 
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter shelter name"
-              placeholderTextColor={COLORS.placeholder}
-              returnKeyType="next"
-            />
+              <DropdownField
+                label="Province"
+                required
+                value={province}
+                placeholder="Select province"
+                options={provinceOptions}
+                onChange={(value) => {
+                  setProvince(value);
+                  setDistrict('');
+                  setDistrictId('');
+                  setCity('');
+                  setCities([]);
+                  setCityLatitude('');
+                  setCityLongitude('');
+                }}
+              />
 
-            <Text style={styles.label}>
-              Location
-              <Text style={styles.required}> *</Text>
-            </Text>
+              <DropdownField
+                label="District"
+                required
+                value={districtId}
+                placeholder={province ? 'Select district' : 'Select province first'}
+                options={districtOptions}
+                disabled={!province || districts.length === 0}
+                onChange={(value) => {
+                  const selected = provinceDistricts.find((item) => String(item.id) === value);
+                  setDistrictId(value);
+                  setDistrict(selected?.name_en || '');
+                  setCity('');
+                  setCityLatitude('');
+                  setCityLongitude('');
+                }}
+              />
 
-            <TextInput
-              style={styles.input}
-              value={location}
-              onChangeText={setLocation}
-              placeholder="Enter address or description"
-              placeholderTextColor={COLORS.placeholder}
-              returnKeyType="next"
-            />
+              <DropdownField
+                label="City"
+                hint="(Optional)"
+                value={city ? String(cities.find((item) => (item.name_en || item.name) === city)?.id || '') : ''}
+                placeholder={districtId ? 'Select city' : 'Select district first'}
+                options={cityOptions}
+                disabled={!districtId || cities.length === 0}
+                onChange={(value) => {
+                  const selected = cities.find((item) => String(item.id) === value);
+                  setCity(selected?.name_en || selected?.name || '');
+                  setCityLatitude(selected?.latitude == null ? '' : String(selected.latitude));
+                  setCityLongitude(selected?.longitude == null ? '' : String(selected.longitude));
+                }}
+              />
 
-            <DropdownField
-              label={<Text>Province<Text style={styles.required}> *</Text></Text>}
-              value={province}
-              placeholder="Select province"
-              options={provinceOptions}
-              onChange={(value) => {
-                setProvince(value);
-                setDistrict('');
-                setDistrictId('');
-                setCity('');
-                setCities([]);
-                setCityLatitude('');
-                setCityLongitude('');
-              }}
-            />
-
-            <DropdownField
-              label={<Text>District<Text style={styles.required}> *</Text></Text>}
-              value={districtId}
-              placeholder={province ? 'Select district' : 'Select province first'}
-              options={districtOptions}
-              disabled={!province || districts.length === 0}
-              onChange={(value) => {
-                const selected = provinceDistricts.find((item) => String(item.id) === value);
-                setDistrictId(value);
-                setDistrict(selected?.name_en || '');
-                setCity('');
-                setCityLatitude('');
-                setCityLongitude('');
-              }}
-            />
-
-            <DropdownField
-              label={<Text>City<Text style={styles.optional}> (Optional)</Text></Text>}
-              value={city ? String(cities.find((item) => (item.name_en || item.name) === city)?.id || '') : ''}
-              placeholder={districtId ? 'Select city' : 'Select district first'}
-              options={cityOptions}
-              disabled={!districtId || cities.length === 0}
-              onChange={(value) => {
-                const selected = cities.find((item) => String(item.id) === value);
-                setCity(selected?.name_en || selected?.name || '');
-                setCityLatitude(selected?.latitude == null ? '' : String(selected.latitude));
-                setCityLongitude(selected?.longitude == null ? '' : String(selected.longitude));
-              }}
-            />
-
-            {/* ================= COORDINATES ================= */}
-
-            <Text style={styles.subSectionTitle}>
-              City Coordinates
-            </Text>
-
-            <Text style={styles.coordinateHint}>
-              Required only when a city is provided
-            </Text>
-
-            <View style={styles.coordinateRow}>
-              <View
-                style={[
-                  styles.coordinateColumn,
-                  { marginRight: 8 },
-                ]}
-              >
-                <Text style={styles.smallLabel}>
-                  Latitude
-                </Text>
-
-                <TextInput
-                  style={styles.input}
-                  value={cityLatitude}
-                  onChangeText={setCityLatitude}
-                  placeholder="e.g. 6.9271"
-                  placeholderTextColor={
-                    COLORS.placeholder
-                  }
-                  keyboardType="numeric"
-                />
+              <View style={styles.coordinateBox}>
+                <Text style={styles.coordinateTitle}>City coordinates</Text>
+                <Text style={styles.coordinateHint}>Required only when a city is provided</Text>
+                <View style={styles.coordinateRow}>
+                  <View style={[styles.coordinateColumn, { marginRight: 6 }]}>
+                    <Field
+                      label="Latitude"
+                      value={cityLatitude}
+                      onChangeText={setCityLatitude}
+                      placeholder="e.g. 6.9271"
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={[styles.coordinateColumn, { marginLeft: 6 }]}>
+                    <Field
+                      label="Longitude"
+                      value={cityLongitude}
+                      onChangeText={setCityLongitude}
+                      placeholder="e.g. 79.8612"
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
               </View>
 
-              <View
-                style={[
-                  styles.coordinateColumn,
-                  { marginLeft: 8 },
-                ]}
-              >
-                <Text style={styles.smallLabel}>
-                  Longitude
-                </Text>
+              <Text style={styles.groupTitle}>Capacity and contact</Text>
 
-                <TextInput
-                  style={styles.input}
-                  value={cityLongitude}
-                  onChangeText={setCityLongitude}
-                  placeholder="e.g. 79.8612"
-                  placeholderTextColor={
-                    COLORS.placeholder
-                  }
-                  keyboardType="numeric"
-                />
+              <Field
+                label="Capacity"
+                required
+                value={capacity}
+                onChangeText={setCapacity}
+                placeholder="Number of people"
+                keyboardType="numeric"
+              />
+
+              <Field
+                label="Contact"
+                hint="(10 digits)"
+                value={contact}
+                onChangeText={setContact}
+                placeholder="Enter phone number"
+                keyboardType="phone-pad"
+                maxLength={10}
+              />
+
+              <Field
+                label="Notes"
+                hint="(Optional)"
+                style={styles.notesInput}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Enter any additional details"
+                multiline
+                textAlignVertical="top"
+              />
+
+              <PrimaryButton onPress={handleSubmit} busy={loading}>
+                Create shelter
+              </PrimaryButton>
+
+              <View style={styles.statusContainer}>
+                <View style={styles.statusDot} />
+                <Text style={styles.statusText}>Connected to DMEWS server</Text>
               </View>
             </View>
+          )}
 
-            {/* ================= CAPACITY ================= */}
+          {/* ================= MANAGE SHELTERS ================= */}
+          {tab === 'manage' && (
+            <View style={styles.listWrap}>
+              <View style={styles.listHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Your shelters</Text>
+                  <Text style={styles.sectionSubtitle}>Update availability and live conditions</Text>
+                </View>
+                <Pressable style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]} onPress={loadShelters}>
+                  <Text style={styles.refreshText}>Refresh</Text>
+                </Pressable>
+              </View>
 
-            <Text style={styles.label}>
-              Capacity
-              <Text style={styles.required}> *</Text>
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              value={capacity}
-              onChangeText={setCapacity}
-              placeholder="Number of people"
-              placeholderTextColor={COLORS.placeholder}
-              keyboardType="numeric"
-            />
-
-            {/* ================= CONTACT ================= */}
-
-            <Text style={styles.label}>
-              Contact
-              <Text style={styles.optional}>
-                {' '}
-                (10 digits)
-              </Text>
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              value={contact}
-              onChangeText={setContact}
-              placeholder="Enter phone number"
-              placeholderTextColor={COLORS.placeholder}
-              keyboardType="phone-pad"
-              maxLength={10}
-            />
-
-            {/* ================= NOTES ================= */}
-
-            <Text style={styles.label}>
-              Notes
-              <Text style={styles.optional}>
-                {' '}
-                (Optional)
-              </Text>
-            </Text>
-
-            <TextInput
-              style={[
-                styles.input,
-                styles.notesInput,
-              ]}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Enter any additional details"
-              placeholderTextColor={COLORS.placeholder}
-              multiline
-              textAlignVertical="top"
-            />
-
-            {/* ================= BUTTON ================= */}
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.button,
-                pressed && styles.buttonPressed,
-                loading && styles.buttonDisabled,
-              ]}
-              onPress={handleSubmit}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator
-                  color="#FFFFFF"
-                  size="small"
-                />
+              {sheltersLoading ? (
+                <View style={styles.card}>
+                  <ActivityIndicator color={COLORS.primary} />
+                </View>
+              ) : mySheltersList.length === 0 ? (
+                <View style={[styles.card, styles.emptyCard]}>
+                  <View style={styles.emptyIcon}>
+                    <Text style={styles.emptyIconText}>⌂</Text>
+                  </View>
+                  <Text style={styles.emptyTitle}>No shelters in your district yet</Text>
+                  <Text style={styles.emptyText}>Register your first shelter to start tracking places and conditions.</Text>
+                  <Pressable style={({ pressed }) => [styles.outlineButton, pressed && styles.pressed]} onPress={() => setTab('add')}>
+                    <Text style={styles.outlineButtonText}>Add a shelter</Text>
+                  </Pressable>
+                </View>
               ) : (
-                <>
-                  <Text style={styles.buttonIcon}>
-                    +
-                  </Text>
+                mySheltersList.map((shelter) => {
+                  const isActive = shelter.status !== 'inactive';
+                  const isManaging = managementId === shelter.id;
+                  const occupied = shelter.occupied || 0;
+                  const cap = shelter.capacity || 0;
+                  const isFull = shelter.isFull || occupied >= cap;
+                  const available = shelter.availableSpaces ?? Math.max(0, cap - occupied);
+                  const pct = cap > 0 ? Math.min(100, Math.round((occupied / cap) * 100)) : 0;
+                  const barColor = isFull ? COLORS.danger : pct >= 70 ? '#F59E0B' : COLORS.success;
+                  const cond = CONDITION_STYLES[shelter.condition || 'good'] || CONDITION_STYLES.good;
+                  const busy = statusBusyId === shelter.id;
 
-                  <Text style={styles.buttonText}>
-                    Create Shelter
-                  </Text>
-                </>
-              )}
-            </Pressable>
-
-            {/* ================= FOOTER ================= */}
-
-            <View style={styles.statusContainer}>
-              <View style={styles.statusDot} />
-
-              <Text style={styles.statusText}>
-                Connected to DMEWS server
-              </Text>
-            </View>
-
-          </View>
-
-          {/* ================= EXISTING SHELTERS ================= */}
-          <View style={styles.card}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionIcon}>
-                <Text style={styles.sectionIconText}>✓</Text>
-              </View>
-              <View>
-                <Text style={styles.sectionTitle}>Manage Shelters</Text>
-                <Text style={styles.sectionSubtitle}>Update availability for registered shelters</Text>
-              </View>
-            </View>
-
-            {sheltersLoading ? (
-              <ActivityIndicator color={COLORS.primary} />
-            ) : shelters.length === 0 ? (
-              <Text style={styles.emptyText}>No shelters have been registered yet.</Text>
-            ) : (
-              shelters.filter((shelter) => shelter.district === user?.district).map((shelter) => {
-                const isActive = shelter.status !== 'inactive';
-                const isManaging = managementId === shelter.id;
-                const isFull = shelter.isFull || (shelter.occupied || 0) >= (shelter.capacity || 0);
-                return (
-                  <View key={shelter.id} style={styles.shelterRow}>
-                    <View style={styles.shelterDetails}>
-                      <Text style={styles.shelterName}>{shelter.name}</Text>
-                      <Text style={styles.shelterMeta}>{shelter.district}{shelter.city ? ` • ${shelter.city}` : ''}</Text>
-                      <Text style={styles.shelterMeta}>Places: {shelter.occupied || 0}/{shelter.capacity} {isFull ? '• FULL' : `• ${shelter.availableSpaces ?? Math.max(0, shelter.capacity - (shelter.occupied || 0))} available`}</Text>
-                      <Text style={styles.shelterMeta}>Condition: {(shelter.condition || 'good').replace('-', ' ')}</Text>
-                    </View>
-                    <View style={styles.shelterActions}>
-                      <Pressable
-                        style={[styles.statusButton, isActive ? styles.activeButton : styles.inactiveButton]}
-                        onPress={() => updateShelterStatus(shelter.id, isActive ? 'inactive' : 'active')}
-                        disabled={statusBusyId === shelter.id}
-                      >
-                        <Text style={styles.statusButtonText}>{isActive ? 'Open' : 'Closed'}</Text>
-                      </Pressable>
-                      <Pressable style={styles.editButton} onPress={() => isManaging ? setManagementId(null) : startManagement(shelter)}>
-                        <Text style={styles.editButtonText}>{isManaging ? 'Cancel' : 'Edit'}</Text>
-                      </Pressable>
-                    </View>
-                    {isManaging && managementDraft && (
-                      <View style={styles.managementEditor}>
-                        <Text style={styles.smallLabel}>Capacity</Text>
-                        <TextInput style={styles.smallInput} keyboardType="numeric" value={managementDraft.capacity} onChangeText={(value) => setManagementDraft((draft) => ({ ...draft, capacity: value.replace(/\D/g, '') }))} />
-                        <Text style={styles.smallLabel}>Occupied</Text>
-                        <TextInput style={styles.smallInput} keyboardType="numeric" value={managementDraft.occupied} onChangeText={(value) => setManagementDraft((draft) => ({ ...draft, occupied: value.replace(/\D/g, '') }))} />
-                        <DropdownField label="Availability" value={managementDraft.availability} options={[{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }]} onChange={(value) => setManagementDraft((draft) => ({ ...draft, availability: value }))} />
-                        <DropdownField label="Live condition" value={managementDraft.condition} options={[{ value: 'good', label: 'Good' }, { value: 'fair', label: 'Fair' }, { value: 'needs-attention', label: 'Needs attention' }, { value: 'critical', label: 'Critical' }]} onChange={(value) => setManagementDraft((draft) => ({ ...draft, condition: value }))} />
-                        <Pressable style={styles.saveManagementButton} onPress={() => saveManagement(shelter.id)} disabled={statusBusyId === shelter.id}>
-                          {statusBusyId === shelter.id ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.statusButtonText}>Save shelter details</Text>}
+                  return (
+                    <View key={shelter.id} style={styles.shelterCard}>
+                      <View style={styles.shelterTop}>
+                        <View style={styles.shelterDetails}>
+                          <Text style={styles.shelterName} numberOfLines={2}>{shelter.name}</Text>
+                          <Text style={styles.shelterMeta}>
+                            {shelter.district}{shelter.city ? `, ${shelter.city}` : ''}
+                          </Text>
+                        </View>
+                        <Pressable
+                          style={[styles.togglePill, isActive ? styles.toggleOpen : styles.toggleClosed]}
+                          onPress={() => updateShelterStatus(shelter.id, isActive ? 'inactive' : 'active')}
+                          disabled={busy}
+                        >
+                          {busy ? (
+                            <ActivityIndicator size="small" color={COLORS.white} />
+                          ) : (
+                            <Text style={styles.toggleText}>{isActive ? 'Open' : 'Closed'}</Text>
+                          )}
                         </Pressable>
                       </View>
-                    )}
-                  </View>
-                );
-              })
-            )}
-          </View>
+
+                      <View style={styles.occupancyRow}>
+                        <Text style={styles.occupancyText}>
+                          <Text style={styles.occupancyStrong}>{occupied}</Text> of {cap} places taken
+                        </Text>
+                        <Text style={[styles.occupancyBadge, { color: barColor }]}>
+                          {isFull ? 'Full' : `${available} free`}
+                        </Text>
+                      </View>
+                      <View style={styles.progressTrack}>
+                        <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: barColor }]} />
+                      </View>
+
+                      <View style={styles.shelterFooter}>
+                        <Pill label={cond.label} fg={cond.fg} bg={cond.bg} />
+                        <Pressable
+                          style={({ pressed }) => [styles.editButton, pressed && styles.pressed]}
+                          onPress={() => (isManaging ? setManagementId(null) : startManagement(shelter))}
+                        >
+                          <Text style={styles.editButtonText}>{isManaging ? 'Cancel' : 'Edit details'}</Text>
+                        </Pressable>
+                      </View>
+
+                      {isManaging && managementDraft && (
+                        <View style={styles.managementEditor}>
+                          <View style={styles.coordinateRow}>
+                            <View style={[styles.coordinateColumn, { marginRight: 6 }]}>
+                              <Field
+                                label="Capacity"
+                                keyboardType="numeric"
+                                value={managementDraft.capacity}
+                                onChangeText={(value) => setManagementDraft((draft) => ({ ...draft, capacity: value.replace(/\D/g, '') }))}
+                              />
+                            </View>
+                            <View style={[styles.coordinateColumn, { marginLeft: 6 }]}>
+                              <Field
+                                label="Occupied"
+                                keyboardType="numeric"
+                                value={managementDraft.occupied}
+                                onChangeText={(value) => setManagementDraft((draft) => ({ ...draft, occupied: value.replace(/\D/g, '') }))}
+                              />
+                            </View>
+                          </View>
+                          <DropdownField
+                            label="Availability"
+                            value={managementDraft.availability}
+                            options={[{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }]}
+                            onChange={(value) => setManagementDraft((draft) => ({ ...draft, availability: value }))}
+                          />
+                          <DropdownField
+                            label="Live condition"
+                            value={managementDraft.condition}
+                            options={[
+                              { value: 'good', label: 'Good' },
+                              { value: 'fair', label: 'Fair' },
+                              { value: 'needs-attention', label: 'Needs attention' },
+                              { value: 'critical', label: 'Critical' },
+                            ]}
+                            onChange={(value) => setManagementDraft((draft) => ({ ...draft, condition: value }))}
+                          />
+                          <PrimaryButton style={styles.saveButton} onPress={() => saveManagement(shelter.id)} busy={busy}>
+                            Save shelter details
+                          </PrimaryButton>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          )}
 
           {/* ================= FOOTER BRAND ================= */}
-
           <View style={styles.footer}>
-            <Text style={styles.footerBrand}>
-              DMEWS
-            </Text>
-
-            <Text style={styles.footerText}>
-              Disaster Management & Early Warning System
-            </Text>
+            <Text style={styles.footerBrand}>DMEWS</Text>
+            <Text style={styles.footerText}>Disaster Management & Early Warning System</Text>
           </View>
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -926,589 +1170,423 @@ export default function App() {
 }
 
 /* =====================================================
-   DMEWS THEME
+   STYLES
 ===================================================== */
 
-const COLORS = {
-  primary: '#1976D2',
-  primaryDark: '#0D47A1',
-  primaryLight: '#E3F2FD',
-
-  background: '#F5F8FC',
-  white: '#FFFFFF',
-
-  text: '#172B4D',
-  secondaryText: '#5F6B7A',
-  placeholder: '#A5AFBC',
-
-  border: '#D9E1EA',
-
-  required: '#E53935',
-
-  success: '#2E7D32',
-  successLight: '#E8F5E9',
+const cardShadow = {
+  elevation: 2,
+  shadowColor: '#0D47A1',
+  shadowOpacity: 0.07,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
+  safeArea: { flex: 1, backgroundColor: COLORS.primaryDark },
+  authSafeArea: { flex: 1, backgroundColor: COLORS.primaryDark },
+  keyboardContainer: { flex: 1 },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  scrollContent: { paddingBottom: 32 },
+  pressed: { opacity: 0.75 },
+
+  /* ================= AUTH ================= */
+  authScroll: { flex: 1, backgroundColor: COLORS.background },
+  authContent: { flexGrow: 1, paddingBottom: 32 },
+  authHero: {
     backgroundColor: COLORS.primaryDark,
+    alignItems: 'center',
+    paddingTop: 36,
+    paddingBottom: 72,
+    paddingHorizontal: 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
   },
-
-  keyboardContainer: {
-    flex: 1,
-  },
-
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-
-  scrollContent: {
-    paddingBottom: 30,
-  },
-
-  authContent: {
-    flexGrow: 1,
+  logoBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    marginBottom: 14,
   },
-
-  authBrand: {
-    color: COLORS.primaryDark,
-    fontSize: 30,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textAlign: 'center',
-  },
-
-  authTitle: {
-    color: COLORS.text,
-    fontSize: 24,
-    fontWeight: '700',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-
+  logoBadgeText: { color: COLORS.primaryDark, fontSize: 32, fontWeight: '900' },
+  authBrand: { color: COLORS.white, fontSize: 28, fontWeight: '800', letterSpacing: 1.5 },
+  authTitle: { color: '#D5E6FA', fontSize: 18, fontWeight: '600', marginTop: 4 },
   authSubtitle: {
-    color: COLORS.secondaryText,
+    color: '#AFCDEE',
     fontSize: 13,
     lineHeight: 19,
-    marginTop: 6,
-    marginBottom: 18,
+    marginTop: 8,
     textAlign: 'center',
+    maxWidth: 280,
   },
-
-  authTabs: {
-    flexDirection: 'row',
-    marginBottom: 8,
+  authCard: { marginTop: -44 },
+  errorBox: {
+    backgroundColor: COLORS.dangerLight,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 14,
   },
-
-  authTab: {
-    flex: 1,
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: COLORS.border,
-    paddingVertical: 10,
-  },
-
-  authTabActive: {
-    borderBottomColor: COLORS.primary,
-  },
-
-  authTabText: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-
-  authError: {
-    color: COLORS.required,
-    fontSize: 13,
-    marginTop: 12,
-  },
+  authError: { color: COLORS.danger, fontSize: 13, lineHeight: 18 },
 
   /* ================= HEADER ================= */
-
   header: {
     backgroundColor: COLORS.primaryDark,
     paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 24,
-
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 14 : 14,
+    paddingBottom: 26,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
+  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerUser: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 12 },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  avatarText: { color: COLORS.primaryDark, fontSize: 20, fontWeight: '800' },
+  greeting: { color: '#AFCDEE', fontSize: 12 },
+  userName: { color: COLORS.white, fontSize: 18, fontWeight: '700', marginTop: 1 },
+  logoutButton: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#4C7DB8',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  logoutText: { color: COLORS.white, fontSize: 12, fontWeight: '700' },
+  districtChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 16,
+  },
+  districtChipText: { color: '#E3F0FF', fontSize: 12, fontWeight: '600' },
+  statsRow: { flexDirection: 'row', marginTop: 18, gap: 10 },
+  statBox: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  statValue: { color: COLORS.white, fontSize: 24, fontWeight: '800' },
+  statLabel: { color: '#BBD6F3', fontSize: 12, marginTop: 2 },
 
-  headerTop: {
+  /* ================= VICTIM ENTRY ================= */
+  victimEntry: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-
-  brand: {
-    color: COLORS.white,
-    fontSize: 27,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-
-  brandSubtitle: {
-    color: '#D5E6FA',
-    fontSize: 10,
-    marginTop: 3,
-    maxWidth: 260,
-  },
-
-  headerIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
     backgroundColor: COLORS.white,
-    justifyContent: 'center',
+    borderRadius: 18,
+    marginHorizontal: 16,
+    marginTop: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...cardShadow,
+  },
+  victimIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: COLORS.primaryLight,
     alignItems: 'center',
-
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    justifyContent: 'center',
+    marginRight: 12,
   },
+  victimIconText: { color: COLORS.primary, fontSize: 22 },
+  victimEntryTitle: { color: COLORS.text, fontSize: 15, fontWeight: '700' },
+  victimEntryText: { color: COLORS.secondaryText, fontSize: 12, marginTop: 2 },
+  chevron: { color: COLORS.placeholder, fontSize: 28, marginLeft: 8, marginTop: -3 },
 
-  headerIconText: {
-    fontSize: 25,
-    color: COLORS.primary,
+  /* ================= SEGMENT / TABS ================= */
+  tabsWrap: { paddingHorizontal: 16, marginTop: 18 },
+  segment: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.slateLight,
+    borderRadius: 14,
+    padding: 4,
   },
-
-  headerDivider: {
-    height: 1,
-    backgroundColor: '#4C7DB8',
-    marginTop: 18,
-    marginBottom: 16,
-  },
-
-  headerTitle: {
-    color: COLORS.white,
-    fontSize: 23,
-    fontWeight: '700',
-  },
-
-  headerDescription: {
-    color: '#D5E6FA',
-    fontSize: 14,
-    marginTop: 4,
-  },
-
-  victimEntry: {
+  segmentItem: { flex: 1, alignItems: 'center', borderRadius: 11, paddingVertical: 11 },
+  segmentItemActive: {
     backgroundColor: COLORS.white,
-    borderRadius: 12,
-    marginTop: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
-
-  victimEntryTitle: {
-    color: COLORS.primaryDark,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-
-  victimEntryText: {
-    color: COLORS.secondaryText,
-    fontSize: 12,
-    marginTop: 3,
-  },
+  segmentText: { color: COLORS.secondaryText, fontSize: 14, fontWeight: '600' },
+  segmentTextActive: { color: COLORS.primaryDark, fontWeight: '800' },
 
   /* ================= CARD ================= */
-
   card: {
     backgroundColor: COLORS.white,
     marginHorizontal: 16,
-    marginTop: 18,
+    marginTop: 16,
     padding: 20,
-
-    borderRadius: 18,
-
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
+    borderRadius: 22,
+    ...cardShadow,
   },
 
-  /* ================= SECTION ================= */
-
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   sectionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: COLORS.primaryLight,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
   },
-
-  sectionIconText: {
-    color: COLORS.primary,
-    fontSize: 26,
-    fontWeight: '500',
-  },
-
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-
-  sectionSubtitle: {
-    fontSize: 12,
-    color: COLORS.secondaryText,
-    marginTop: 2,
+  sectionIconText: { color: COLORS.primary, fontSize: 26, fontWeight: '500', marginTop: -2 },
+  sectionTitle: { fontSize: 19, fontWeight: '800', color: COLORS.text },
+  sectionSubtitle: { fontSize: 12, color: COLORS.secondaryText, marginTop: 2 },
+  groupTitle: {
+    color: COLORS.primaryDark,
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 22,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderSoft,
   },
 
   /* ================= FORM ================= */
-
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginTop: 15,
-    marginBottom: 7,
-  },
-
-  smallLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 7,
-  },
-
-  required: {
-    color: COLORS.required,
-  },
-
-  optional: {
-    color: COLORS.secondaryText,
-    fontWeight: '400',
-  },
+  field: { marginTop: 14 },
+  label: { fontSize: 13, fontWeight: '600', color: COLORS.text, marginBottom: 7 },
+  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  linkText: { color: COLORS.primary, fontSize: 13, fontWeight: '700', marginBottom: 7 },
+  required: { color: COLORS.required },
+  optional: { color: COLORS.secondaryText, fontWeight: '400' },
 
   input: {
-    height: 48,
-
-    borderWidth: 1,
+    height: 50,
+    borderWidth: 1.5,
     borderColor: COLORS.border,
-    borderRadius: 10,
-
+    borderRadius: 12,
     backgroundColor: '#FAFCFE',
-
     paddingHorizontal: 14,
-
     fontSize: 14,
     color: COLORS.text,
   },
-
-  inputText: {
-    flex: 1,
-    fontSize: 14,
-    color: COLORS.text,
+  inputFocused: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.white,
   },
+  inputText: { flex: 1, fontSize: 14, color: COLORS.text },
+  placeholderText: { flex: 1, fontSize: 14, color: COLORS.placeholder },
+  notesInput: { height: 100, paddingTop: 14, paddingBottom: 14 },
 
-  placeholderText: {
+  dropdown: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dropdownDisabled: { backgroundColor: '#F1F4F7', opacity: 0.7 },
+  dropdownArrow: { color: COLORS.secondaryText, fontSize: 20, marginLeft: 8, marginTop: -5 },
+
+  /* Bottom sheet */
+  modalBackdrop: {
     flex: 1,
-    fontSize: 14,
-    color: COLORS.placeholder,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(13, 32, 64, 0.5)',
   },
-
-  dropdown: {
+  sheet: {
+    maxHeight: '75%',
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 28,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: COLORS.border,
+    marginBottom: 14,
+  },
+  sheetTitle: { color: COLORS.text, fontSize: 18, fontWeight: '800', marginBottom: 8 },
+  sheetOption: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 15,
   },
+  sheetOptionSelected: { backgroundColor: COLORS.primaryLight },
+  sheetOptionText: { color: COLORS.text, fontSize: 15 },
+  sheetOptionTextSelected: { color: COLORS.primaryDark, fontWeight: '700' },
+  sheetCheck: { color: COLORS.primary, fontSize: 18, fontWeight: '800' },
 
-  dropdownDisabled: {
-    backgroundColor: '#F1F4F7',
-    opacity: 0.75,
+  /* Coordinates */
+  coordinateBox: {
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 16,
   },
+  coordinateTitle: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
+  coordinateHint: { color: COLORS.secondaryText, fontSize: 11, marginTop: 2 },
+  coordinateRow: { flexDirection: 'row' },
+  coordinateColumn: { flex: 1 },
 
-  dropdownArrow: {
-    color: COLORS.secondaryText,
-    fontSize: 20,
-    marginLeft: 8,
-    marginTop: -5,
-  },
-
-  modalBackdrop: {
-    flex: 1,
+  /* ================= BUTTONS ================= */
+  button: {
+    height: 54,
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    marginTop: 26,
+    flexDirection: 'row',
     justifyContent: 'center',
-    padding: 24,
-    backgroundColor: 'rgba(15, 32, 56, 0.45)',
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
+  buttonPressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
+  buttonDisabled: { opacity: 0.7 },
+  buttonText: { color: COLORS.white, fontSize: 16, fontWeight: '700' },
+  outlineButton: {
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+  },
+  outlineButtonText: { color: COLORS.primary, fontSize: 14, fontWeight: '700' },
 
-  dropdownModal: {
-    maxHeight: '75%',
-    borderRadius: 16,
+  /* ================= STATUS ================= */
+  statusContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 18 },
+  statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.success, marginRight: 6 },
+  statusText: { fontSize: 11, color: COLORS.secondaryText },
+
+  /* ================= SHELTER LIST ================= */
+  listWrap: { marginTop: 22 },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 2,
+  },
+  refreshButton: {
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  refreshText: { color: COLORS.primary, fontSize: 12, fontWeight: '700' },
+
+  shelterCard: {
     backgroundColor: COLORS.white,
+    marginHorizontal: 16,
+    marginTop: 14,
     padding: 18,
-    elevation: 8,
+    borderRadius: 20,
+    ...cardShadow,
   },
+  shelterTop: { flexDirection: 'row', alignItems: 'flex-start' },
+  shelterDetails: { flex: 1, paddingRight: 12 },
+  shelterName: { color: COLORS.text, fontSize: 16, fontWeight: '800' },
+  shelterMeta: { color: COLORS.secondaryText, fontSize: 12, marginTop: 3 },
 
-  dropdownModalTitle: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontWeight: '700',
+  togglePill: {
+    minWidth: 78,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  toggleOpen: { backgroundColor: COLORS.success },
+  toggleClosed: { backgroundColor: COLORS.slate },
+  toggleText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
+
+  occupancyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 18,
     marginBottom: 8,
   },
-
-  dropdownOption: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEF2F6',
-    paddingVertical: 14,
+  occupancyText: { color: COLORS.secondaryText, fontSize: 12 },
+  occupancyStrong: { color: COLORS.text, fontWeight: '800', fontSize: 14 },
+  occupancyBadge: { fontSize: 12, fontWeight: '800' },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.borderSoft,
+    overflow: 'hidden',
   },
+  progressFill: { height: 8, borderRadius: 4 },
 
-  dropdownOptionText: {
-    color: COLORS.text,
-    fontSize: 15,
-  },
-
-  notesInput: {
-    height: 100,
-    paddingTop: 13,
-    paddingBottom: 13,
-  },
-
-  shelterRow: {
+  shelterFooter: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#EEF2F6',
-    paddingVertical: 14,
+    justifyContent: 'space-between',
+    marginTop: 16,
   },
-
-  shelterDetails: {
-    flex: 1,
-    paddingRight: 10,
-  },
-
-  shelterActions: {
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-
-  shelterName: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-
-  shelterMeta: {
-    color: COLORS.secondaryText,
-    fontSize: 12,
-    marginTop: 3,
-  },
-
-  statusButton: {
-    minWidth: 78,
-    minHeight: 36,
-    borderRadius: 9,
+  pill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 14,
     paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-
-  activeButton: {
-    backgroundColor: COLORS.success,
-  },
-
-  inactiveButton: {
-    backgroundColor: '#64748B',
-  },
-
-  statusButtonText: {
-    color: COLORS.white,
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  pillDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
+  pillText: { fontSize: 12, fontWeight: '700' },
 
   editButton: {
-    minWidth: 78,
-    minHeight: 34,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    borderWidth: 1,
+    borderRadius: 18,
+    borderWidth: 1.5,
     borderColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
   },
-
-  editButtonText: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  editButtonText: { color: COLORS.primary, fontSize: 12, fontWeight: '700' },
 
   managementEditor: {
-    width: '100%',
-    marginTop: 12,
+    marginTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#EEF2F6',
-    paddingTop: 12,
+    borderTopColor: COLORS.borderSoft,
+    paddingTop: 4,
   },
+  saveButton: { height: 50, marginTop: 20 },
 
-  smallInput: {
-    height: 42,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 9,
-    backgroundColor: '#FAFCFE',
-    paddingHorizontal: 12,
-    fontSize: 14,
-    color: COLORS.text,
-    marginBottom: 6,
-  },
-
-  saveManagementButton: {
-    minHeight: 44,
-    borderRadius: 10,
+  emptyCard: { alignItems: 'center', paddingVertical: 30 },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
-    marginTop: 8,
+    marginBottom: 12,
   },
-
+  emptyIconText: { color: COLORS.primary, fontSize: 28 },
+  emptyTitle: { color: COLORS.text, fontSize: 16, fontWeight: '800' },
   emptyText: {
     color: COLORS.secondaryText,
     fontSize: 13,
+    lineHeight: 19,
     textAlign: 'center',
-    paddingVertical: 12,
-  },
-
-  /* ================= COORDINATES ================= */
-
-  subSectionTitle: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 22,
-  },
-
-  coordinateHint: {
-    color: COLORS.secondaryText,
-    fontSize: 11,
-    marginTop: 3,
-    marginBottom: 10,
-  },
-
-  coordinateRow: {
-    flexDirection: 'row',
-  },
-
-  coordinateColumn: {
-    flex: 1,
-  },
-
-  /* ================= BUTTON ================= */
-
-  button: {
-    height: 52,
-
-    backgroundColor: COLORS.primary,
-
-    borderRadius: 12,
-
-    marginTop: 25,
-
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-
-    elevation: 3,
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-  },
-
-  buttonPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.99 }],
-  },
-
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-
-  buttonIcon: {
-    color: COLORS.white,
-    fontSize: 24,
-    fontWeight: '400',
-    marginRight: 8,
-    marginTop: -2,
-  },
-
-  buttonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-
-  /* ================= STATUS ================= */
-
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    marginTop: 17,
-  },
-
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: COLORS.success,
-    marginRight: 6,
-  },
-
-  statusText: {
-    fontSize: 11,
-    color: COLORS.secondaryText,
+    paddingVertical: 6,
   },
 
   /* ================= FOOTER ================= */
-
-  footer: {
-    alignItems: 'center',
-    marginTop: 20,
-    paddingHorizontal: 20,
-  },
-
-  footerBrand: {
-    color: COLORS.primary,
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-
-  footerText: {
-    color: COLORS.secondaryText,
-    fontSize: 9,
-    marginTop: 3,
-    textAlign: 'center',
-  },
+  footer: { alignItems: 'center', marginTop: 28, paddingHorizontal: 20 },
+  footerBrand: { color: COLORS.primary, fontSize: 15, fontWeight: '800', letterSpacing: 1.5 },
+  footerText: { color: COLORS.secondaryText, fontSize: 10, marginTop: 3, textAlign: 'center' },
 });

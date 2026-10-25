@@ -17,6 +17,7 @@ function payload(row, peopleById = new Map()) {
       const person = peopleById.get(String(match.personId));
       return {
         personId: String(match.personId),
+        matchType: match.matchType || "metadata",
         confidence: match.confidence,
         metadataScore: match.metadataScore,
         reason: match.reason,
@@ -52,7 +53,7 @@ async function callRecognitionService(file, optionalInfo, candidates) {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  const timeout = setTimeout(() => controller.abort(), 120000);
   try {
     const response = await fetch(`${serviceUrl}/analyze`, {
       method: "POST",
@@ -88,7 +89,7 @@ async function createScan(req, res) {
   const optionalInfo = cleanOptionalInfo(req.body);
   try {
     await connectDb();
-    const candidates = await MissingPerson.find({ photoUrl: { $nin: ["", null] } })
+    const candidates = await MissingPerson.find({})
       .sort({ createdAt: -1 })
       .limit(500)
       .lean()
@@ -103,7 +104,8 @@ async function createScan(req, res) {
       serviceMessage: String(result.message || "").slice(0, 500),
       matches: matches.map((match) => ({
         personId: match.personId,
-        confidence: Number(match.confidence) || 0,
+        matchType: match.matchType === "face" ? "face" : "metadata",
+        confidence: match.confidence == null ? null : Number(match.confidence),
         metadataScore: Number(match.metadataScore) || 0,
         reason: String(match.reason || "").slice(0, 500),
       })),

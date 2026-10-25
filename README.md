@@ -47,7 +47,7 @@ cd DMEWS.worktrees
 python -m pip install -r ML-Service\face_recognition\requirements.txt
 
 Start the service
-python -m uvicorn service:app `
+py -m uvicorn service:app `
   --app-dir ML-Service\face_recognition `
   --host 127.0.0.1 `
   --port 8010

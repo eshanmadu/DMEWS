@@ -14,7 +14,8 @@ const VictimIdentificationScanSchema = new Schema(
     },
     matches: [{
       personId: { type: Schema.Types.ObjectId, ref: "MissingPerson", required: true },
-      confidence: { type: Number, min: 0, max: 1, required: true },
+      matchType: { type: String, enum: ["face", "metadata"], required: true, default: "metadata" },
+      confidence: { type: Number, min: 0, max: 1, default: null },
       metadataScore: { type: Number, min: 0, max: 100, default: 0 },
       reason: { type: String, trim: true, maxlength: 500, default: "" },
     }],
