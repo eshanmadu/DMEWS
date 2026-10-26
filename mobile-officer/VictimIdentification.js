@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Platform,
   Pressable,
   SafeAreaView,
@@ -161,6 +162,8 @@ function CameraScreen({ onCancel, onCaptured }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraError, setCameraError] = useState('');
   const [capturing, setCapturing] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState('back');
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) requestPermission();
@@ -173,7 +176,7 @@ function CameraScreen({ onCancel, onCaptured }) {
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.8, skipProcessing: false });
       if (!photo?.uri) throw new Error('The camera did not return an image. Please try again.');
-      onCaptured(photo);
+      setCapturedPhoto(photo);
     } catch (error) {
       setCameraError(error?.message || 'Unable to capture the image.');
     } finally {
@@ -202,15 +205,36 @@ function CameraScreen({ onCancel, onCaptured }) {
     );
   }
 
+  if (capturedPhoto) {
+    return (
+      <View style={styles.cameraScreen}>
+        <Image source={{ uri: capturedPhoto.uri }} style={styles.previewImage} resizeMode="contain" />
+        <View style={styles.previewPanel}>
+          <Text style={styles.previewTitle}>Review captured photo</Text>
+          <Text style={styles.previewText}>Use the photo only when one face is clearly visible and well lit.</Text>
+          <ActionButton onPress={() => onCaptured(capturedPhoto)}>Use photo for analysis</ActionButton>
+          <ActionButton onPress={() => setCapturedPhoto(null)} secondary>Retake photo</ActionButton>
+          <ActionButton onPress={onCancel} secondary>Cancel</ActionButton>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.cameraScreen}>
-      <CameraView ref={cameraRef} style={styles.camera} facing="back">
+      <CameraView ref={cameraRef} style={styles.camera} facing={cameraFacing}>
         <View style={styles.cameraTop}>
           <View style={styles.cameraTitlePill}>
             <Text style={styles.cameraTitle}>Position face in guide</Text>
           </View>
           <Pressable onPress={onCancel} style={({ pressed }) => [styles.closeButton, pressed && styles.pressedButton]}>
             <Text style={styles.closeButtonText}>Close</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setCameraFacing((current) => current === 'back' ? 'front' : 'back')}
+            style={({ pressed }) => [styles.closeButton, pressed && styles.pressedButton]}
+          >
+            <Text style={styles.closeButtonText}>{cameraFacing === 'back' ? 'Front camera' : 'Back camera'}</Text>
           </Pressable>
         </View>
 
@@ -340,8 +364,13 @@ function ResultScreen({ photo, result, error, onRetake, onBack }) {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Reference photo check</Text>
             <Text style={styles.cardText}>
-              {result.analysisStats.withPhotoUrl || 0} candidate photo(s) supplied; {result.analysisStats.processedReferences || 0} processed reference(s); {result.analysisStats.downloadOrDecodeErrors || 0} unavailable or unreadable.
+              Submitted image: {result.analysisStats.queryFaceCount || 0} detected face(s). {result.analysisStats.withPhotoUrl || 0} candidate photo(s) supplied; {result.analysisStats.processedReferences || 0} processed reference(s); {result.analysisStats.downloadOrDecodeErrors || 0} unavailable or unreadable.
             </Text>
+            {result.analysisStats.candidateStatuses?.belowThreshold ? (
+              <Text style={styles.cardText}>
+                {result.analysisStats.candidateStatuses.belowThreshold} reference face(s) were readable but did not pass the similarity threshold.
+              </Text>
+            ) : null}
           </View>
         ) : null}
         <View style={{ flex: 1 }}>
@@ -359,6 +388,18 @@ function ResultScreen({ photo, result, error, onRetake, onBack }) {
         return (
           <View key={match.personId} style={styles.card}>
             <View style={styles.matchHeader}>
+              {match.person?.photoUrl ? (
+                <Image
+                  source={{ uri: match.person.photoUrl }}
+                  style={styles.matchPhoto}
+                  resizeMode="cover"
+                  accessibilityLabel={`${match.person?.fullName || 'Missing person'} reference photo`}
+                />
+              ) : (
+                <View style={styles.matchPhotoPlaceholder}>
+                  <Text style={styles.matchPhotoPlaceholderText}>No photo</Text>
+                </View>
+              )}
               <View style={styles.rankBadge}>
                 <Text style={styles.rankText}>{index + 1}</Text>
               </View>
@@ -494,7 +535,12 @@ export default function VictimIdentification({ apiUrl, token, onBack }) {
       }
       setResult(data.scan);
     } catch (error) {
-      setAnalysisError(error.message);
+      const message = String(error?.message || 'Unknown request error');
+      setAnalysisError(
+        message.toLowerCase().includes('fetch failed') || message.toLowerCase().includes('network request failed')
+          ? 'Cannot reach the DMEWS backend. Confirm the phone and computer are on the same Wi-Fi and restart Expo after the backend starts.'
+          : message
+      );
     } finally {
       setScreen('result');
     }
@@ -684,6 +730,15 @@ const styles = StyleSheet.create({
   /* Camera */
   cameraScreen: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1, justifyContent: 'space-between' },
+  previewImage: { flex: 1, backgroundColor: '#000' },
+  previewPanel: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+  },
+  previewTitle: { color: COLORS.text, fontSize: 18, fontWeight: '800' },
+  previewText: { color: COLORS.secondaryText, fontSize: 13, lineHeight: 19, marginTop: 6 },
   cameraTop: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -786,6 +841,23 @@ const styles = StyleSheet.create({
   resultCount: { color: COLORS.secondaryText, fontSize: 13, marginTop: 4 },
 
   matchHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  matchPhoto: {
+    backgroundColor: COLORS.borderSoft,
+    borderRadius: 12,
+    height: 64,
+    marginRight: 12,
+    width: 64,
+  },
+  matchPhotoPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: COLORS.borderSoft,
+    borderRadius: 12,
+    height: 64,
+    justifyContent: 'center',
+    marginRight: 12,
+    width: 64,
+  },
+  matchPhotoPlaceholderText: { color: COLORS.secondaryText, fontSize: 10, fontWeight: '700' },
   rankBadge: {
     width: 34,
     height: 34,

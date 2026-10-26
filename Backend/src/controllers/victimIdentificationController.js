@@ -117,9 +117,18 @@ async function createScan(req, res) {
     return res.status(201).json({ scan: payload(scan, peopleById) });
   } catch (error) {
     console.error("Victim identification scan error", error);
+    const recognitionUnavailable =
+      error?.cause?.code === "ECONNREFUSED" ||
+      error?.cause?.code === "ENOTFOUND" ||
+      error?.cause?.code === "ECONNRESET" ||
+      error?.code === "ECONNREFUSED" ||
+      error?.code === "ENOTFOUND" ||
+      error?.code === "ECONNRESET";
     return res.status(502).json({
       message: error?.name === "AbortError"
         ? "Victim identification analysis timed out."
+        : recognitionUnavailable
+        ? "Face recognition service stopped during analysis. Restart the Python service on port 8010 and try again."
         : `Victim identification analysis failed: ${error?.message || "unknown service error"}`,
     });
   }

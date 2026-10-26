@@ -16,7 +16,9 @@ from threading import Lock
 from typing import Any
 from urllib.request import Request, urlopen
 
+import numpy as np
 from fastapi import FastAPI, HTTPException
+from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
 try:
@@ -75,6 +77,19 @@ def image_from_url(url: str) -> bytes:
         return response.read()
 
 
+def load_normalized_image(raw: bytes) -> Any:
+    with Image.open(io.BytesIO(raw)) as image:
+        normalized = ImageOps.exif_transpose(image).convert("RGB")
+        max_dimension = 1600
+        if max(normalized.size) > max_dimension:
+            scale = max_dimension / max(normalized.size)
+            normalized = normalized.resize(
+                (max(1, round(normalized.width * scale)), max(1, round(normalized.height * scale))),
+                Image.Resampling.LANCZOS,
+            )
+        return np.asarray(normalized)
+
+
 def reference_encoding(candidate: Candidate) -> Any:
     if not candidate.photoUrl:
         return None
@@ -82,13 +97,27 @@ def reference_encoding(candidate: Candidate) -> Any:
         if candidate.photoUrl in _reference_cache:
             return _reference_cache[candidate.photoUrl]
     reference_raw = image_from_url(candidate.photoUrl)
-    reference_image = face_recognition.load_image_file(io.BytesIO(reference_raw))
-    reference_faces = face_recognition.face_encodings(reference_image)
+    reference_image = load_normalized_image(reference_raw)
+    reference_locations = face_recognition.face_locations(
+        reference_image,
+        number_of_times_to_upsample=2,
+        model="hog",
+    )
+    reference_faces = face_recognition.face_encodings(reference_image, reference_locations)
     encoding = reference_faces[0] if len(reference_faces) == 1 else None
     if encoding is not None:
         with _reference_cache_lock:
             _reference_cache[candidate.photoUrl] = encoding
     return encoding
+
+
+def detect_faces(image: Any) -> list[Any]:
+    locations = face_recognition.face_locations(
+        image,
+        number_of_times_to_upsample=2,
+        model="hog",
+    )
+    return face_recognition.face_encodings(image, locations)
 
 
 def compare_with_stats(query_encoding: Any, candidate: Candidate) -> tuple[dict[str, Any] | None, str]:
@@ -129,9 +158,14 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
 
     query_raw = decode_image(request.imageBase64)
     query_faces = []
+    query_dimensions = None
     try:
-        query_image = face_recognition.load_image_file(io.BytesIO(query_raw))
-        query_faces = face_recognition.face_encodings(query_image)
+        query_image = load_normalized_image(query_raw)
+        query_dimensions = {
+            "width": int(query_image.shape[1]),
+            "height": int(query_image.shape[0]),
+        }
+        query_faces = detect_faces(query_image)
     except (OSError, ValueError):
         query_faces = []
 
@@ -157,14 +191,25 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
             ),
         }, face_status
 
-    with ThreadPoolExecutor(max_workers=min(8, max(1, len(request.candidates)))) as executor:
+    # dlib uses native memory internally; concurrent face detection can terminate
+    # the process on constrained machines without raising a Python exception.
+    with ThreadPoolExecutor(max_workers=1) as executor:
         scored = list(executor.map(score_candidate, request.candidates))
     matches = [match for match, _status in scored if match]
+    status_counts = {
+        "missingUrl": sum(1 for _match, status in scored if status == "missing_url"),
+        "noFace": sum(1 for _match, status in scored if status == "no_face"),
+        "belowThreshold": sum(1 for _match, status in scored if status == "below_threshold"),
+        "downloadOrDecodeErrors": sum(1 for _match, status in scored if status == "download_or_decode_error"),
+    }
     reference_stats = {
         "candidates": len(request.candidates),
         "withPhotoUrl": sum(1 for candidate in request.candidates if candidate.photoUrl),
-        "downloadOrDecodeErrors": sum(1 for _match, status in scored if status == "download_or_decode_error"),
+        "downloadOrDecodeErrors": status_counts["downloadOrDecodeErrors"],
         "processedReferences": sum(1 for _match, status in scored if status in {"matched", "below_threshold", "no_face"}),
+        "queryFaceCount": len(query_faces),
+        "queryDimensions": query_dimensions,
+        "candidateStatuses": status_counts,
     }
     matches.sort(
         key=lambda item: (
@@ -180,7 +225,7 @@ def analyze(request: AnalysisRequest) -> dict[str, Any]:
         "message": (
             "Potential matches ranked for officer review. Face and details are supporting signals only."
             if len(query_faces) == 1
-            else "No clear face was detected. Details-based potential matches are shown for officer review."
+            else "No single face was detected in the submitted image. Retake the photo with one face centered in good lighting."
         ),
         "referenceStats": reference_stats,
     }
