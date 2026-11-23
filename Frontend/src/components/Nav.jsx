@@ -50,10 +50,18 @@ export function Nav() {
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const languageDropdownRef = useRef(null);
   const languageCloseTimeoutRef = useRef(null);
+  // Alerts dropdown state
+  const [alertsDropdownOpen, setAlertsDropdownOpen] = useState(false);
+  const alertsDropdownRef = useRef(null);
+  const alertsCloseTimeoutRef = useRef(null);
 
   const dropdownItems = [
     { href: "/incidents/missing-persons", label: t("nav.findPeople", "Find People") },
     { href: "/incidents", label: t("nav.reports", "Reports") }, // keep current path
+  ];
+  const alertsDropdownItems = [
+    { href: "/alerts", label: t("nav.alerts") },
+    { href: "/my-risk", label: t("nav.myRisk", "My risk") },
   ];
   const volunteerDropdownItems = [
     { href: "/volunteer", label: t("nav.volunteer") },
@@ -63,6 +71,7 @@ export function Nav() {
   // Close incidents dropdown on route change
   useEffect(() => {
     setIncidentsDropdownOpen(false);
+    setAlertsDropdownOpen(false);
     setVolunteerDropdownOpen(false);
     setProfileDropdownOpen(false);
   }, [pathname]);
@@ -75,6 +84,12 @@ export function Nav() {
         !incidentsDropdownRef.current.contains(event.target)
       ) {
         setIncidentsDropdownOpen(false);
+      }
+      if (
+        alertsDropdownRef.current &&
+        !alertsDropdownRef.current.contains(event.target)
+      ) {
+        setAlertsDropdownOpen(false);
       }
       if (
         volunteerDropdownRef.current &&
@@ -116,6 +131,18 @@ export function Nav() {
   const cancelClose = () => {
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
   };
+  const openAlertsDropdown = () => {
+    if (alertsCloseTimeoutRef.current) clearTimeout(alertsCloseTimeoutRef.current);
+    setAlertsDropdownOpen(true);
+  };
+  const closeAlertsDropdownWithDelay = () => {
+    alertsCloseTimeoutRef.current = setTimeout(() => {
+      setAlertsDropdownOpen(false);
+    }, 150);
+  };
+  const cancelAlertsClose = () => {
+    if (alertsCloseTimeoutRef.current) clearTimeout(alertsCloseTimeoutRef.current);
+  };
   const openVolunteerDropdown = () => {
     if (volunteerCloseTimeoutRef.current)
       clearTimeout(volunteerCloseTimeoutRef.current);
@@ -144,6 +171,9 @@ export function Nav() {
   };
 
   const isIncidentsActive = dropdownItems.some((item) => pathname === item.href);
+  const isAlertsActive = alertsDropdownItems.some(
+    (item) => pathname === item.href || pathname?.startsWith(`${item.href}/`)
+  );
   const isVolunteerActive = volunteerDropdownItems.some(
     (item) => pathname === item.href
   );
@@ -268,6 +298,65 @@ export function Nav() {
         <nav className="flex items-center gap-3">
           <div className="flex gap-1">
             {linkKeys.map(({ href, key: linkKey, icon: Icon }) => {
+              // Alerts dropdown: Alerts list + My risk
+              if (linkKey === "alerts") {
+                return (
+                  <div
+                    key="alerts-dropdown"
+                    ref={alertsDropdownRef}
+                    className="relative"
+                    onMouseEnter={openAlertsDropdown}
+                    onMouseLeave={closeAlertsDropdownWithDelay}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setAlertsDropdownOpen((prev) => !prev)}
+                      className={clsx(
+                        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
+                        isAlertsActive || alertsDropdownOpen
+                          ? "bg-white/15 text-white shadow-sm"
+                          : "text-sky-100/80 hover:bg-sky-500/40 hover:text-white"
+                      )}
+                      aria-expanded={alertsDropdownOpen}
+                      aria-haspopup="true"
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="hidden sm:inline">{t(`nav.${linkKey}`)}</span>
+                      <ChevronDown
+                        className={clsx(
+                          "h-3 w-3 transition-transform duration-200",
+                          alertsDropdownOpen && "rotate-180"
+                        )}
+                      />
+                    </button>
+                    {alertsDropdownOpen && (
+                      <div
+                        className="absolute left-0 mt-2 min-w-[160px] rounded-md bg-white py-1 shadow-lg ring-1 ring-black/5"
+                        onMouseEnter={cancelAlertsClose}
+                        onMouseLeave={closeAlertsDropdownWithDelay}
+                        role="menu"
+                        aria-orientation="vertical"
+                      >
+                        {alertsDropdownItems.map((item) => (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={clsx(
+                              "block px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100",
+                              pathname === item.href && "bg-gray-100 font-medium"
+                            )}
+                            role="menuitem"
+                            onClick={() => setAlertsDropdownOpen(false)}
+                          >
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               // Replace the Incidents link with dropdown
               if (linkKey === "incidents") {
                 return (

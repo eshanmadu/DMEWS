@@ -21,6 +21,7 @@ import {
   BadgeCheck,
   Route,
   ScanFace,
+  Waves,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/admin/list", label: "Alert List", icon: FileText },
   { href: "/admin/risk", label: "Risk management", icon: ShieldAlert },
   { href: "/admin/risk-prediction", label: "Risk prediction", icon: Sparkles },
+  { href: "/admin/cascade-risk", label: "Cascade risk", icon: Waves },
   { href: "/admin/shelters", label: "Shelters", icon: Building2 },
   { href: "/admin/routing-system", label: "Routing system", icon: Route },
   { href: "/admin/users", label: "Users", icon: Users },

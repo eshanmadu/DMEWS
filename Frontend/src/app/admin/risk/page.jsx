@@ -19,12 +19,15 @@ import {
   Waves,
   Radio,
 } from "lucide-react";
+import {
+  IRRIGATION_DASHBOARD,
+  IRRIGATION_SOURCE,
+  buildGaugeFeedUrl,
+  getStationStatus,
+  parseArcGISFeed,
+} from "@/lib/riverGauges";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-const IRRIGATION_SOURCE =
-  "https://services3.arcgis.com/J7ZFXmR8rSmQ3FGf/arcgis/rest/services/gauges_2_view/FeatureServer/0/query";
-const IRRIGATION_DASHBOARD =
-  "https://www.arcgis.com/apps/dashboards/2cffe83c9ff5497d97375498bdf3ff38";
 const REFRESH_INTERVAL = 60_000;
 const LANDSLIDE_SOURCE =
   "https://www.dmc.gov.lk/index.php?option=com_dmcreports&view=reports&Itemid=276&report_type_id=5&lang=en";
@@ -32,55 +35,6 @@ const LANDSLIDE_SOURCE =
 /* ------------------------------------------------------------------ */
 /* Data helpers                                                        */
 /* ------------------------------------------------------------------ */
-
-function parseArcGISFeed(payload) {
-  const stations = new Map();
-  for (const feature of payload?.features || []) {
-    const attributes = feature?.attributes || {};
-    const station = String(attributes.gauge || "").trim();
-    const timestamp = new Date(Number(attributes.EditDate || attributes.CreationDate));
-    const level = Number(attributes.water_level);
-    const latitude = Number(feature?.geometry?.y);
-    const longitude = Number(feature?.geometry?.x);
-    if (!station || !Number.isFinite(level) || Number.isNaN(timestamp.getTime())) continue;
-    if (!stations.has(station)) stations.set(station, []);
-    stations.get(station).push({
-      station,
-      timestamp,
-      level,
-      basin: String(attributes.basin || "Unknown basin").trim(),
-      rainfall: Number(attributes.rain_fall),
-      alertLevel: Number(attributes.alertpull),
-      minorFloodLevel: Number(attributes.minorpull),
-      majorFloodLevel: Number(attributes.majorpull),
-      latitude,
-      longitude,
-    });
-  }
-
-  return [...stations.values()]
-    .map((observations) => {
-      observations.sort((a, b) => a.timestamp - b.timestamp);
-      const latest = observations.at(-1);
-      const previous = observations.at(-2);
-      return {
-        ...latest,
-        change: previous ? latest.level - previous.level : 0,
-        observations: observations.slice(-48),
-      };
-    })
-    .sort((a, b) => b.timestamp - a.timestamp);
-}
-
-function getStationStatus(station) {
-  if (station.level >= station.majorFloodLevel)
-    return { label: "Major flood", color: "#dc2626", badge: "bg-red-50 text-red-700 ring-1 ring-red-200" };
-  if (station.level >= station.minorFloodLevel)
-    return { label: "Minor flood", color: "#ea580c", badge: "bg-orange-50 text-orange-700 ring-1 ring-orange-200" };
-  if (station.level >= station.alertLevel)
-    return { label: "Alert", color: "#eab308", badge: "bg-yellow-50 text-yellow-800 ring-1 ring-yellow-200" };
-  return { label: "Normal", color: "#16a34a", badge: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" };
-}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -857,10 +811,7 @@ export default function AdminRiskPage() {
     setError("");
     try {
       const [feedResponse, riskResponse] = await Promise.all([
-        fetch(
-          `${IRRIGATION_SOURCE}?where=1%3D1&outFields=basin%2Cgauge%2Cwater_level%2Crain_fall%2Calertpull%2Cminorpull%2Cmajorpull%2CCreationDate%2CEditDate&orderByFields=CreationDate%20DESC&resultRecordCount=1000&returnGeometry=true&f=json&refresh=${Date.now()}`,
-          { cache: "no-store" }
-        ),
+        fetch(buildGaugeFeedUrl(), { cache: "no-store" }),
         fetch(`${API_BASE}/risk-levels`, { cache: "no-store" }),
       ]);
       const feed = await feedResponse.json();

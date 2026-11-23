@@ -1,4 +1,5 @@
 const fs = require("node:fs/promises");
+const fsSync = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
@@ -45,8 +46,23 @@ function parseReports(html) {
   return reports;
 }
 
+function resolvePythonCommand() {
+  if (process.env.LANDSLIDE_PYTHON_COMMAND) return process.env.LANDSLIDE_PYTHON_COMMAND;
+
+  const isWindows = process.platform === "win32";
+  const venvPython = path.join(
+    __dirname,
+    "../../.venv",
+    isWindows ? "Scripts/python.exe" : "bin/python"
+  );
+  if (fsSync.existsSync(venvPython)) return venvPython;
+
+  // macOS/Linux usually ship only `python3`; Windows uses `python`.
+  return isWindows ? "python" : "python3";
+}
+
 function runExtractor(pdfPath) {
-  const command = process.env.LANDSLIDE_PYTHON_COMMAND || "python";
+  const command = resolvePythonCommand();
   const scriptPath = path.join(__dirname, "../../scripts/extract_landslide_report.py");
 
   return new Promise((resolve, reject) => {
