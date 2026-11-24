@@ -52,7 +52,7 @@ py -m uvicorn service:app `
   --host 127.0.0.1 `
   --port 8010
 
-
+s
 Open **http://localhost:3000**. The app fetches data from the Backend API (`NEXT_PUBLIC_API_URL`, default `http://localhost:4000`).
 
 ## Running both

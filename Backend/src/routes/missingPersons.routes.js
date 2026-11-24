@@ -13,6 +13,7 @@ const {
   updateFoundReport,
   deleteMissingReport,
   deleteFoundReport,
+  suggestFeatures,
 } = require("../controllers/missingPersonsController");
 
 const upload = multer({
@@ -30,6 +31,7 @@ router.get("/location-suggest", suggestLocationQuery);
 router.get("/my", authMiddleware, listMyPersonReports);
 router.get("/", listPersonReports);
 router.get("/admin/overview", adminMiddleware, adminPersonOverview);
+router.post("/suggest-features", authMiddleware, upload.single("photo"), suggestFeatures);
 router.post("/missing", optionalAuthMiddleware, upload.single("photo"), createMissingReport);
 router.patch("/missing/:id", authMiddleware, upload.single("photo"), updateMissingReport);
 router.post("/found", optionalAuthMiddleware, upload.single("photo"), createFoundReport);

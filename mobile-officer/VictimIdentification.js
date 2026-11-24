@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as FileSystem from 'expo-file-system/legacy';
+import { File } from 'expo-file-system';
 
 const COLORS = {
   primary: '#1976D2',
@@ -36,11 +36,43 @@ const COLORS = {
 };
 
 const STEPS = [
-  { key: 'optional', label: 'Details' },
-  { key: 'camera', label: 'Photo' },
-  { key: 'processing', label: 'Analysis' },
+  { key: 'camera', label: 'Photos' },
+  { key: 'extracting', label: 'AI reading' },
+  { key: 'review', label: 'Review' },
   { key: 'result', label: 'Result' },
 ];
+const STEP_ALIASES = { matching: 'result' };
+const MAX_PHOTOS = 4;
+
+const MARK_FIELDS = [
+  { key: 'bodyLocation', label: 'Body location', placeholder: 'e.g. left forearm' },
+  { key: 'description', label: 'Description', placeholder: 'Shape, size, colour, design' },
+  { key: 'visibleText', label: 'Text in mark', placeholder: 'Exact letters, if any' },
+];
+const ITEM_FIELDS = [
+  { key: 'item', label: 'Item', placeholder: 'e.g. T-shirt, ring' },
+  { key: 'color', label: 'Colour', placeholder: '' },
+  { key: 'bodyLocation', label: 'Worn / found on', placeholder: '' },
+  { key: 'description', label: 'Description', placeholder: 'Pattern, logo, printed text' },
+];
+const MARK_SECTIONS = [
+  { key: 'tattoos', title: 'Tattoos' },
+  { key: 'scars', title: 'Scars' },
+  { key: 'birthmarks', title: 'Birthmarks' },
+  { key: 'piercings', title: 'Piercings' },
+  { key: 'otherMarks', title: 'Other distinguishing features' },
+];
+const ITEM_SECTIONS = [
+  { key: 'clothing', title: 'Clothing' },
+  { key: 'jewellery', title: 'Jewellery' },
+  { key: 'personalItems', title: 'Personal items' },
+];
+const FACE_STATUS_TEXT = {
+  ok: 'A clear face was found and will be compared with missing-person photos.',
+  no_face: 'No face was found in the photos. Matching will use the details only.',
+  multiple_faces: 'Several faces were found and none is clearly the main one. Matching will use the details only — retake with one face if possible.',
+  error: 'The face service could not process the photos. Matching will use the details only.',
+};
 
 /* =====================================================
    SHARED COMPONENTS
@@ -82,7 +114,7 @@ function Field({ label, style, ...props }) {
 }
 
 function StepIndicator({ current }) {
-  const index = STEPS.findIndex((s) => s.key === current);
+  const index = STEPS.findIndex((s) => s.key === (STEP_ALIASES[current] || current));
   if (index < 0) return null;
   return (
     <View style={styles.stepsRow}>
@@ -123,7 +155,7 @@ function Dashboard({ onScan, onHistory }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.noticeTitle}>How it works</Text>
           <Text style={styles.noticeText}>
-            Capture a photo, add optional context, and send it for ranked potential matches.
+            Capture the face and any tattoos or scars. The AI fills in the details, you check them, then DMEWS ranks potential matches.
           </Text>
         </View>
       </View>
@@ -157,7 +189,7 @@ function Dashboard({ onScan, onHistory }) {
   );
 }
 
-function CameraScreen({ onCancel, onCaptured }) {
+function CameraScreen({ photoCount, onCancel, onCaptured }) {
   const cameraRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraError, setCameraError] = useState('');
@@ -206,14 +238,24 @@ function CameraScreen({ onCancel, onCaptured }) {
   }
 
   if (capturedPhoto) {
+    const total = photoCount + 1;
     return (
       <View style={styles.cameraScreen}>
         <Image source={{ uri: capturedPhoto.uri }} style={styles.previewImage} resizeMode="contain" />
         <View style={styles.previewPanel}>
-          <Text style={styles.previewTitle}>Review captured photo</Text>
-          <Text style={styles.previewText}>Use the photo only when one face is clearly visible and well lit.</Text>
-          <ActionButton onPress={() => onCaptured(capturedPhoto)}>Use photo for analysis</ActionButton>
-          <ActionButton onPress={() => setCapturedPhoto(null)} secondary>Retake photo</ActionButton>
+          <Text style={styles.previewTitle}>Photo {total} of up to {MAX_PHOTOS}</Text>
+          <Text style={styles.previewText}>
+            Take the face first, then close-ups of tattoos, scars or clothing if visible.
+          </Text>
+          <ActionButton onPress={() => onCaptured(capturedPhoto, true)}>
+            Analyse {total} photo{total === 1 ? '' : 's'}
+          </ActionButton>
+          {total < MAX_PHOTOS ? (
+            <ActionButton onPress={() => { onCaptured(capturedPhoto, false); setCapturedPhoto(null); }} secondary>
+              Keep and take another photo
+            </ActionButton>
+          ) : null}
+          <ActionButton onPress={() => setCapturedPhoto(null)} secondary>Retake this photo</ActionButton>
           <ActionButton onPress={onCancel} secondary>Cancel</ActionButton>
         </View>
       </View>
@@ -225,7 +267,9 @@ function CameraScreen({ onCancel, onCaptured }) {
       <CameraView ref={cameraRef} style={styles.camera} facing={cameraFacing}>
         <View style={styles.cameraTop}>
           <View style={styles.cameraTitlePill}>
-            <Text style={styles.cameraTitle}>Position face in guide</Text>
+            <Text style={styles.cameraTitle}>
+              {photoCount === 0 ? 'Position face in guide' : `Photo ${photoCount + 1}: tattoo, scar or clothing`}
+            </Text>
           </View>
           <Pressable onPress={onCancel} style={({ pressed }) => [styles.closeButton, pressed && styles.pressedButton]}>
             <Text style={styles.closeButtonText}>Close</Text>
@@ -256,65 +300,156 @@ function CameraScreen({ onCancel, onCaptured }) {
   );
 }
 
-function OptionalInfoScreen({ value, onChange, onContinue, onBack }) {
+function Choice({ label, value, options, onChange }) {
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.choiceRow}>
+        {options.map((option) => (
+          <Pressable
+            key={option}
+            onPress={() => onChange(option)}
+            style={[styles.choiceChip, value === option && styles.choiceChipOn]}
+          >
+            <Text style={[styles.choiceText, value === option && styles.choiceTextOn]}>{option}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function ListEditor({ title, items, fields, onChange }) {
+  const list = Array.isArray(items) ? items : [];
+  const blank = Object.fromEntries(fields.map((f) => [f.key, '']));
+  const update = (index, key, text) => onChange(list.map((item, i) => (i === index ? { ...item, [key]: text } : item)));
+  return (
+    <View style={styles.card}>
+      <View style={styles.listHeader}>
+        <Text style={[styles.cardTitle, { flex: 1 }]}>{title}</Text>
+        <Text style={styles.listCount}>{list.length}</Text>
+      </View>
+      {list.length === 0 ? <Text style={styles.cardText}>None recorded.</Text> : null}
+      {list.map((item, index) => (
+        <View key={index} style={styles.listItem}>
+          {fields.map((field) => (
+            <Field
+              key={field.key}
+              label={field.label}
+              value={String(item[field.key] ?? '')}
+              placeholder={field.placeholder}
+              onChangeText={(text) => update(index, field.key, text)}
+            />
+          ))}
+          <Pressable onPress={() => onChange(list.filter((_, i) => i !== index))}>
+            <Text style={styles.removeText}>Remove</Text>
+          </Pressable>
+        </View>
+      ))}
+      <Pressable onPress={() => onChange([...list, blank])}>
+        <Text style={styles.addText}>+ Add</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function DetailsReviewScreen({ scan, details, onChange, onSubmit, onCancel, error }) {
+  const set = (key) => (value) => onChange({ ...details, [key]: value });
+  const extraction = scan?.extraction || {};
+  const aiOk = extraction.status === 'ok';
+  const warnings = scan?.face?.quality?.warnings || [];
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-      <Text style={styles.title}>Help narrow the review</Text>
+      <Text style={styles.title}>Review the details</Text>
       <Text style={styles.subtitle}>
-        These fields support ranking only. Leave them blank when unknown.
+        {aiOk
+          ? 'Pre-filled by AI from the photos. Check every field against the photos and correct anything wrong.'
+          : 'The AI could not fill in the details. Enter what you can see.'}
       </Text>
+
+      <View style={[styles.notice, !aiOk && styles.warningNotice]}>
+        <View style={[styles.noticeIcon, !aiOk && styles.noticeIconWarning]}>
+          <Text style={[styles.noticeIconText, !aiOk && { color: COLORS.danger }]}>{aiOk ? 'AI' : '!'}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.noticeTitle}>{aiOk ? 'AI suggestions' : 'Manual entry needed'}</Text>
+          <Text style={styles.noticeText}>{aiOk ? 'AI can miss or misread marks. You are responsible for the final details.' : extraction.error || 'AI unavailable.'}</Text>
+        </View>
+      </View>
+
       <View style={styles.card}>
-        <Field
-          label="Last known location"
-          value={value.location}
-          onChangeText={(location) => onChange({ ...value, location })}
-          placeholder="Town, shelter or incident area"
-        />
+        <Text style={styles.cardTitle}>Face check</Text>
+        <Text style={styles.cardText}>{FACE_STATUS_TEXT[scan?.face?.status] || FACE_STATUS_TEXT.error}</Text>
+        {warnings.length ? (
+          <Text style={[styles.cardText, { color: COLORS.warning }]}>Quality: {warnings.map((w) => w.replace(/_/g, ' ')).join(', ')}</Text>
+        ) : null}
+      </View>
+
+      {aiOk && scan?.aiDetails?.uncertainties ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>AI could not determine</Text>
+          <Text style={styles.cardText}>{scan.aiDetails.uncertainties}</Text>
+        </View>
+      ) : null}
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Where and when found</Text>
+        <Field label="Found location (required)" value={details.foundLocation || ''} onChangeText={set('foundLocation')} placeholder="Town, shelter or incident area" />
+        <Field label="Date found (YYYY-MM-DD)" value={details.foundDate || ''} onChangeText={set('foundDate')} placeholder="2026-11-24" />
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Physical description</Text>
         <View style={styles.row}>
           <View style={[styles.col, { marginRight: 6 }]}>
-            <Field
-              label="Approximate age"
-              value={value.age}
-              onChangeText={(age) => onChange({ ...value, age: age.replace(/\D/g, '').slice(0, 3) })}
-              keyboardType="number-pad"
-              placeholder="Optional"
-            />
+            <Field label="Age from" value={String(details.estimatedAgeMin ?? '')} keyboardType="number-pad"
+              onChangeText={(v) => set('estimatedAgeMin')(v.replace(/\D/g, '').slice(0, 3))} />
           </View>
           <View style={[styles.col, { marginLeft: 6 }]}>
-            <Field
-              label="Gender"
-              value={value.gender}
-              onChangeText={(gender) => onChange({ ...value, gender })}
-              placeholder="Optional"
-            />
+            <Field label="Age to" value={String(details.estimatedAgeMax ?? '')} keyboardType="number-pad"
+              onChangeText={(v) => set('estimatedAgeMax')(v.replace(/\D/g, '').slice(0, 3))} />
           </View>
         </View>
-        <Field
-          label="Officer notes"
-          style={styles.notesInput}
-          value={value.notes}
-          onChangeText={(notes) => onChange({ ...value, notes })}
-          multiline
-          placeholder="Optional incident context"
-        />
+        <Choice label="Sex" value={details.sex} options={['male', 'female', 'unknown']} onChange={set('sex')} />
+        <Choice label="Build" value={details.build} options={['slim', 'medium', 'heavy', 'unknown']} onChange={set('build')} />
+        <Field label="Skin tone" value={details.skinTone || ''} onChangeText={set('skinTone')} />
+        <Field label="Hair colour" value={details.hairColor || ''} onChangeText={set('hairColor')} />
+        <Choice label="Hair length" value={details.hairLength} options={['bald', 'short', 'medium', 'long', 'unknown']} onChange={set('hairLength')} />
+        <Field label="Facial hair" value={details.facialHair || ''} onChangeText={set('facialHair')} />
       </View>
-      <ActionButton onPress={onContinue}>Continue to camera</ActionButton>
-      <ActionButton onPress={onBack} secondary>Cancel</ActionButton>
+
+      {MARK_SECTIONS.map((section) => (
+        <ListEditor key={section.key} title={section.title} items={details[section.key]} fields={MARK_FIELDS} onChange={set(section.key)} />
+      ))}
+      {ITEM_SECTIONS.map((section) => (
+        <ListEditor key={section.key} title={section.title} items={details[section.key]} fields={ITEM_FIELDS} onChange={set(section.key)} />
+      ))}
+
+      <View style={styles.card}>
+        <Field label="Other readable text (comma separated)" value={(details.visibleText || []).join(', ')}
+          onChangeText={(v) => set('visibleText')(v.split(',').map((s) => s.trimStart()))} />
+        <Field label="Summary" style={styles.notesInput} multiline value={details.summary || ''} onChangeText={set('summary')} />
+        <Field label="Officer notes" style={styles.notesInput} multiline value={details.notes || ''} onChangeText={set('notes')} placeholder="Optional incident context" />
+      </View>
+
+      {error ? <Text style={styles.formError}>{error}</Text> : null}
+      <ActionButton onPress={onSubmit} disabled={!String(details.foundLocation || '').trim()}>Confirm details and find matches</ActionButton>
+      <ActionButton onPress={onCancel} secondary>Cancel</ActionButton>
     </ScrollView>
   );
 }
 
-function ProcessingScreen({ onComplete, error }) {
+function ProcessingScreen({ title, text, onStart }) {
   useEffect(() => {
-    onComplete();
+    onStart();
   }, []);
   return (
     <CenteredState>
       <View style={styles.stateIcon}>
-        {error ? <Text style={[styles.stateIconText, { color: COLORS.danger }]}>!</Text> : <ActivityIndicator size="large" color={COLORS.primary} />}
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
-      <Text style={styles.stateTitle}>{error ? 'Analysis failed' : 'Analysing scan'}</Text>
-      <Text style={styles.stateText}>{error || 'Uploading your explicitly submitted scan for analysis. Please wait.'}</Text>
+      <Text style={styles.stateTitle}>{title}</Text>
+      <Text style={styles.stateText}>{text}</Text>
     </CenteredState>
   );
 }
@@ -334,7 +469,7 @@ function ScoreBar({ label, percent, color }) {
   );
 }
 
-function ResultScreen({ photo, result, error, onRetake, onBack }) {
+function ResultScreen({ result, error, onRetake, onBack }) {
   const matches = result?.matches || [];
   const available = result?.status === 'completed';
   const found = !error && matches.length > 0;
@@ -360,19 +495,6 @@ function ResultScreen({ photo, result, error, onRetake, onBack }) {
         <View style={[styles.noticeIcon, !available && styles.noticeIconWarning]}>
           <Text style={[styles.noticeIconText, !available && { color: COLORS.danger }]}>{available ? 'i' : '!'}</Text>
         </View>
-        {result?.analysisStats ? (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Reference photo check</Text>
-            <Text style={styles.cardText}>
-              Submitted image: {result.analysisStats.queryFaceCount || 0} detected face(s). {result.analysisStats.withPhotoUrl || 0} candidate photo(s) supplied; {result.analysisStats.processedReferences || 0} processed reference(s); {result.analysisStats.downloadOrDecodeErrors || 0} unavailable or unreadable.
-            </Text>
-            {result.analysisStats.candidateStatuses?.belowThreshold ? (
-              <Text style={styles.cardText}>
-                {result.analysisStats.candidateStatuses.belowThreshold} reference face(s) were readable but did not pass the similarity threshold.
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
         <View style={{ flex: 1 }}>
           <Text style={styles.noticeTitle}>
             {error ? 'Request error' : available ? 'Officer review required' : 'Recognition service unavailable'}
@@ -382,6 +504,15 @@ function ResultScreen({ photo, result, error, onRetake, onBack }) {
           </Text>
         </View>
       </View>
+
+      {result?.analysisStats?.candidates != null ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Records checked</Text>
+          <Text style={styles.cardText}>
+            {result.analysisStats.candidates} record(s) checked · {result.analysisStats.queryHasFace ? `${result.analysisStats.comparedFaces || 0} compared by face` : 'no usable face, details only'} · {result.analysisStats.markQueries || 0} mark(s)/item(s) compared{result.analysisStats.excludedByDate ? ` · ${result.analysisStats.excludedByDate} excluded (reported missing after the found date)` : ''}.
+          </Text>
+        </View>
+      ) : null}
 
       {matches.map((match, index) => {
         const isFace = match.matchType === 'face';
@@ -409,19 +540,28 @@ function ResultScreen({ photo, result, error, onRetake, onBack }) {
               </View>
               <View style={[styles.typeTag, isFace ? styles.typeTagFace : styles.typeTagDetails]}>
                 <Text style={[styles.typeTagText, { color: isFace ? COLORS.primaryDark : COLORS.warning }]}>
-                  {isFace ? 'Face match' : 'Details only'}
+                  {isFace ? `${match.band === 'strong' ? 'Strong' : 'Possible'} face match` : 'Details only'}
                 </Text>
               </View>
             </View>
 
-            {isFace ? (
-              <ScoreBar label="Face similarity" percent={Math.round((match.confidence || 0) * 100)} color={COLORS.primary} />
+            <ScoreBar label="Evidence score" percent={Math.round(match.score ?? match.metadataScore ?? 0)} color={COLORS.primary} />
+            {(match.evidence || []).length ? (
+              <View style={styles.evidenceList}>
+                <Text style={styles.evidenceTitle}>Why this record was suggested</Text>
+                {match.evidence.map((item, i) => (
+                  <View key={i} style={styles.evidenceRow}>
+                    <Text style={[styles.evidencePoints, { color: item.points < 0 ? COLORS.danger : COLORS.success }]}>
+                      {item.points > 0 ? '+' : ''}{item.points}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.evidenceLabel}>{item.label}</Text>
+                      {item.detail ? <Text style={styles.evidenceDetail}>{item.detail}</Text> : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
             ) : null}
-            <ScoreBar
-              label={isFace ? 'Supporting details' : 'Details-based match'}
-              percent={Math.round(match.metadataScore || 0)}
-              color={COLORS.success}
-            />
 
             <View style={styles.disclaimerBox}>
               <Text style={styles.disclaimer}>{match.reason || 'Potential match only; verify identity.'}</Text>
@@ -430,16 +570,7 @@ function ResultScreen({ photo, result, error, onRetake, onBack }) {
         );
       })}
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Image quality check</Text>
-        <Text style={styles.cardText}>
-          {photo?.width && photo?.height
-            ? `Captured at ${photo.width} × ${photo.height}. Retake if the face is blurred, too dark, or outside the guide.`
-            : 'Retake if the face is blurred, too dark, or outside the guide.'}
-        </Text>
-      </View>
-
-      <ActionButton onPress={onRetake}>Retake photo</ActionButton>
+      <ActionButton onPress={onRetake}>Start a new scan</ActionButton>
       <ActionButton onPress={onBack} secondary>Back to dashboard</ActionButton>
     </ScrollView>
   );
@@ -507,47 +638,86 @@ function HistoryStatus({ apiUrl, token, onBack }) {
 
 export default function VictimIdentification({ apiUrl, token, onBack }) {
   const [screen, setScreen] = useState('dashboard');
-  const [photo, setPhoto] = useState(null);
-  const [optionalInfo, setOptionalInfo] = useState({ location: '', age: '', gender: '', notes: '' });
+  const [photos, setPhotos] = useState([]);
+  const [draft, setDraft] = useState(null);
+  const [details, setDetails] = useState(null);
   const [result, setResult] = useState(null);
-  const [analysisError, setAnalysisError] = useState('');
+  const [error, setError] = useState('');
 
-  function capturePhoto(nextPhoto) {
-    setPhoto(nextPhoto);
-    setScreen('processing');
+  function describeError(err) {
+    const message = String(err?.message || 'Unknown request error');
+    const lower = message.toLowerCase();
+    return lower.includes('fetch failed') || lower.includes('network request failed')
+      ? 'Cannot reach the DMEWS backend. Confirm the phone and computer are on the same Wi-Fi and restart Expo after the backend starts.'
+      : message;
   }
 
-  async function submitScan() {
-    setAnalysisError('');
+  async function request(path, options) {
+    const response = await fetch(`${apiUrl}${path}`, {
+      ...options,
+      headers: { Authorization: `Bearer ${token}`, ...(options?.headers || {}) },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || `Request failed (${response.status}).`);
+    return data;
+  }
+
+  function startScan() {
+    setPhotos([]);
+    setDraft(null);
+    setDetails(null);
+    setResult(null);
+    setError('');
+    setScreen('camera');
+  }
+
+  function capturePhoto(photo, done) {
+    const next = [...photos, photo].slice(0, MAX_PHOTOS);
+    setPhotos(next);
+    if (done) setScreen('extracting');
+  }
+
+  // Step 1: send photos; the backend returns AI-filled details and the face check.
+  async function extractDetails() {
     try {
-      const upload = await FileSystem.uploadAsync(`${apiUrl}/victim-access/scans`, photo.uri, {
-        fieldName: 'image',
-        mimeType: 'image/jpeg',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        parameters: Object.fromEntries(
-          Object.entries(optionalInfo).filter(([, value]) => Boolean(value))
-        ),
-        headers: { Authorization: `Bearer ${token}` },
+      const body = new FormData();
+      // Expo's fetch only accepts real file objects in FormData (not RN-style { uri, name, type }).
+      photos.forEach((photo) => {
+        body.append('images', new File(photo.uri));
       });
-      const data = JSON.parse(upload.body || '{}');
-      if (upload.status < 200 || upload.status >= 300) {
-        throw new Error(data.message || `Analysis request failed (${upload.status}).`);
-      }
-      setResult(data.scan);
-    } catch (error) {
-      const message = String(error?.message || 'Unknown request error');
-      setAnalysisError(
-        message.toLowerCase().includes('fetch failed') || message.toLowerCase().includes('network request failed')
-          ? 'Cannot reach the DMEWS backend. Confirm the phone and computer are on the same Wi-Fi and restart Expo after the backend starts.'
-          : message
-      );
-    } finally {
+      const data = await request('/victim-access/scans', { method: 'POST', body });
+      setDraft(data.scan);
+      setDetails(data.scan.details || {});
+      setError('');
+      setScreen('review');
+    } catch (err) {
+      setResult(null);
+      setError(describeError(err));
       setScreen('result');
     }
   }
 
+  // Step 2: officer-confirmed details; the backend runs matching.
+  async function findMatches() {
+    try {
+      const data = await request(`/victim-access/scans/${draft.id}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ details }),
+      });
+      setResult(data.scan);
+      setError('');
+      setScreen('result');
+    } catch (err) {
+      setError(describeError(err));
+      setScreen('review');
+    }
+  }
+
   function reset() {
-    setPhoto(null);
+    setPhotos([]);
+    setDraft(null);
+    setDetails(null);
     setScreen('dashboard');
   }
 
@@ -570,11 +740,29 @@ export default function VictimIdentification({ apiUrl, token, onBack }) {
       </View>
 
       <View style={styles.body}>
-        {screen === 'dashboard' && <Dashboard onScan={() => setScreen('optional')} onHistory={() => setScreen('history')} />}
-        {screen === 'optional' && <OptionalInfoScreen value={optionalInfo} onChange={setOptionalInfo} onContinue={() => setScreen('camera')} onBack={reset} />}
-        {screen === 'camera' && <CameraScreen onCancel={reset} onCaptured={capturePhoto} />}
-        {screen === 'processing' && <ProcessingScreen error={analysisError} onComplete={submitScan} />}
-        {screen === 'result' && <ResultScreen photo={photo} result={result} error={analysisError} onRetake={() => setScreen('camera')} onBack={reset} />}
+        {screen === 'dashboard' && <Dashboard onScan={startScan} onHistory={() => setScreen('history')} />}
+        {screen === 'camera' && <CameraScreen photoCount={photos.length} onCancel={reset} onCaptured={capturePhoto} />}
+        {screen === 'extracting' && (
+          <ProcessingScreen
+            title="Reading the photos"
+            text={`AI is describing ${photos.length} photo${photos.length === 1 ? '' : 's'} and checking the face. This can take up to a minute.`}
+            onStart={extractDetails}
+          />
+        )}
+        {screen === 'review' && details && (
+          <DetailsReviewScreen
+            scan={draft}
+            details={details}
+            onChange={setDetails}
+            onSubmit={() => setScreen('matching')}
+            onCancel={reset}
+            error={error}
+          />
+        )}
+        {screen === 'matching' && (
+          <ProcessingScreen title="Finding matches" text="Comparing with missing-person records." onStart={findMatches} />
+        )}
+        {screen === 'result' && <ResultScreen result={result} error={error} onRetake={startScan} onBack={reset} />}
         {screen === 'history' && <HistoryStatus apiUrl={apiUrl} token={token} onBack={reset} />}
       </View>
     </SafeAreaView>
@@ -594,6 +782,27 @@ const cardShadow = {
 };
 
 const styles = StyleSheet.create({
+  /* Match evidence */
+  evidenceList: { marginTop: 10, borderTopWidth: 1, borderTopColor: COLORS.borderSoft, paddingTop: 8 },
+  evidenceTitle: { fontSize: 12, fontWeight: '800', color: COLORS.secondaryText, marginBottom: 4, textTransform: 'uppercase' },
+  evidenceRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 4 },
+  evidencePoints: { width: 38, fontSize: 13, fontWeight: '800' },
+  evidenceLabel: { fontSize: 13, fontWeight: '700', color: COLORS.text },
+  evidenceDetail: { fontSize: 12, color: COLORS.secondaryText, marginTop: 1 },
+
+  /* Review form */
+  choiceRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 },
+  choiceChip: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, marginRight: 6, marginBottom: 6, backgroundColor: COLORS.white },
+  choiceChipOn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  choiceText: { fontSize: 13, color: COLORS.text, textTransform: 'capitalize' },
+  choiceTextOn: { color: COLORS.white, fontWeight: '700' },
+  listHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  listCount: { fontSize: 13, fontWeight: '800', color: COLORS.primary },
+  listItem: { borderTopWidth: 1, borderTopColor: COLORS.borderSoft, paddingTop: 10, marginTop: 10 },
+  removeText: { color: COLORS.danger, fontWeight: '700', fontSize: 13, marginTop: 4 },
+  addText: { color: COLORS.primary, fontWeight: '800', fontSize: 14, marginTop: 12 },
+  formError: { color: COLORS.danger, backgroundColor: COLORS.dangerLight, padding: 10, borderRadius: 10, marginBottom: 10 },
+
   safeArea: { flex: 1, backgroundColor: COLORS.primaryDark },
   body: { flex: 1, backgroundColor: COLORS.background },
 

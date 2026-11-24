@@ -12,6 +12,28 @@ const {
   isSendGridConfigured,
   sendPossibleMatchEmail,
 } = require("../services/sendGridMailer");
+const { computeFace } = require("../services/faceService");
+const { buildTextIndex, indexHash } = require("../services/matching");
+const { cleanFeatures, hasFeatures } = require("../services/personDetails");
+const { extractAttributes } = require("../services/attributeExtraction");
+const { checkReportInBackground } = require("../services/reverseMatching");
+
+/**
+ * Structured identifying features sent as a JSON string in the multipart
+ * field "features". Returns undefined when the field is absent (keep current
+ * value on edit) and null when it is present but empty (clear it).
+ */
+function parseFeatures(body) {
+  if (body?.features === undefined) return undefined;
+  let raw = {};
+  try {
+    raw = typeof body.features === "string" ? JSON.parse(body.features || "{}") : body.features;
+  } catch {
+    raw = {};
+  }
+  const features = cleanFeatures(raw);
+  return hasFeatures(features) ? features : null;
+}
 
 function todayYMD() {
   return new Date().toISOString().slice(0, 10);
@@ -866,6 +888,7 @@ function normalizeMissing(o) {
     dateMissing: o.dateMissing,
     description: o.description || "",
     contactInfo: o.contactInfo || "",
+    identifyingFeatures: o.identifyingFeatures || null,
     photoUrl: o.photoUrl || "",
     submittedByUserId: o.submittedByUserId ? String(o.submittedByUserId) : null,
     reporterName: o.reporterName || "",
@@ -1079,10 +1102,17 @@ async function createMissingReport(req, res) {
       contactInfo: contactInfoNorm,
       photoUrl,
       photoPublicId,
+      identifyingFeatures: parseFeatures(req.body) || undefined,
+      face: photoUrl ? await computeFace(req.file.buffer, req.file.mimetype, photoUrl) : undefined,
+      textIndex: await buildTextIndex({
+        description: description.slice(0, 4000),
+        identifyingFeatures: parseFeatures(req.body) || undefined,
+      }),
       submittedByUserId: optionalSubmitterObjectId(req),
       reporterName: reporter.reporterName,
       ifYouSeePhone: reporter.ifYouSeePhone,
     });
+    checkReportInBackground(doc._id);
 
     return res.status(201).json({ person: normalizeMissing(doc.toObject()) });
   } catch (error) {
@@ -1161,6 +1191,7 @@ async function updateMissingReport(req, res) {
           await destroyPublicId(photoPublicId);
           photoUrl = up.photoUrl;
           photoPublicId = up.photoPublicId;
+          doc.face = await computeFace(req.file.buffer, req.file.mimetype, photoUrl);
         }
       } catch (e) {
         if (e?.statusCode === 503) {
@@ -1187,12 +1218,21 @@ async function updateMissingReport(req, res) {
     doc.location = location || undefined;
     doc.dateMissing = dateMissing;
     doc.description = description.slice(0, 4000);
+    const features = parseFeatures(req.body);
+    if (features !== undefined) {
+      doc.identifyingFeatures = features || undefined;
+      doc.markModified("identifyingFeatures");
+    }
+    if (doc.textIndex?.status !== "ok" || doc.textIndex?.sourceHash !== indexHash(doc)) {
+      doc.textIndex = await buildTextIndex(doc);
+    }
     doc.contactInfo = contactInfoNorm;
     doc.photoUrl = photoUrl;
     doc.photoPublicId = photoPublicId;
     doc.reporterName = reporter.reporterName;
     doc.ifYouSeePhone = reporter.ifYouSeePhone;
     await doc.save();
+    checkReportInBackground(doc._id);
 
     return res.json({ person: normalizeMissing(doc.toObject()) });
   } catch (error) {
@@ -1488,7 +1528,24 @@ async function deleteFoundReport(req, res) {
   }
 }
 
+/**
+ * AI suggestions for a report's identifying features, read from its photo by
+ * the vision model. The reporter reviews them before they are saved.
+ */
+async function suggestFeatures(req, res) {
+  if (!req.file || !String(req.file.mimetype || "").toLowerCase().startsWith("image/")) {
+    return res.status(400).json({ message: "A photo is required." });
+  }
+  const result = await extractAttributes([req.file]);
+  if (result.status !== "ok") {
+    return res.status(503).json({ message: result.error || "Photo reading is unavailable right now." });
+  }
+  return res.json({ features: cleanFeatures(result.attributes), model: result.model });
+}
+
 module.exports = {
+  geocodeToPointSriLanka,
+  suggestFeatures,
   listPersonReports,
   listMyPersonReports,
   adminPersonOverview,

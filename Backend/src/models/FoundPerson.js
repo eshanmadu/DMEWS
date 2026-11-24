@@ -6,11 +6,15 @@ const foundPersonSchema = new mongoose.Schema(
     gender: { type: String, default: "", trim: true, maxlength: 40 },
     age: { type: Number, default: null, min: 0, max: 120 },
     locationFound: { type: String, required: true, trim: true, maxlength: 500 },
+    /**
+     * GeoJSON point, set only when the place could be located. No default:
+     * a {type: "Point"} without coordinates is rejected by the 2dsphere index,
+     * which made reports with unrecognised place names fail to save.
+     */
     location: {
       type: {
         type: String,
         enum: ["Point"],
-        default: "Point",
       },
       coordinates: {
         type: [Number], // [lng, lat]

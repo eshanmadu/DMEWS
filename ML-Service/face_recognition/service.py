@@ -1,9 +1,18 @@
-"""DMEWS face matching service.
+"""DMEWS face matching service (InsightFace / ArcFace).
 
 This service returns ranked potential matches only. It never makes an identity
-claim. The face_recognition dependency is deliberately required at runtime so
-an unconfigured deployment reports unavailable instead of returning fabricated
+claim. The InsightFace dependency is deliberately required at runtime so an
+unconfigured deployment reports unavailable instead of returning fabricated
 matches.
+
+Pipeline: RetinaFace-family detection (SCRFD) -> 5-point alignment -> ArcFace
+512-dimensional L2-normalised embedding -> cosine similarity.
+
+Endpoints
+- GET  /health   service and model status
+- POST /embed    one image -> every detected face with embedding and quality
+
+The Node backend stores the embeddings and compares them (Backend/src/services/matching.js).
 """
 
 from __future__ import annotations
@@ -11,10 +20,8 @@ from __future__ import annotations
 import base64
 import io
 import os
-from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from typing import Any
-from urllib.request import Request, urlopen
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -22,67 +29,79 @@ from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
 try:
-    import face_recognition
+    from insightface.app import FaceAnalysis
 except ImportError:  # pragma: no cover - exercised by deployment configuration
-    face_recognition = None
+    FaceAnalysis = None
 
 
-app = FastAPI(title="DMEWS Face Recognition Service", version="1.0.0")
-_reference_cache: dict[str, Any] = {}
-_reference_cache_lock = Lock()
+MODEL_NAME = os.getenv("INSIGHTFACE_MODEL", "buffalo_l")
+MODEL_ROOT = os.path.expanduser(os.getenv("INSIGHTFACE_ROOT", "~/.insightface"))
+DETECTION_SIZE = int(os.getenv("FACE_DETECTION_SIZE", "640"))
+EMBEDDING_DIM = 512
+MIN_DETECTION_SCORE = float(os.getenv("FACE_MIN_DETECTION_SCORE", "0.50"))
+MIN_FACE_PIXELS = int(os.getenv("FACE_MIN_FACE_PIXELS", "60"))
+MAX_IMAGE_DIMENSION = 1600
+
+app = FastAPI(title="DMEWS Face Recognition Service", version="2.0.0")
+
+_engine: Any = None
+_engine_error = ""
+_engine_lock = Lock()
+# ONNX Runtime sessions are shared; serialise inference to keep memory bounded.
+_inference_lock = Lock()
 
 
-class Candidate(BaseModel):
-    id: str
-    fullName: str = ""
-    age: int | None = None
-    gender: str = ""
-    lastSeenLocation: str = ""
-    photoUrl: str = ""
-
-
-class AnalysisRequest(BaseModel):
+class EmbedRequest(BaseModel):
     imageBase64: str = Field(min_length=1)
     imageMimeType: str = "image/jpeg"
-    optionalInfo: dict[str, Any] = {}
-    candidates: list[Candidate] = []
 
 
-def decode_image(value: str) -> Any:
+# --------------------------------------------------------------------------
+# Model and image handling
+# --------------------------------------------------------------------------
+
+def get_engine() -> Any:
+    """Load the InsightFace model pack once. Returns None when unavailable."""
+    global _engine, _engine_error
+    if FaceAnalysis is None:
+        _engine_error = "InsightFace is not installed on the analysis service."
+        return None
+    with _engine_lock:
+        if _engine is None and not _engine_error:
+            try:
+                engine = FaceAnalysis(
+                    name=MODEL_NAME,
+                    root=MODEL_ROOT,
+                    providers=["CPUExecutionProvider"],
+                    allowed_modules=["detection", "landmark_3d_68", "genderage", "recognition"],
+                )
+                engine.prepare(ctx_id=-1, det_size=(DETECTION_SIZE, DETECTION_SIZE))
+                _engine = engine
+            except Exception as error:  # model download or ONNX load failure
+                _engine_error = f"Face model failed to load: {error}"
+        return _engine
+
+
+@app.on_event("startup")
+def warm_up() -> None:
+    get_engine()
+
+
+def decode_image(value: str) -> bytes:
+    if "," in value and value.strip().lower().startswith("data:"):
+        value = value.split(",", 1)[1]
     try:
         return base64.b64decode(value, validate=True)
     except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Invalid image data.")
 
 
-def metadata_score(info: dict[str, Any], candidate: Candidate) -> int:
-    score = 0
-    location = str(info.get("location") or "").strip().lower()
-    candidate_location = candidate.lastSeenLocation.strip().lower()
-    if location and candidate_location and (location in candidate_location or candidate_location in location):
-        score += 50
-    age = info.get("age")
-    if age is not None and candidate.age is not None:
-        difference = abs(float(age) - candidate.age)
-        score += 30 if difference <= 2 else 15 if difference <= 5 else 0
-    gender = str(info.get("gender") or "").strip().lower()
-    if gender and candidate.gender and gender == candidate.gender.strip().lower():
-        score += 20
-    return min(score, 100)
-
-
-def image_from_url(url: str) -> bytes:
-    request = Request(url, headers={"User-Agent": "DMEWS-face-matching/1.0"})
-    with urlopen(request, timeout=4) as response:
-        return response.read()
-
-
-def load_normalized_image(raw: bytes) -> Any:
+def load_normalized_image(raw: bytes) -> np.ndarray:
+    """EXIF-upright RGB array, longest side capped at MAX_IMAGE_DIMENSION."""
     with Image.open(io.BytesIO(raw)) as image:
         normalized = ImageOps.exif_transpose(image).convert("RGB")
-        max_dimension = 1600
-        if max(normalized.size) > max_dimension:
-            scale = max_dimension / max(normalized.size)
+        if max(normalized.size) > MAX_IMAGE_DIMENSION:
+            scale = MAX_IMAGE_DIMENSION / max(normalized.size)
             normalized = normalized.resize(
                 (max(1, round(normalized.width * scale)), max(1, round(normalized.height * scale))),
                 Image.Resampling.LANCZOS,
@@ -90,142 +109,138 @@ def load_normalized_image(raw: bytes) -> Any:
         return np.asarray(normalized)
 
 
-def reference_encoding(candidate: Candidate) -> Any:
-    if not candidate.photoUrl:
-        return None
-    with _reference_cache_lock:
-        if candidate.photoUrl in _reference_cache:
-            return _reference_cache[candidate.photoUrl]
-    reference_raw = image_from_url(candidate.photoUrl)
-    reference_image = load_normalized_image(reference_raw)
-    reference_locations = face_recognition.face_locations(
-        reference_image,
-        number_of_times_to_upsample=2,
-        model="hog",
+def sharpness(gray: np.ndarray) -> float:
+    """Variance of a 4-neighbour Laplacian; low values indicate blur."""
+    if gray.shape[0] < 3 or gray.shape[1] < 3:
+        return 0.0
+    g = gray.astype(np.float32)
+    lap = -4 * g[1:-1, 1:-1] + g[:-2, 1:-1] + g[2:, 1:-1] + g[1:-1, :-2] + g[1:-1, 2:]
+    return float(lap.var())
+
+
+def describe_face(face: Any, rgb: np.ndarray) -> dict[str, Any]:
+    x1, y1, x2, y2 = (float(v) for v in face.bbox)
+    width, height = max(0.0, x2 - x1), max(0.0, y2 - y1)
+    h, w = rgb.shape[:2]
+    crop = rgb[max(0, int(y1)):min(h, int(y2)), max(0, int(x1)):min(w, int(x2))]
+    gray = crop.mean(axis=2) if crop.size else np.zeros((1, 1))
+    blur_score = sharpness(gray)
+    brightness = float(gray.mean()) if crop.size else 0.0
+
+    pose = getattr(face, "pose", None)
+    pitch, yaw, roll = (float(v) for v in pose) if pose is not None else (None, None, None)
+
+    warnings = []
+    if float(face.det_score) < MIN_DETECTION_SCORE:
+        warnings.append("low_detection_confidence")
+    if min(width, height) < MIN_FACE_PIXELS:
+        warnings.append("small_face")
+    if blur_score < 40:
+        warnings.append("blurry")
+    if brightness < 50:
+        warnings.append("too_dark")
+    elif brightness > 215:
+        warnings.append("overexposed")
+    if yaw is not None and abs(yaw) > 45:
+        warnings.append("turned_away")
+    if pitch is not None and abs(pitch) > 35:
+        warnings.append("tilted")
+
+    sex = getattr(face, "sex", None)
+    age = getattr(face, "age", None)
+    return {
+        "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
+        "detectionScore": round(float(face.det_score), 4),
+        "quality": {
+            "faceWidthPx": round(width, 1),
+            "faceHeightPx": round(height, 1),
+            "sharpness": round(blur_score, 1),
+            "brightness": round(brightness, 1),
+            "yaw": None if yaw is None else round(yaw, 1),
+            "pitch": None if pitch is None else round(pitch, 1),
+            "roll": None if roll is None else round(roll, 1),
+            "warnings": warnings,
+            "usable": "low_detection_confidence" not in warnings and "small_face" not in warnings,
+        },
+        "estimatedAge": None if age is None else int(age),
+        "estimatedSex": {"M": "male", "F": "female"}.get(str(sex), None) if sex is not None else None,
+    }
+
+
+def analyse_image(rgb: np.ndarray) -> list[tuple[np.ndarray, dict[str, Any]]]:
+    """Detect faces; return (embedding, description) sorted largest face first."""
+    engine = get_engine()
+    if engine is None:
+        return []
+    bgr = np.ascontiguousarray(rgb[:, :, ::-1])
+    with _inference_lock:
+        faces = engine.get(bgr)
+    results = []
+    for face in faces:
+        embedding = getattr(face, "normed_embedding", None)
+        if embedding is None:
+            continue
+        results.append((np.asarray(embedding, dtype=np.float32), describe_face(face, rgb)))
+    results.sort(
+        key=lambda item: (item[1]["bbox"][2] - item[1]["bbox"][0]) * (item[1]["bbox"][3] - item[1]["bbox"][1]),
+        reverse=True,
     )
-    reference_faces = face_recognition.face_encodings(reference_image, reference_locations)
-    encoding = reference_faces[0] if len(reference_faces) == 1 else None
-    if encoding is not None:
-        with _reference_cache_lock:
-            _reference_cache[candidate.photoUrl] = encoding
-    return encoding
+    return results
 
 
-def detect_faces(image: Any) -> list[Any]:
-    locations = face_recognition.face_locations(
-        image,
-        number_of_times_to_upsample=2,
-        model="hog",
-    )
-    return face_recognition.face_encodings(image, locations)
+def dominant_face(faces: list[tuple[np.ndarray, dict[str, Any]]]) -> tuple[np.ndarray | None, str]:
+    """Pick the reference face: the only face, or one clearly larger than the rest."""
+    if not faces:
+        return None, "no_face"
+    if len(faces) == 1:
+        return faces[0][0], "ok"
+
+    def area(item: tuple[np.ndarray, dict[str, Any]]) -> float:
+        x1, y1, x2, y2 = item[1]["bbox"]
+        return (x2 - x1) * (y2 - y1)
+
+    if area(faces[0]) >= 2.5 * area(faces[1]):
+        return faces[0][0], "ok"
+    return None, "multiple_faces"
 
 
-def compare_with_stats(query_encoding: Any, candidate: Candidate) -> tuple[dict[str, Any] | None, str]:
-    if not candidate.photoUrl:
-        return None, "missing_url"
-    try:
-        reference = reference_encoding(candidate)
-        if reference is None:
-            return None, "no_face"
-        distance = float(face_recognition.face_distance([reference], query_encoding)[0])
-        confidence = max(0.0, min(1.0, 1.0 - distance))
-        if distance > float(os.getenv("FACE_MATCH_THRESHOLD", "0.55")):
-            return None, "below_threshold"
-        return {
-            "personId": candidate.id,
-            "matchType": "face",
-            "confidence": round(confidence, 4),
-            "metadataScore": metadata_score({}, candidate),
-            "reason": "Potential face similarity; verify against official records.",
-        }, "matched"
-    except (OSError, ValueError, TimeoutError):
-        return None, "download_or_decode_error"
-
+# --------------------------------------------------------------------------
+# Endpoints
+# --------------------------------------------------------------------------
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {"ok": True, "faceRecognitionConfigured": face_recognition is not None}
+    engine = get_engine()
+    return {
+        "ok": True,
+        "faceRecognitionConfigured": engine is not None,
+        "engine": "insightface",
+        "model": MODEL_NAME,
+        "embeddingDim": EMBEDDING_DIM,
+        "error": _engine_error or None,
+    }
 
 
-@app.post("/analyze")
-def analyze(request: AnalysisRequest) -> dict[str, Any]:
-    if face_recognition is None:
-        return {
-            "status": "unavailable",
-            "matches": [],
-            "message": "Face recognition dependencies are not installed on the analysis service.",
-        }
-
-    query_raw = decode_image(request.imageBase64)
-    query_faces = []
-    query_dimensions = None
+@app.post("/embed")
+def embed(request: EmbedRequest) -> dict[str, Any]:
+    if get_engine() is None:
+        return {"status": "unavailable", "faces": [], "message": _engine_error}
     try:
-        query_image = load_normalized_image(query_raw)
-        query_dimensions = {
-            "width": int(query_image.shape[1]),
-            "height": int(query_image.shape[0]),
-        }
-        query_faces = detect_faces(query_image)
+        rgb = load_normalized_image(decode_image(request.imageBase64))
     except (OSError, ValueError):
-        query_faces = []
-
-    def score_candidate(candidate: Candidate) -> tuple[dict[str, Any] | None, str]:
-        score = metadata_score(request.optionalInfo, candidate)
-        face_match, face_status = (
-            compare_with_stats(query_faces[0], candidate)
-            if len(query_faces) == 1
-            else (None, "no_query_face")
-        )
-        confidence = face_match["confidence"] if face_match else None
-        if confidence is None and score == 0:
-            return None, face_status
-        return {
-            "personId": candidate.id,
-            "matchType": "face" if confidence is not None else "metadata",
-            "confidence": round(confidence, 4) if confidence is not None else None,
-            "metadataScore": score,
-            "reason": (
-                "Potential face similarity with supporting details; verify against official records."
-                if confidence is not None
-                else "Potential details-based match only; no face similarity passed the threshold."
-            ),
-        }, face_status
-
-    # dlib uses native memory internally; concurrent face detection can terminate
-    # the process on constrained machines without raising a Python exception.
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        scored = list(executor.map(score_candidate, request.candidates))
-    matches = [match for match, _status in scored if match]
-    status_counts = {
-        "missingUrl": sum(1 for _match, status in scored if status == "missing_url"),
-        "noFace": sum(1 for _match, status in scored if status == "no_face"),
-        "belowThreshold": sum(1 for _match, status in scored if status == "below_threshold"),
-        "downloadOrDecodeErrors": sum(1 for _match, status in scored if status == "download_or_decode_error"),
-    }
-    reference_stats = {
-        "candidates": len(request.candidates),
-        "withPhotoUrl": sum(1 for candidate in request.candidates if candidate.photoUrl),
-        "downloadOrDecodeErrors": status_counts["downloadOrDecodeErrors"],
-        "processedReferences": sum(1 for _match, status in scored if status in {"matched", "below_threshold", "no_face"}),
-        "queryFaceCount": len(query_faces),
-        "queryDimensions": query_dimensions,
-        "candidateStatuses": status_counts,
-    }
-    matches.sort(
-        key=lambda item: (
-            item["matchType"] == "face",
-            item["confidence"] or 0,
-            item["metadataScore"],
-        ),
-        reverse=True,
-    )
+        raise HTTPException(status_code=400, detail="The image could not be decoded.")
+    faces = analyse_image(rgb)
+    _, reference_status = dominant_face(faces)
     return {
         "status": "completed",
-        "matches": matches[:10],
-        "message": (
-            "Potential matches ranked for officer review. Face and details are supporting signals only."
-            if len(query_faces) == 1
-            else "No single face was detected in the submitted image. Retake the photo with one face centered in good lighting."
-        ),
-        "referenceStats": reference_stats,
+        "model": MODEL_NAME,
+        "embeddingDim": EMBEDDING_DIM,
+        "imageDimensions": {"width": int(rgb.shape[1]), "height": int(rgb.shape[0])},
+        "faceCount": len(faces),
+        "primaryFaceIndex": 0 if reference_status == "ok" else None,
+        "referenceStatus": reference_status,
+        "faces": [
+            {**info, "index": index, "embedding": [round(float(v), 6) for v in embedding]}
+            for index, (embedding, info) in enumerate(faces)
+        ],
     }

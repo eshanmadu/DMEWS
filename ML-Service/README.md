@@ -50,10 +50,9 @@ No flood, landslide, or cascade prediction model has been trained here.
 ## Victim face-analysis service
 
 `face_recognition/service.py` is an isolated HTTP service used by the protected
-DMEWS victim-identification scan endpoint. It compares one captured image with
-photos already stored on missing-person records and returns ranked **potential**
-matches only. It does not confirm identity. Optional location, age, gender, and
-notes are stored with the scan and used only as supporting context.
+DMEWS victim-identification feature. It turns a photo into face encodings; the
+backend stores them and does all comparison. Results are ranked **potential**
+matches for officer review only. Nothing confirms identity.
 
 Install its separate dependencies and run it from the repository root:
 
@@ -62,9 +61,80 @@ python -m pip install -r ML-Service/face_recognition/requirements.txt
 python -m uvicorn service:app --app-dir ML-Service/face_recognition --host 127.0.0.1 --port 8010
 ```
 
-Set `FACE_RECOGNITION_URL=http://127.0.0.1:8010` in `Backend/.env`. If the
-service is not configured or its model dependencies are unavailable, the
-backend records an unavailable scan and does not invent matches.
+Set `FACE_RECOGNITION_URL=http://127.0.0.1:8010` in `Backend/.env`.
+
+The service uses InsightFace (`buffalo_l`: SCRFD detection, 5-point alignment,
+ArcFace 512-dimensional embeddings) on CPU through ONNX Runtime. On first start
+it downloads the model pack (about 280 MB) to `~/.insightface/models`. The
+InsightFace pretrained models are licensed for non-commercial research use
+only; a production deployment needs a commercially licensed model.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Model status |
+| `POST /embed` | `{imageBase64}` -> every detected face with bounding box, quality checks, estimated age/sex, and its 512-d embedding |
+
+### How a victim scan works
+
+1. `POST /victim-access/scans` (up to 4 photos): the face service encodes the
+   best face photo, and a vision model describes scars, tattoos, clothing and
+   other features. By default the vision model is Qwen2.5-VL 7B running locally
+   in Ollama; Claude can be used instead with an `ANTHROPIC_API_KEY` (see
+   `Backend/.env.example`). The result is saved as a draft. Photos are not stored.
+2. The officer corrects the details.
+3. `POST /victim-access/scans/:id/submit`: `Backend/src/services/matching.js`
+   compares the scan with every missing-person record and returns up to 10
+   suggestions, each with an evidence list (points and a reason per item):
+   face similarity, tattoos/scars/birthmarks/clothing compared by meaning with
+   the report description, exact readable text, sex, age, distance between the
+   found and last-seen locations. Records reported missing after the found
+   date are excluded.
+
+4. Admin review (`/admin/victim-identification/<scan id>`): the scan photo
+   and the report photo side by side, a details comparison, the evidence,
+   and a decision per suggestion (confirm identity — requires a note on how
+   it was verified — / needs verification / not this person). Every action,
+   including each photo view, is written to an audit log (`VictimScanAudit`).
+   "Delete case permanently" removes the scan, its photos, details,
+   suggestions, decisions and audit entries, keeping only one deletion entry
+   (who, when, reason).
+
+5. Reverse matching (`Backend/src/services/reverseMatching.js`): when a
+   missing-person report is created or edited, it is checked in the
+   background against every open scan. A report that would have been
+   suggested is added to that scan ("From a later report") and the scan is
+   flagged with a new-suggestion count until an admin opens its review.
+
+Scan photos are stored encrypted (AES-256-GCM) on the backend disk, never on
+a public host, viewable only by admins and the scanning officer. They are
+deleted with the case; abandoned drafts are deleted completely after a day,
+and photos of other scans after `SCAN_PHOTO_RETENTION_DAYS` (default 90). See `Backend/.env.example`.
+
+Free local models used (Ollama, `ollama serve`):
+
+```bash
+ollama pull qwen2.5vl:7b      # reads details from photos (~6 GB)
+ollama pull nomic-embed-text  # compares descriptions by meaning (~270 MB)
+```
+
+Public missing-person reports can include structured identifying features
+(tattoos, scars, birthmarks, piercings, other marks, clothing, jewellery,
+personal items, readable text), entered by the reporter or suggested from the
+photo by the same local vision model (`POST /missing-persons/suggest-features`).
+Missing-person records get their face encoding and a text index of their
+description and features when they are created or edited. For older records, or ones saved while a
+service was down, run from `Backend/`:
+
+```bash
+npm run backfill:matching              # missing, failed or out-of-date data
+npm run backfill:matching -- --all     # recompute everything
+npm run backfill:matching -- --dry-run # list what would be processed
+```
+
+Thresholds (backend env, starting values to calibrate on real test data):
+`FACE_SIMILARITY_THRESHOLD` (0.35) and `FACE_STRONG_SIMILARITY` (0.50) for
+faces; `TEXT_MATCH_THRESHOLD` (0.70) and `TEXT_STRONG_THRESHOLD` (0.76) for
+marks and clothing.
 
 ## Shelter risk training
 

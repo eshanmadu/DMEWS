@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CalendarDays, FileUp, Loader2, MapPin, ShieldCheck } from "lucide-react";
+import VictimScanPanel from "@/components/VictimScanPanel";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -97,8 +98,10 @@ export default function VictimIdentificationPage() {
   return <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
     <div className="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
       <div><Link href="/incidents/missing-persons" className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-700 hover:text-indigo-900"><ArrowLeft className="h-4 w-4" />Back to reports</Link><div className="mt-4 flex items-center gap-3"><ShieldCheck className="h-8 w-8 text-indigo-700" /><div><p className="text-sm font-semibold uppercase tracking-wide text-indigo-700">Verified officer workspace</p><h1 className="mt-1 text-3xl font-bold text-slate-900">Victim Identification</h1></div></div></div>
-      <p className="max-w-sm text-sm text-slate-600">Upload body cases and evidence. Only your own uploaded cases are returned to this account.</p>
+      <p className="max-w-sm text-sm text-slate-600">Identify people from photos, and upload body cases and evidence. Only your own scans and cases are returned to this account.</p>
     </div>
+
+    <VictimScanPanel />
 
     <section className="mt-8 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-sky-50 p-5 shadow-sm sm:p-6">
       <h2 className="text-lg font-bold text-slate-900">Upload body case</h2>

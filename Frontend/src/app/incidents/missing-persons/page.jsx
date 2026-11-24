@@ -39,6 +39,7 @@ import {
 
 import { MatchScoreBreakdown } from "@/components/MatchScoreBreakdown";
 import { LocationSuggestInput } from "@/components/LocationSuggestInput";
+import IdentifyingFeaturesEditor, { countFeatures } from "@/components/IdentifyingFeaturesEditor";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const HERO_BG = "/img/missing.png";
@@ -202,6 +203,8 @@ export default function MissingPersonsPage() {
     contactInfo: "",
   });
   const [missingPhoto, setMissingPhoto] = useState(null);
+  const [missingFeatures, setMissingFeatures] = useState({});
+  const [showMissingFeatures, setShowMissingFeatures] = useState(false);
   const missingPhotoInputRef = useRef(null);
   const [missingErrors, setMissingErrors] = useState({});
   const [missingPhotoPreview, setMissingPhotoPreview] = useState(null);
@@ -403,6 +406,7 @@ export default function MissingPersonsPage() {
       fd.append("dateMissing", missingForm.dateMissing);
       fd.append("description", missingForm.description.trim());
       fd.append("contactInfo", normalizeAdditionalPhoneForSubmit(missingForm.contactInfo));
+      fd.append("features", JSON.stringify(missingFeatures));
       if (missingPhoto) fd.append("photo", missingPhoto);
 
       const res = await fetch(`${API_BASE}/missing-persons/missing`, {
@@ -432,6 +436,8 @@ export default function MissingPersonsPage() {
       });
       setMissingPhoto(null);
       setMissingPhotoPreview(null);
+      setMissingFeatures({});
+      setShowMissingFeatures(false);
       if (missingPhotoInputRef.current) missingPhotoInputRef.current.value = "";
       setSuccessMsg({ type: "missing", text: tr("✓ Missing person report submitted", "✓ අතුරුදහන් පුද්ගල වාර්තාව යවන ලදී") });
       setShowMissingForm(false);
@@ -583,6 +589,7 @@ export default function MissingPersonsPage() {
       description: person.description || "",
       contactInfo: sanitizeAdditionalPhoneInput(person.contactInfo || ""),
       existingPhotoUrl: person.photoUrl || "",
+      features: person.identifyingFeatures || {},
     });
     setMissingEditPhoto(null);
     setMissingEditPreview(person.photoUrl || null);
@@ -692,6 +699,7 @@ export default function MissingPersonsPage() {
       fd.append("dateMissing", missingEdit.dateMissing);
       fd.append("description", missingEdit.description.trim());
       fd.append("contactInfo", normalizeAdditionalPhoneForSubmit(missingEdit.contactInfo));
+      fd.append("features", JSON.stringify(missingEdit.features || {}));
       if (missingEditPhoto) fd.append("photo", missingEditPhoto);
       const res = await fetch(`${API_BASE}/missing-persons/missing/${missingEdit.id}`, {
         method: "PATCH",
@@ -1231,6 +1239,38 @@ export default function MissingPersonsPage() {
                 </div>
                 {missingErrors.description && <p className="mt-1 text-xs text-rose-600">{missingErrors.description}</p>}
               </div>
+            </div>
+
+            {/* Identifying features */}
+            <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <button
+                type="button"
+                onClick={() => setShowMissingFeatures((open) => !open)}
+                className="flex w-full items-center justify-between text-left"
+              >
+                <span>
+                  <span className="block text-sm font-semibold text-slate-800">
+                    {tr("Tattoos, scars, clothing and other identifying features (optional)", "පච්ච, කැළැල්, ඇඳුම් සහ වෙනත් හඳුනාගැනීමේ ලක්ෂණ (විකල්ප)")}
+                    {countFeatures(missingFeatures) ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">{countFeatures(missingFeatures)}</span> : null}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    {tr("These help officers recognise the person. Use left/right from the person's own point of view.", "මේවා නිලධාරීන්ට පුද්ගලයා හඳුනා ගැනීමට උපකාරී වේ.")}
+                  </span>
+                </span>
+                <span className="text-sm font-bold text-rose-600">{showMissingFeatures ? "−" : "+"}</span>
+              </button>
+              {showMissingFeatures ? (
+                <div className="mt-4">
+                  <IdentifyingFeaturesEditor
+                    features={missingFeatures}
+                    onChange={setMissingFeatures}
+                    photo={missingPhoto}
+                    suggestUrl={clientSignedIn ? `${API_BASE}/missing-persons/suggest-features` : undefined}
+                    authHeaders={authHeaders}
+                    si={si}
+                  />
+                </div>
+              ) : null}
             </div>
 
             {/* Reporter Section */}
@@ -1980,6 +2020,19 @@ export default function MissingPersonsPage() {
                   {missingEditErrors.description && (
                     <p className="mt-1 text-xs text-rose-600">{missingEditErrors.description}</p>
                   )}
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="mb-2 text-sm font-medium text-slate-700">
+                    {tr("Tattoos, scars, clothing and other identifying features", "පච්ච, කැළැල්, ඇඳුම් සහ වෙනත් හඳුනාගැනීමේ ලක්ෂණ")}
+                  </p>
+                  <IdentifyingFeaturesEditor
+                    features={missingEdit.features}
+                    onChange={(features) => setMissingEdit({ ...missingEdit, features })}
+                    photo={missingEditPhoto}
+                    suggestUrl={`${API_BASE}/missing-persons/suggest-features`}
+                    authHeaders={authHeaders}
+                    si={si}
+                  />
                 </div>
                 <div className="sm:col-span-2">
                   <label className="mb-1 block text-sm font-medium text-slate-700">
