@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import "leaflet/dist/leaflet.css";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Loader from "@/components/Loader";
 import {
   Building2,
@@ -42,6 +43,101 @@ const initialForm = {
   contact: "",
   notes: "",
 };
+
+function ShelterLocationPicker({ districtSelected, citySelected, cityLatitude, cityLongitude, cities, latitude, longitude, onSelect }) {
+  const mapContainerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+
+  const fallbackCenter = useMemo(() => {
+    if (typeof cityLatitude === "number" && typeof cityLongitude === "number") {
+      return [cityLatitude, cityLongitude];
+    }
+    if (Array.isArray(cities) && cities.length > 0) {
+      const valid = cities.filter(
+        (city) => Number.isFinite(city.latitude) && Number.isFinite(city.longitude)
+      );
+      if (valid.length > 0) {
+        const lat = valid.reduce((sum, city) => sum + Number(city.latitude), 0) / valid.length;
+        const lon = valid.reduce((sum, city) => sum + Number(city.longitude), 0) / valid.length;
+        return [lat, lon];
+      }
+    }
+    return [7.8731, 80.7718];
+  }, [cityLatitude, cityLongitude, cities]);
+
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return undefined;
+
+    const L = require("leaflet");
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    });
+
+    const map = L.map(mapContainerRef.current, {
+      center: fallbackCenter,
+      zoom: districtSelected ? (citySelected ? 13 : 9) : 7,
+      scrollWheelZoom: true,
+    });
+    mapRef.current = map;
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
+    map.on("click", (event) => {
+      onSelect(event.latlng.lat, event.latlng.lng);
+    });
+
+    const resize = window.setTimeout(() => map.invalidateSize(), 100);
+    return () => {
+      window.clearTimeout(resize);
+      map.off();
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const L = require("leaflet");
+    mapRef.current.setView(
+      fallbackCenter,
+      citySelected ? 13 : (districtSelected ? 9 : 7),
+      { animate: true }
+    );
+    window.setTimeout(() => mapRef.current?.invalidateSize(), 100);
+
+    const selectedLat = Number(latitude);
+    const selectedLon = Number(longitude);
+    if (Number.isFinite(selectedLat) && Number.isFinite(selectedLon)) {
+      if (!markerRef.current) {
+        markerRef.current = L.marker([selectedLat, selectedLon]).addTo(mapRef.current);
+      } else {
+        markerRef.current.setLatLng([selectedLat, selectedLon]);
+      }
+    } else if (markerRef.current) {
+      markerRef.current.remove();
+      markerRef.current = null;
+    }
+  }, [fallbackCenter, districtSelected, citySelected, latitude, longitude]);
+
+  return (
+    <div>
+      <div
+        ref={mapContainerRef}
+        className="h-80 w-full rounded-xl border border-slate-200 bg-slate-100"
+        aria-label="Select shelter location"
+      />
+      <p className="mt-2 text-xs text-slate-500">
+        Click the map to place the shelter pin. The latitude and longitude are filled automatically.
+      </p>
+    </div>
+  );
+}
 
 export function AdminShelters() {
   const [shelters, setShelters] = useState([]);
@@ -196,8 +292,8 @@ export function AdminShelters() {
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (!form.name.trim() || !form.location.trim() || !form.district || form.capacity === "" || form.latitude === "" || form.longitude === "") {
-      setError("Name, location, district, capacity, latitude, and longitude are required.");
+    if (!form.name.trim() || !form.location.trim() || !form.district || !form.city || form.capacity === "" || form.latitude === "" || form.longitude === "") {
+      setError("Name, location, district, city, capacity, and map location are required.");
       return;
     }
     const cap = parseInt(form.capacity, 10);
@@ -278,7 +374,7 @@ export function AdminShelters() {
 
   async function saveEdit(id) {
     if (!editForm.name.trim() || !editForm.location.trim() || !editForm.district || editForm.capacity === "" || editForm.latitude === "" || editForm.longitude === "") {
-      setError("Name, location, district, capacity, latitude, and longitude are required.");
+      setError("Name, location, district, capacity, and shelter location are required.");
       return;
     }
     const cap = parseInt(editForm.capacity, 10);
@@ -537,14 +633,6 @@ export function AdminShelters() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Actual shelter latitude <span className="text-red-500">*</span></label>
-                <input name="latitude" type="number" step="any" min="-90" max="90" value={form.latitude} onChange={handleChange} placeholder="e.g. 6.9934" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Actual shelter longitude <span className="text-red-500">*</span></label>
-                <input name="longitude" type="number" step="any" min="-180" max="180" value={form.longitude} onChange={handleChange} placeholder="e.g. 81.0550" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200" />
-              </div>
-              <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
                   District <span className="text-red-500">*</span>
                 </label>
@@ -562,6 +650,8 @@ export function AdminShelters() {
                       cityRowId: "",
                       cityLatitude: null,
                       cityLongitude: null,
+                      latitude: "",
+                      longitude: "",
                     }));
                   }}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
@@ -582,7 +672,7 @@ export function AdminShelters() {
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  City <span className="text-slate-400">(optional)</span>
+                  City <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={form.cityRowId}
@@ -596,6 +686,8 @@ export function AdminShelters() {
                         city: "",
                         cityLatitude: null,
                         cityLongitude: null,
+                        latitude: "",
+                        longitude: "",
                       }));
                       return;
                     }
@@ -607,6 +699,8 @@ export function AdminShelters() {
                       city: formatLkCityLabel(c),
                       cityLatitude: typeof c.latitude === "number" ? c.latitude : null,
                       cityLongitude: typeof c.longitude === "number" ? c.longitude : null,
+                      latitude: "",
+                      longitude: "",
                     }));
                   }}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-slate-50"
@@ -665,6 +759,39 @@ export function AdminShelters() {
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
                 />
               </div>
+            </div>
+            <div className="mt-5">
+              <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shelter location <span className="text-red-500">*</span>
+                  </label>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Select a district and city, then click the map.
+                  </p>
+                </div>
+                {form.latitude !== "" && form.longitude !== "" && (
+                  <div className="rounded-lg bg-sky-50 px-3 py-2 text-xs font-medium text-sky-800">
+                    Latitude: {Number(form.latitude).toFixed(6)} · Longitude: {Number(form.longitude).toFixed(6)}
+                  </div>
+                )}
+              </div>
+              <ShelterLocationPicker
+                districtSelected={Boolean(form.district)}
+                citySelected={Boolean(form.city)}
+                cityLatitude={form.cityLatitude}
+                cityLongitude={form.cityLongitude}
+                cities={formCitiesList}
+                latitude={form.latitude}
+                longitude={form.longitude}
+                onSelect={(lat, lon) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    latitude: lat.toFixed(6),
+                    longitude: lon.toFixed(6),
+                  }))
+                }
+              />
             </div>
             <div className="mt-5">
               <button
@@ -777,10 +904,10 @@ export function AdminShelters() {
                             )}
                           </td>
                           <td className="py-3 px-3 text-slate-600">
-                            {editingId === s.id ? <input name="latitude" type="number" step="any" value={editForm.latitude} onChange={handleEditChange} className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm" /> : (s.latitude ?? "-")}
+                            {s.latitude ?? "-"}
                           </td>
                           <td className="py-3 px-3 text-slate-600">
-                            {editingId === s.id ? <input name="longitude" type="number" step="any" value={editForm.longitude} onChange={handleEditChange} className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm" /> : (s.longitude ?? "-")}
+                            {s.longitude ?? "-"}
                           </td>
                           <td className="py-3 px-3 text-slate-600">
                             {editingId === s.id ? (

@@ -19,6 +19,58 @@ const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 const ROUTER_URL = "https://router.project-osrm.org/route/v1/driving";
 const EARTH_RADIUS_KM = 6371;
 
+const DISTRICT_COORDINATES = {
+  Ampara: [7.2833, 81.6667],
+  Anuradhapura: [8.3114, 80.4037],
+  Badulla: [6.9934, 81.0550],
+  Batticaloa: [7.7248, 81.6964],
+  Colombo: [6.9271, 79.8612],
+  Galle: [6.0329, 80.2170],
+  Gampaha: [7.0873, 80.0144],
+  Hambantota: [6.1248, 81.1185],
+  Jaffna: [9.6615, 80.0255],
+  Kalutara: [6.5854, 79.9607],
+  Kandy: [7.2906, 80.6337],
+  Kegalle: [7.2513, 80.3464],
+  Kilinochchi: [9.3803, 80.3770],
+  Kurunegala: [7.4863, 80.3623],
+  Mannar: [8.9771, 79.9042],
+  Matale: [7.4675, 80.6234],
+  Matara: [5.9549, 80.5549],
+  Monaragala: [6.8728, 81.3507],
+  Mullaitivu: [9.2671, 80.8142],
+  "Nuwara Eliya": [6.9497, 80.7891],
+  Polonnaruwa: [7.9403, 81.0188],
+  Puttalam: [8.0408, 79.8394],
+  Ratnapura: [6.6828, 80.3992],
+  Trincomalee: [8.5874, 81.2152],
+  Vavuniya: [8.7514, 80.4971],
+};
+
+function getDestination(shelter) {
+  const candidates = [
+    [shelter?.latitude, shelter?.longitude],
+    [shelter?.cityLatitude, shelter?.cityLongitude],
+  ];
+  for (const [rawLatitude, rawLongitude] of candidates) {
+    const latitude = Number(rawLatitude);
+    const longitude = Number(rawLongitude);
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      return [latitude, longitude];
+    }
+  }
+  const districtCenter = DISTRICT_COORDINATES[String(shelter?.district || "").trim()];
+  return districtCenter ? [...districtCenter] : null;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function distanceKm(a, b) {
   const toRad = (value) => (value * Math.PI) / 180;
   const dLat = toRad(b[0] - a[0]);
@@ -29,6 +81,36 @@ function distanceKm(a, b) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+}
+
+async function geocodeWarningLocations(labels) {
+  const uniqueLabels = [...new Set(labels.map((label) => String(label || "").trim()).filter(Boolean))];
+  const results = await Promise.all(
+    uniqueLabels.map(async (label) => {
+      try {
+        const response = await fetch(
+          `${API_BASE}/geocode/suggest?q=${encodeURIComponent(`${label}, Sri Lanka`)}`,
+          { cache: "no-store" }
+        );
+        if (!response.ok) return null;
+        const data = await response.json().catch(() => ({}));
+        const suggestion = Array.isArray(data?.suggestions)
+          ? data.suggestions.find((item) =>
+              Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude))
+            )
+          : null;
+        if (!suggestion) return null;
+        return {
+          latitude: Number(suggestion.latitude),
+          longitude: Number(suggestion.longitude),
+          label,
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+  return results.filter(Boolean);
 }
 
 function latestRiverReading(payload) {
@@ -56,7 +138,7 @@ function routeSegments(route, hazards) {
     const end = points[index + 1];
     const midpoint = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
     const nearby = hazards.filter(
-      (hazard) => distanceKm(midpoint, [hazard.latitude, hazard.longitude]) <= 1.5
+      (hazard) => distanceKm(midpoint, [hazard.latitude, hazard.longitude]) <= 2.5
     );
     return { start, end, dangerous: nearby.length > 0, hazards: nearby };
   });
@@ -88,20 +170,17 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
     feedErrors: [],
   });
 
-  const destination = useMemo(
-    () => [Number(shelter?.latitude), Number(shelter?.longitude)],
-    [shelter]
-  );
+  const destination = useMemo(() => getDestination(shelter), [shelter]);
 
   useEffect(() => {
     if (!mapContainerRef.current || !userLocation || !shelter) return undefined;
     const L = require("leaflet");
     const origin = [userLocation.latitude, userLocation.longitude];
-    if (!Number.isFinite(destination[0]) || !Number.isFinite(destination[1])) {
+    if (!destination || !Number.isFinite(destination[0]) || !Number.isFinite(destination[1])) {
       setState((current) => ({
         ...current,
         loading: false,
-        error: "This shelter does not have actual coordinates yet.",
+        error: "This shelter and district do not have usable coordinates for routing.",
       }));
       return undefined;
     }
@@ -150,7 +229,7 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
       fetchJson(`${API_BASE}/landslide-warnings`, { warnings: [] }, "Landslide"),
       fetchJson(`${API_BASE}/shelters/river-water-levels`, {}, "River level"),
     ])
-      .then(([routes, alertsResult, landslideResult, riverResult]) => {
+      .then(async ([routes, alertsResult, landslideResult, riverResult]) => {
         const alerts = Array.isArray(alertsResult?.value ?? alertsResult)
           ? alertsResult?.value ?? alertsResult
           : [];
@@ -159,17 +238,53 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
         const feedErrors = [alertsResult, landslideResult, riverResult]
           .filter((result) => result?.error)
           .map((result) => result.error);
-        const hazards = alerts
+        const alertsWithCoordinates = alerts
           .filter((alert) => String(alert.status || "").toLowerCase() === "active")
           .map((alert) => ({
             latitude: Number(alert.latitude),
             longitude: Number(alert.longitude),
             label: alert.affectedArea || alert.disasterType || "Active warning",
+            source: "Emergency alert",
           }))
           .filter((hazard) => Number.isFinite(hazard.latitude) && Number.isFinite(hazard.longitude));
-        const warningDistricts = (landslidePayload?.warnings || [])
+        const alertsWithoutCoordinates = alerts
+          .filter((alert) => String(alert.status || "").toLowerCase() === "active")
+          .filter((alert) => !Number.isFinite(Number(alert.latitude)) || !Number.isFinite(Number(alert.longitude)))
+          .map((alert) => alert.affectedArea || alert.disasterType)
+          .filter(Boolean);
+        const allLandslideWarnings = Array.isArray(landslidePayload?.warnings)
+          ? landslidePayload.warnings
+          : [];
+        const warningDistricts = allLandslideWarnings
           .filter((warning) => warning?.district && warning?.divisions?.length)
           .filter((warning) => warning.district.toLowerCase() === String(shelter.district || "").toLowerCase());
+        const landslideLabels = allLandslideWarnings.flatMap((warning) =>
+          (warning.divisions || []).length
+            ? warning.divisions.map((division) => `${division}, ${warning.district}`)
+            : [warning.district]
+        );
+        const geocodedWarnings = await geocodeWarningLocations([
+          ...alertsWithoutCoordinates,
+          ...landslideLabels,
+        ]);
+        const alertGeocodes = geocodedWarnings.filter((hazard) =>
+          alertsWithoutCoordinates.some((label) =>
+            hazard.label.toLowerCase().includes(String(label).trim().toLowerCase())
+          )
+        ).map((hazard) => ({ ...hazard, source: "Emergency alert" }));
+        const landslideGeocodes = geocodedWarnings
+          .filter((hazard) =>
+            landslideLabels.some((label) =>
+              label.toLowerCase().includes(hazard.label.toLowerCase()) ||
+              hazard.label.toLowerCase().includes(label.toLowerCase())
+            )
+          )
+          .map((hazard) => ({ ...hazard, source: "Official landslide warning" }));
+        const hazards = [
+          ...alertsWithCoordinates,
+          ...alertGeocodes,
+          ...landslideGeocodes,
+        ];
         const observedRiver = latestRiverReading(river);
         const builtRoutes = routes.map((route) => {
           const segments = routeSegments(route, hazards);
@@ -199,11 +314,14 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
         map.fitBounds(L.latLngBounds([origin, destination, ...allPoints]), { padding: [24, 24] });
         hazards.forEach((hazard) =>
           L.circleMarker([hazard.latitude, hazard.longitude], {
-            radius: 8,
+            radius: 10,
             color: "#b91c1c",
+            weight: 3,
             fillColor: "#ef4444",
-            fillOpacity: 0.8,
-          }).addTo(map).bindPopup(hazard.label)
+            fillOpacity: 0.85,
+          }).addTo(map).bindPopup(
+            `<strong>${escapeHtml(hazard.source || "Warning")}</strong><br>${escapeHtml(hazard.label)}`
+          )
         );
       })
       .catch((error) => {
@@ -234,7 +352,13 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
             opacity: isSelected ? 0.95 : 0.45,
           })
             .addTo(map)
-            .bindPopup(segment.dangerous ? "Danger reported near this road segment." : "Road segment")
+            .bindPopup(
+              segment.dangerous
+                ? `<strong>Warning near this road segment</strong><br>${escapeHtml(
+                    segment.hazards.map((hazard) => hazard.label).join("; ")
+                  )}`
+                : "Road segment"
+            )
         );
       });
     });

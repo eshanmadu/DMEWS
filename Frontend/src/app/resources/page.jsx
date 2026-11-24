@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import DistributionRouteModal from "@/components/DistributionRouteModal";
 import {
   Package,
   Pill,
@@ -17,6 +18,8 @@ import {
   ChevronLeft,
   ChevronRight,
   PackageCheck,
+  Navigation,
+  Sparkles,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -108,6 +111,9 @@ export default function ResourcesPage() {
   const [step, setStep] = useState(1);
   const [submittedReference, setSubmittedReference] = useState("");
   const [resourceItems, setResourceItems] = useState({});
+  const [demandPrediction, setDemandPrediction] = useState(null);
+  const [demandLoading, setDemandLoading] = useState(true);
+  const [distributionRoute, setDistributionRoute] = useState(null);
 
   const selectedResources = useMemo(
     () => ALL_RESOURCE_TYPES.filter((r) => (form.resourceTypes || []).includes(r.id)),
@@ -236,6 +242,26 @@ export default function ResourcesPage() {
       }
     }
     loadPrograms();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDemandPrediction() {
+      setDemandLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/resource-demand/predictions`, { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (!cancelled && res.ok) setDemandPrediction(data);
+      } catch {
+        if (!cancelled) setDemandPrediction(null);
+      } finally {
+        if (!cancelled) setDemandLoading(false);
+      }
+    }
+    loadDemandPrediction();
     return () => {
       cancelled = true;
     };
@@ -385,6 +411,91 @@ export default function ResourcesPage() {
 
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-3 lg:px-8">
         <section className="space-y-5 lg:col-span-2">
+          <div className="rounded-2xl border border-violet-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-sky-50 px-5 py-4">
+              <div>
+                <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-slate-800">
+                  <Sparkles className="h-5 w-5 text-violet-600" />
+                  {tr("AI resource priority areas", "AI සම්පත් ප්‍රමුඛතා ප්‍රදේශ")}
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  {tr(
+                    "Areas where recent incidents and active alerts indicate the greatest resource need.",
+                    "මෑත සිදුවීම් සහ සක්‍රීය අනතුරු ඇඟවීම් මගින් විශාලතම සම්පත් අවශ්‍යතාව පෙන්වන ප්‍රදේශ."
+                  )}
+                </p>
+              </div>
+            </div>
+            {demandLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-violet-600" />
+              </div>
+            ) : !demandPrediction?.predictions?.length ? (
+              <p className="px-5 py-8 text-center text-sm text-slate-500">
+                {tr("No affected-area demand signals are available yet.", "දැනට බලපෑමට ලක් වූ ප්‍රදේශවල අවශ්‍යතා නොමැත.")}
+              </p>
+            ) : (
+              <div className="grid gap-3 p-5 md:grid-cols-2">
+                {demandPrediction.predictions.slice(0, 6).map((prediction, index) => (
+                  <article key={prediction.district} className="rounded-xl border border-slate-200 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600">
+                          {tr(`Priority #${index + 1}`, `ප්‍රමුඛතාව #${index + 1}`)}
+                        </p>
+                        <h3 className="mt-1 flex items-center gap-1.5 font-bold text-slate-900">
+                          <MapPin className="h-4 w-4 text-rose-600" />
+                          {prediction.district}
+                        </h3>
+                      </div>
+                      <span className="rounded-full bg-violet-100 px-2 py-1 text-[11px] font-bold text-violet-800">
+                        {prediction.score}
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-1.5">
+                      {(prediction.needs || []).filter((need) => need.severity !== "Covered").slice(0, 3).map((need) => (
+                        <div key={need.resourceType} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                          <span className="font-semibold text-slate-800">{need.resourceType}</span>
+                          <span className={`font-bold ${need.severity === "High" ? "text-rose-700" : "text-amber-700"}`}>
+                            {need.severity === "Covered"
+                              ? tr("Stock covered", "තොගය ප්‍රමාණවත්")
+                              : tr(`${need.severity} demand priority`, `${need.severity} අවශ්‍යතා ප්‍රමුඛතාව`)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {prediction.topAreas?.length > 0 && (
+                      <p className="mt-3 text-[11px] text-slate-500">
+                        {tr("Frequent areas:", "නිරන්තර ප්‍රදේශ:")} {prediction.topAreas.map((area) => area.area).join(", ")}
+                      </p>
+                    )}
+                    {prediction.center && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const firstNeed = (prediction.needs || []).find((need) => need.sources?.length);
+                          const source = firstNeed?.sources?.[0];
+                          setDistributionRoute({
+                            origin: source?.center
+                              ? { latitude: source.center.latitude, longitude: source.center.longitude, label: `${source.storageLocation} (${source.district})` }
+                              : null,
+                            destination: prediction.center,
+                            destinationLabel: `${prediction.district} affected area`,
+                            resourceType: firstNeed?.resourceType || "Resource",
+                          });
+                        }}
+                        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800"
+                      >
+                        <Navigation className="h-3.5 w-3.5" />
+                        {tr("Distribution route", "බෙදාහැරීමේ මාර්ගය")}
+                      </button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div id="resource-categories" className="rounded-2xl border border-slate-200 bg-white shadow-sm scroll-mt-6">
             <div className="border-b border-slate-100 bg-gradient-to-r from-sky-50 to-indigo-50/50 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-800">
@@ -657,6 +768,16 @@ export default function ResourcesPage() {
           )}
         </aside>
       </div>
+
+      {distributionRoute?.origin && distributionRoute?.destination && (
+        <DistributionRouteModal
+          origin={distributionRoute.origin}
+          destination={distributionRoute.destination}
+          destinationLabel={distributionRoute.destinationLabel}
+          resourceType={distributionRoute.resourceType}
+          onClose={() => setDistributionRoute(null)}
+        />
+      )}
 
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

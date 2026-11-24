@@ -42,6 +42,47 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const HERO_BG = "/img/shelter.png";
 const MAX_RECOMMENDED_SHELTERS = 6;
 
+const DISTRICT_COORDINATES = {
+  Ampara: [7.2833, 81.6667],
+  Anuradhapura: [8.3114, 80.4037],
+  Badulla: [6.9934, 81.0550],
+  Batticaloa: [7.7248, 81.6964],
+  Colombo: [6.9271, 79.8612],
+  Galle: [6.0329, 80.2170],
+  Gampaha: [7.0873, 80.0144],
+  Hambantota: [6.1248, 81.1185],
+  Jaffna: [9.6615, 80.0255],
+  Kalutara: [6.5854, 79.9607],
+  Kandy: [7.2906, 80.6337],
+  Kegalle: [7.2513, 80.3464],
+  Kilinochchi: [9.3803, 80.3770],
+  Kurunegala: [7.4863, 80.3623],
+  Mannar: [8.9771, 79.9042],
+  Matale: [7.4675, 80.6234],
+  Matara: [5.9549, 80.5549],
+  Monaragala: [6.8728, 81.3507],
+  Mullaitivu: [9.2671, 80.8142],
+  "Nuwara Eliya": [6.9497, 80.7891],
+  Polonnaruwa: [7.9403, 81.0188],
+  Puttalam: [8.0408, 79.8394],
+  Ratnapura: [6.6828, 80.3992],
+  Trincomalee: [8.5874, 81.2152],
+  Vavuniya: [8.7514, 80.4971],
+};
+
+function getShelterCoordinates(shelter) {
+  const latitude = Number(shelter?.latitude ?? shelter?.cityLatitude);
+  const longitude = Number(shelter?.longitude ?? shelter?.cityLongitude);
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    return { latitude, longitude };
+  }
+  const districtCenter =
+    DISTRICT_COORDINATES[String(shelter?.district || "").trim()];
+  return districtCenter
+    ? { latitude: districtCenter[0], longitude: districtCenter[1] }
+    : null;
+}
+
 /** Haversine formula for distance calculation */
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -274,6 +315,7 @@ function ShelterCard({
   const isFull = Boolean(shelter.isFull || (capacity > 0 && occupied >= capacity));
   const isOpen =
     (shelter.availability || (shelter.status === "inactive" ? "closed" : "open")) === "open";
+  const shelterCoordinates = getShelterCoordinates(shelter);
   const condition = shelter.condition || "good";
   const conditionLabel =
     condition === "needs-attention" ? "Needs attention" : condition[0].toUpperCase() + condition.slice(1);
@@ -465,11 +507,11 @@ function ShelterCard({
         <button
           type="button"
           onClick={onDirections}
-          disabled={!shelter.latitude || !shelter.longitude}
+          disabled={!shelterCoordinates}
           className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           title={
-            !shelter.latitude || !shelter.longitude
-              ? "Shelter coordinates are not available"
+            !shelterCoordinates
+              ? "Shelter and district coordinates are not available"
               : "Use Browser GPS and OSRM to get directions"
           }
         >
@@ -565,7 +607,16 @@ export default function SheltersPage() {
                 highlightedGreen: Boolean(centre.highlighted_green),
               }))
             : [];
-          const combined = [...data, ...centres];
+          const combined = [...data, ...centres].map((shelter) => {
+            const coordinates = getShelterCoordinates(shelter);
+            return coordinates
+              ? {
+                  ...shelter,
+                  latitude: coordinates.latitude,
+                  longitude: coordinates.longitude,
+                }
+              : shelter;
+          });
           setShelters(combined);
           const uniqueDistricts = [...new Set(combined.map((s) => s.district).filter(Boolean))].sort();
           setDistricts(uniqueDistricts);
@@ -823,7 +874,14 @@ export default function SheltersPage() {
           longitude: position.coords.longitude,
         });
         setBrowserLocationStatus("ready");
-        if (shelterToRoute) setRouteShelter(shelterToRoute);
+        if (shelterToRoute) {
+          const coordinates = getShelterCoordinates(shelterToRoute);
+          setRouteShelter(
+            coordinates
+              ? { ...shelterToRoute, latitude: coordinates.latitude, longitude: coordinates.longitude }
+              : shelterToRoute
+          );
+        }
       },
       (error) => {
         setBrowserLocationStatus("error");
@@ -1064,16 +1122,47 @@ export default function SheltersPage() {
                           </div>
                         </div>
 
-                        {recommendedShelter.recommendationDistanceKm != null && (
-                          <div className="shrink-0 rounded-xl bg-white/70 px-4 py-3 text-center ring-1 ring-white/80 backdrop-blur">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                              {si ? "දුර" : "Distance"}
-                            </p>
-                            <p className="mt-0.5 text-2xl font-bold tabular-nums text-emerald-900">
-                              {formatDistanceKm(recommendedShelter.recommendationDistanceKm)}
-                            </p>
-                          </div>
-                        )}
+                        <div className="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row md:flex-col">
+                          {recommendedShelter.recommendationDistanceKm != null && (
+                            <div className="rounded-xl bg-white/70 px-4 py-3 text-center ring-1 ring-white/80 backdrop-blur">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                                {si ? "දුර" : "Distance"}
+                              </p>
+                              <p className="mt-0.5 text-2xl font-bold tabular-nums text-emerald-900">
+                                {formatDistanceKm(recommendedShelter.recommendationDistanceKm)}
+                              </p>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const coordinates = getShelterCoordinates(recommendedShelter);
+                              const routableShelter = coordinates
+                                ? {
+                                    ...recommendedShelter,
+                                    latitude: coordinates.latitude,
+                                    longitude: coordinates.longitude,
+                                  }
+                                : recommendedShelter;
+                              if (!browserLocation) {
+                                requestBrowserLocation(routableShelter);
+                              } else {
+                                setRouteShelter(routableShelter);
+                              }
+                            }}
+                            disabled={!getShelterCoordinates(recommendedShelter)}
+                            className="inline-flex min-w-[150px] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          >
+                            <Navigation className="h-4 w-4" />
+                            {browserLocation
+                              ? si
+                                ? "දිශාවන්"
+                                : "Directions"
+                              : si
+                                ? "GPS සක්‍රීය කරන්න"
+                                : "Enable GPS"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1168,8 +1257,12 @@ export default function SheltersPage() {
                                       highlight={isUserDistrict || s.id === recommendedShelter?.id}
                                       distanceLabel={formatDistanceKm(s.distanceKm)}
                                       onDirections={() => {
-                                        if (!browserLocation) requestBrowserLocation(s);
-                                        else setRouteShelter(s);
+                                        const coordinates = getShelterCoordinates(s);
+                                        const routableShelter = coordinates
+                                          ? { ...s, latitude: coordinates.latitude, longitude: coordinates.longitude }
+                                          : s;
+                                        if (!browserLocation) requestBrowserLocation(routableShelter);
+                                        else setRouteShelter(routableShelter);
                                       }}
                                       directionsReady={Boolean(browserLocation)}
                                       onLiveCapacityUpdated={(updated) => {

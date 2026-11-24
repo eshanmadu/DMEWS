@@ -12,9 +12,11 @@ const {
   adminCreateInventory,
   adminAddInventoryTransaction,
   adminListInventoryTransactions,
+  getResourceDemand,
 } = require("../controllers/resourcesController");
 
 router.get("/resource-programs", listPrograms);
+router.get("/resource-demand/predictions", getResourceDemand);
 router.get("/resource-programs/admin/list", adminMiddleware, adminListPrograms);
 router.post("/resource-programs/admin", adminMiddleware, adminCreateProgram);
 router.delete("/resource-programs/admin/:id", adminMiddleware, adminDeleteProgram);

@@ -4,6 +4,9 @@ const { ResourceProgram } = require("../models/ResourceProgram");
 const { ResourceParticipation } = require("../models/ResourceParticipation");
 const { ResourceInventory } = require("../models/ResourceInventory");
 const { ResourceInventoryTransaction } = require("../models/ResourceInventoryTransaction");
+const { IncidentReport } = require("../models/IncidentReport");
+const Alert = require("../models/Alert");
+const lkCities = require("../../data/cities.json");
 
 function validEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
@@ -431,6 +434,190 @@ async function adminListParticipations(_req, res) {
   }
 }
 
+  function districtCenter(district) {
+    const cities = Array.isArray(lkCities?.cities) ? lkCities.cities : [];
+    const districtDoc = require("../../data/districts.json").districts || [];
+    const districtRow = districtDoc.find(
+      (item) => String(item.name_en || "").trim().toLowerCase() === String(district || "").trim().toLowerCase()
+    );
+    if (!districtRow) return null;
+    const matches = cities
+      .filter((city) => String(city.district_id) === String(districtRow.id))
+      .filter((city) => Number.isFinite(Number(city.latitude)) && Number.isFinite(Number(city.longitude)));
+    if (!matches.length) return null;
+    return {
+      latitude: matches.reduce((sum, city) => sum + Number(city.latitude), 0) / matches.length,
+      longitude: matches.reduce((sum, city) => sum + Number(city.longitude), 0) / matches.length,
+    };
+  }
+
+  function inferResourceNeeds(text) {
+    const value = String(text || "").toLowerCase();
+    const needs = [];
+    if (/flood|water|drown|drinking|purif/.test(value)) needs.push("water");
+    if (/medical|medicine|injur|health|hospital|first aid|wound/.test(value)) needs.push("medicines");
+    if (/food|hungry|ration|meal|rice|supply/.test(value)) needs.push("dry-food");
+    if (/cloth|blanket|bedding|raincoat|shelter/.test(value)) needs.push("clothes");
+    if (/hygiene|tool|essential|relief/.test(value)) needs.push("other");
+    return [...new Set(needs)];
+  }
+
+  const SRI_LANKA_DISTRICTS = [
+    "Ampara","Anuradhapura","Badulla","Batticaloa","Colombo","Galle","Gampaha","Hambantota",
+    "Jaffna","Kalutara","Kandy","Kegalle","Kilinochchi","Kurunegala","Mannar","Matale","Matara",
+    "Monaragala","Mullaitivu","Nuwara Eliya","Polonnaruwa","Puttalam","Ratnapura","Trincomalee","Vavuniya",
+  ];
+
+  function findDistrict(text) {
+    const value = String(text || "").trim().toLowerCase();
+    return SRI_LANKA_DISTRICTS.find((district) =>
+      value === district.toLowerCase() ||
+      value.includes(district.toLowerCase())
+    ) || null;
+  }
+
+async function getResourceDemand(req, res) {
+    try {
+      await connectDb();
+      const [incidents, alerts, inventory, participations] = await Promise.all([
+        IncidentReport.find({}).sort({ reportedAt: -1, createdAt: -1 }).limit(1000).lean().exec(),
+        Alert.find({ status: "Active" }).lean().exec(),
+        ResourceInventory.find({}).lean().exec(),
+        ResourceParticipation.find({}).sort({ createdAt: -1 }).limit(1000).lean().exec(),
+      ]);
+
+      const now = Date.now();
+      const districtScores = new Map();
+      const ensureDistrict = (district) => {
+        const name = String(district || "").trim();
+        if (!name) return null;
+        if (!districtScores.has(name)) {
+          districtScores.set(name, {
+            district: name,
+            center: districtCenter(name),
+            incidentCount: 0,
+            unresolvedCount: 0,
+            alertCount: 0,
+            participationCount: 0,
+            needs: new Map(),
+            areas: new Map(),
+            recentSignals: 0,
+          });
+        }
+        return districtScores.get(name);
+      };
+
+      incidents.forEach((incident) => {
+        const row = ensureDistrict(incident.district || incident.userSnapshot?.district);
+        if (!row) return;
+        row.incidentCount += 1;
+        if (!["resolved"].includes(String(incident.status || "").toLowerCase())) row.unresolvedCount += 1;
+        const occurred = new Date(incident.reportedAt || incident.createdAt || 0).getTime();
+        const ageDays = Number.isFinite(occurred) ? (now - occurred) / 86400000 : 365;
+        const recency = Math.max(0.15, 1 - Math.max(0, ageDays) / 180);
+        row.recentSignals += recency;
+        const needs = inferResourceNeeds(`${incident.title} ${incident.description} ${incident.area}`);
+        needs.forEach((resourceType) => {
+          const current = row.needs.get(resourceType) || { score: 0, events: 0 };
+          const unresolvedWeight =
+            String(incident.status || "").toLowerCase() === "resolved" ? 0.7 : 1.4;
+          current.score += (1.2 + recency) * unresolvedWeight;
+          current.events += 1;
+          row.needs.set(resourceType, current);
+        });
+        const area = String(incident.area || "").trim();
+        if (area) row.areas.set(area, (row.areas.get(area) || 0) + 1);
+      });
+
+      alerts.forEach((alert) => {
+        const district = findDistrict(`${alert.affectedArea} ${alert.description}`);
+        const row = ensureDistrict(district);
+        if (!row) return;
+        row.alertCount += 1;
+        row.recentSignals += alert.severity === "High" ? 1.8 : alert.severity === "Medium" ? 1.2 : 0.7;
+        const needs = inferResourceNeeds(`${alert.disasterType} ${alert.description} ${alert.affectedArea}`);
+        needs.forEach((resourceType) => {
+          const current = row.needs.get(resourceType) || { score: 0, events: 0 };
+          current.score += alert.severity === "High" ? 3 : alert.severity === "Medium" ? 2 : 1;
+          current.events += 1;
+          row.needs.set(resourceType, current);
+        });
+      });
+
+      participations.forEach((participation) => {
+        const row = ensureDistrict(participation.district);
+        if (row) row.participationCount += 1;
+      });
+
+      const stockByDistrictType = new Map();
+      inventory.forEach((item) => {
+        const key = `${String(item.district).trim()}|${String(item.resourceType).trim().toLowerCase()}`;
+        stockByDistrictType.set(key, (stockByDistrictType.get(key) || 0) + Number(item.availableQuantity || 0));
+      });
+
+      const predictions = [...districtScores.values()].map((row) => {
+        const needs = [...row.needs.entries()].map(([resourceType, demand]) => {
+          const stock = stockByDistrictType.get(`${row.district}|${resourceType}`) || 0;
+          const matchingSources = inventory
+            .filter((item) =>
+              String(item.resourceType).trim().toLowerCase() === resourceType &&
+              Number(item.availableQuantity || 0) > 0
+            )
+            .sort((a, b) => String(a.district).localeCompare(String(b.district)))
+            .map((item) => ({
+              district: item.district,
+              storageLocation: item.storageLocation,
+              availableQuantity: Number(item.availableQuantity || 0),
+              unit: item.unit,
+              center: districtCenter(item.district),
+            }));
+          return {
+            resourceType,
+            demandScore: Math.round(demand.score * 10) / 10,
+            events: demand.events,
+            availableStock: stock,
+            severity: stock > 0 ? "Covered" : demand.events >= 3 ? "High" : "Medium",
+            sources: matchingSources.slice(0, 5),
+          };
+        }).sort((a, b) => b.demandScore - a.demandScore);
+
+        const score =
+          row.unresolvedCount * 2 +
+          row.recentSignals * 1.5 +
+          row.alertCount * 3 +
+          needs.filter((need) => need.severity !== "Covered").length * 4;
+
+        return {
+          district: row.district,
+          center: row.center,
+          score: Math.round(score * 10) / 10,
+          incidentCount: row.incidentCount,
+          unresolvedCount: row.unresolvedCount,
+          alertCount: row.alertCount,
+          participationCount: row.participationCount,
+          topAreas: [...row.areas.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([area, count]) => ({ area, count })),
+          needs,
+          model: "Historical incidents + active alerts + confirmed inventory",
+        };
+      }).sort((a, b) => b.score - a.score);
+
+      const generatedAt = new Date().toISOString();
+      res.json({
+        generatedAt,
+        summary: {
+          affectedDistricts: predictions.filter((row) => row.score > 0).length,
+          resourceShortages: predictions.reduce((sum, row) => sum + row.needs.filter((need) => need.severity !== "Covered").length, 0),
+          incidentsAnalyzed: incidents.length,
+          activeAlertsAnalyzed: alerts.length,
+        },
+        predictions,
+      });
+    } catch (error) {
+      console.error("Resource demand prediction error", error);
+      res.status(500).json({ message: "Failed to generate resource demand predictions." });
+    }
+}
+
 module.exports = {
   listPrograms,
   adminListPrograms,
@@ -442,5 +629,6 @@ module.exports = {
   adminCreateInventory,
   adminAddInventoryTransaction,
   adminListInventoryTransactions,
+  getResourceDemand,
 };
 

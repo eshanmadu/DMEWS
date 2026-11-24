@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ClipboardList, History, Loader2, PackageCheck, PackagePlus, RefreshCw, Trash2 } from "lucide-react";
+import { ClipboardList, History, Loader2, MapPin, Navigation, PackageCheck, PackagePlus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import DistributionRouteModal from "@/components/DistributionRouteModal";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 export default function AdminResourcesPage() {
@@ -11,6 +12,9 @@ export default function AdminResourcesPage() {
   const [submissionsLoading, setSubmissionsLoading] = useState(true);
   const [inventory, setInventory] = useState([]);
   const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [demandPrediction, setDemandPrediction] = useState(null);
+  const [demandLoading, setDemandLoading] = useState(true);
+  const [distributionRoute, setDistributionRoute] = useState(null);
   const [inventoryForm, setInventoryForm] = useState({ resourceType: "", unit: "units", storageLocation: "", district: "", expiryDate: "" });
   const [activeInventoryId, setActiveInventoryId] = useState(null);
   const [transactionRows, setTransactionRows] = useState([]);
@@ -111,6 +115,23 @@ export default function AdminResourcesPage() {
     loadSubmissions();
     loadInventory();
   }, [loadPrograms, loadSubmissions, loadInventory]);
+
+  const loadDemandPrediction = useCallback(async () => {
+    setDemandLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/resource-demand/predictions`, { cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      if (res.ok) setDemandPrediction(data);
+    } catch {
+      setDemandPrediction(null);
+    } finally {
+      setDemandLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDemandPrediction();
+  }, [loadDemandPrediction]);
 
   async function createInventoryItem(event) {
     event.preventDefault();
@@ -269,6 +290,7 @@ export default function AdminResourcesPage() {
             loadPrograms();
             loadSubmissions();
             loadInventory();
+            loadDemandPrediction();
           }}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
         >
@@ -282,6 +304,91 @@ export default function AdminResourcesPage() {
           {error}
         </div>
       )}
+
+      <section className="rounded-2xl border border-violet-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-sky-50 px-6 py-4">
+          <div>
+            <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <Sparkles className="h-5 w-5 text-violet-600" />
+              AI resource demand forecast
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Ranked from incidents, active alerts, confirmed inventory, and recent contribution patterns.
+            </p>
+          </div>
+          {demandPrediction?.generatedAt && (
+            <span className="text-xs text-slate-500">
+              Updated {new Date(demandPrediction.generatedAt).toLocaleString()}
+            </span>
+          )}
+        </div>
+        {demandLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-7 w-7 animate-spin text-violet-600" />
+          </div>
+        ) : !demandPrediction?.predictions?.length ? (
+          <p className="px-6 py-10 text-center text-sm text-slate-500">
+            No affected-area demand signals are available yet.
+          </p>
+        ) : (
+          <div className="grid gap-4 p-6 lg:grid-cols-2">
+            {demandPrediction.predictions.slice(0, 8).map((prediction, index) => (
+              <article key={prediction.district} className="rounded-xl border border-slate-200 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-violet-600">
+                      Priority #{index + 1}
+                    </p>
+                    <h3 className="mt-1 flex items-center gap-1.5 text-base font-bold text-slate-900">
+                      <MapPin className="h-4 w-4 text-rose-600" />
+                      {prediction.district}
+                    </h3>
+                  </div>
+                  <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-800">
+                    Score {prediction.score}
+                  </span>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {(prediction.needs || []).slice(0, 4).map((need) => (
+                    <div key={need.resourceType} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                      <span className="font-semibold text-slate-800">{need.resourceType}</span>
+                      <span className={`text-xs font-bold ${need.severity === "Covered" ? "text-emerald-700" : need.severity === "High" ? "text-rose-700" : "text-amber-700"}`}>
+                        {need.severity === "Covered" ? "Stock covered" : `${need.severity} demand priority`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {prediction.topAreas?.length > 0 && (
+                  <p className="mt-3 text-xs text-slate-500">
+                    Frequent areas: {prediction.topAreas.map((area) => area.area).join(", ")}
+                  </p>
+                )}
+                {prediction.center && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const firstNeed = (prediction.needs || []).find((need) => need.sources?.length);
+                      const source = firstNeed?.sources?.[0];
+                      setDistributionRoute({
+                        origin: source?.center
+                          ? { latitude: source.center.latitude, longitude: source.center.longitude, label: `${source.storageLocation} (${source.district})` }
+                          : null,
+                        destination: prediction.center,
+                        destinationLabel: `${prediction.district} affected area`,
+                        resourceType: firstNeed?.resourceType || "Resource",
+                      });
+                    }}
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800"
+                  >
+                    <Navigation className="h-3.5 w-3.5" />
+                    Open distribution route
+                  </button>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
@@ -468,6 +575,15 @@ export default function AdminResourcesPage() {
           </div>
         )}
       </div>
+      {distributionRoute?.origin && distributionRoute?.destination && (
+        <DistributionRouteModal
+          origin={distributionRoute.origin}
+          destination={distributionRoute.destination}
+          destinationLabel={distributionRoute.destinationLabel}
+          resourceType={distributionRoute.resourceType}
+          onClose={() => setDistributionRoute(null)}
+        />
+      )}
     </div>
   );
 }
