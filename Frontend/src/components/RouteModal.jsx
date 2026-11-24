@@ -12,12 +12,14 @@ import {
   Route as RouteIcon,
   X,
 } from "lucide-react";
+import { buildGaugeFeedUrl, getStationStatus, parseArcGISFeed } from "@/lib/riverGauges";
 import "leaflet/dist/leaflet.css";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 const ROUTER_URL = "https://router.project-osrm.org/route/v1/driving";
 const EARTH_RADIUS_KM = 6371;
+const NO_ADDITIONAL_HAZARDS = [];
 
 const DISTRICT_COORDINATES = {
   Ampara: [7.2833, 81.6667],
@@ -71,16 +73,22 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function distanceKm(a, b) {
-  const toRad = (value) => (value * Math.PI) / 180;
-  const dLat = toRad(b[0] - a[0]);
-  const dLon = toRad(b[1] - a[1]);
-  const lat1 = toRad(a[0]);
-  const lat2 = toRad(b[0]);
-  const value =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+function distanceToSegmentKm(point, start, end) {
+  const toRadians = (value) => (value * Math.PI) / 180;
+  const referenceLatitude = toRadians(point[0]);
+  const project = ([latitude, longitude]) => [
+    EARTH_RADIUS_KM * toRadians(longitude - point[1]) * Math.cos(referenceLatitude),
+    EARTH_RADIUS_KM * toRadians(latitude - point[0]),
+  ];
+  const [startX, startY] = project(start);
+  const [endX, endY] = project(end);
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+  const segmentLengthSquared = deltaX ** 2 + deltaY ** 2;
+  const fraction = segmentLengthSquared
+    ? Math.max(0, Math.min(1, -(startX * deltaX + startY * deltaY) / segmentLengthSquared))
+    : 0;
+  return Math.hypot(startX + fraction * deltaX, startY + fraction * deltaY);
 }
 
 async function geocodeWarningLocations(labels) {
@@ -136,12 +144,31 @@ function routeSegments(route, hazards) {
   ]);
   return points.slice(0, -1).map((start, index) => {
     const end = points[index + 1];
-    const midpoint = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
     const nearby = hazards.filter(
-      (hazard) => distanceKm(midpoint, [hazard.latitude, hazard.longitude]) <= 2.5
+      (hazard) =>
+        distanceToSegmentKm([hazard.latitude, hazard.longitude], start, end) <= 2.5
     );
     return { start, end, dangerous: nearby.length > 0, hazards: nearby };
   });
+}
+
+function scoreRouteRisk(segments) {
+  const exposedHazards = new Map();
+  segments.forEach((segment) => {
+    segment.hazards.forEach((hazard) => {
+      const key = [
+        hazard.source,
+        hazard.label,
+        Number(hazard.latitude).toFixed(4),
+        Number(hazard.longitude).toFixed(4),
+      ].join(":");
+      exposedHazards.set(key, hazard);
+    });
+  });
+  return [...exposedHazards.values()].reduce(
+    (score, hazard) => score + (Number(hazard.riskWeight) || 3),
+    0
+  );
 }
 
 function formatDuration(seconds) {
@@ -151,12 +178,18 @@ function formatDuration(seconds) {
 }
 
 function riskLabel(score) {
-  if (score >= 7) return { label: "High risk", className: "text-red-700 bg-red-50 border-red-200" };
-  if (score >= 3) return { label: "Use caution", className: "text-amber-700 bg-amber-50 border-amber-200" };
+  if (score >= 5) return { label: "High risk", className: "text-red-700 bg-red-50 border-red-200" };
+  if (score >= 2) return { label: "Use caution", className: "text-amber-700 bg-amber-50 border-amber-200" };
   return { label: "Lowest observed risk", className: "text-emerald-700 bg-emerald-50 border-emerald-200" };
 }
 
-export default function RouteModal({ shelter, userLocation, onClose }) {
+export default function RouteModal({
+  shelter,
+  userLocation,
+  onClose,
+  originLabel = "Your current location",
+  additionalHazards = NO_ADDITIONAL_HAZARDS,
+}) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const [state, setState] = useState({
@@ -166,6 +199,8 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
     selectedIndex: 0,
     alerts: [],
     landslides: [],
+    floodWarnings: [],
+    floodFeedAvailable: false,
     river: null,
     feedErrors: [],
   });
@@ -199,7 +234,7 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     }).addTo(map);
-    L.marker(origin).addTo(map).bindPopup("Your current location");
+    L.marker(origin).addTo(map).bindPopup(originLabel);
     L.marker(destination).addTo(map).bindPopup(shelter.name || "Shelter");
 
     const controller = new AbortController();
@@ -218,7 +253,7 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
     setState((current) => ({ ...current, loading: true, error: "", feedErrors: [] }));
     Promise.all([
       fetch(
-        `${ROUTER_URL}/${userLocation.longitude},${userLocation.latitude};${destination[1]},${destination[0]}?overview=full&alternatives=true&steps=false&geometries=geojson`,
+        `${ROUTER_URL}/${userLocation.longitude},${userLocation.latitude};${destination[1]},${destination[0]}?overview=full&alternatives=3&steps=false&geometries=geojson`,
         { signal: controller.signal }
       ).then(async (response) => {
         const data = await response.json().catch(() => ({}));
@@ -228,8 +263,9 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
       fetchJson(`${API_BASE}/alerts`, [], "Flood and emergency alert"),
       fetchJson(`${API_BASE}/landslide-warnings`, { warnings: [] }, "Landslide"),
       fetchJson(`${API_BASE}/shelters/river-water-levels`, {}, "River level"),
+      fetchJson(buildGaugeFeedUrl(), { features: [] }, "Live river gauge"),
     ])
-      .then(async ([routes, alertsResult, landslideResult, riverResult]) => {
+      .then(async ([routes, alertsResult, landslideResult, riverResult, gaugeResult]) => {
         const alerts = Array.isArray(alertsResult?.value ?? alertsResult)
           ? alertsResult?.value ?? alertsResult
           : [];
@@ -238,6 +274,32 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
         const feedErrors = [alertsResult, landslideResult, riverResult]
           .filter((result) => result?.error)
           .map((result) => result.error);
+        const gaugePayload = gaugeResult?.value ?? gaugeResult;
+        const floodFeedAvailable =
+          !gaugeResult?.error && Array.isArray(gaugePayload?.features);
+        if (!floodFeedAvailable && !gaugeResult?.error) {
+          feedErrors.push("Live river gauge feed returned no gauge data.");
+        }
+        const floodWarnings = floodFeedAvailable
+          ? parseArcGISFeed(gaugePayload).flatMap((station) => {
+              const status = getStationStatus(station);
+              const riskWeight = {
+                Alert: 2,
+                "Minor flood": 3,
+                "Major flood": 5,
+              }[status.label];
+              if (!riskWeight || !Number.isFinite(station.latitude) || !Number.isFinite(station.longitude)) {
+                return [];
+              }
+              return [{
+                latitude: station.latitude,
+                longitude: station.longitude,
+                label: `${station.station}: ${status.label}`,
+                source: "Irrigation Department flood warning",
+                riskWeight,
+              }];
+            })
+          : [];
         const alertsWithCoordinates = alerts
           .filter((alert) => String(alert.status || "").toLowerCase() === "active")
           .map((alert) => ({
@@ -280,31 +342,40 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
             )
           )
           .map((hazard) => ({ ...hazard, source: "Official landslide warning" }));
+        const suppliedHazards = additionalHazards
+          .map((hazard) => ({
+            ...hazard,
+            latitude: Number(hazard.latitude),
+            longitude: Number(hazard.longitude),
+          }))
+          .filter((hazard) => Number.isFinite(hazard.latitude) && Number.isFinite(hazard.longitude));
         const hazards = [
           ...alertsWithCoordinates,
           ...alertGeocodes,
           ...landslideGeocodes,
+          ...floodWarnings,
+          ...suppliedHazards,
         ];
-        const observedRiver = latestRiverReading(river);
         const builtRoutes = routes.map((route) => {
           const segments = routeSegments(route, hazards);
-          const score =
-            segments.filter((segment) => segment.dangerous).length * 3 +
-            warningDistricts.length * 3 +
-            (observedRiver ? 1 : 0);
-          return { ...route, segments, score, warningDistricts };
-        });
-        const selectedIndex = builtRoutes.reduce(
-          (best, route, index, list) => (route.score < list[best].score ? index : best),
-          0
+          return {
+            ...route,
+            segments,
+            score: scoreRouteRisk(segments),
+            warningDistricts,
+          };
+        }).sort(
+          (a, b) => a.score - b.score || a.duration - b.duration || a.distance - b.distance
         );
         setState({
           loading: false,
           error: "",
           routes: builtRoutes,
-          selectedIndex,
+          selectedIndex: 0,
           alerts,
           landslides: warningDistricts,
+          floodWarnings,
+          floodFeedAvailable,
           river,
           feedErrors,
         });
@@ -335,7 +406,7 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
       map.remove();
       mapRef.current = null;
     };
-  }, [destination, shelter, userLocation]);
+  }, [additionalHazards, destination, originLabel, shelter, userLocation]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -398,6 +469,12 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
               </div>
             )}
             <h3 className="mt-5 text-sm font-bold text-slate-900">Suggested routes</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Routes are ranked by mapped warning exposure, then travel time.
+              {state.routes.length === 1
+                ? " The routing service returned only one drivable route, so no alternate road was available to compare."
+                : ""}
+            </p>
             <div className="mt-2 space-y-2">
               {state.routes.map((route, index) => (
                 <button key={`${route.distance}-${index}`} type="button" onClick={() => setState((current) => ({ ...current, selectedIndex: index }))} className={`w-full rounded-xl border p-3 text-left ${index === state.selectedIndex ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white"}`}>
@@ -407,7 +484,7 @@ export default function RouteModal({ shelter, userLocation, onClose }) {
               ))}
             </div>
             <div className="mt-5 space-y-2">
-              <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-700"><Droplets className="h-4 w-4 shrink-0 text-cyan-600" /><span><strong>Water levels:</strong> {riverReading ? `latest observation ${riverReading.level.toFixed(2)} m` : "no recent observation available"}</span></div>
+              <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-700"><Droplets className="h-4 w-4 shrink-0 text-cyan-600" /><span><strong>Water levels:</strong> {state.floodFeedAvailable ? state.floodWarnings.length ? `${state.floodWarnings.length} active gauge warning${state.floodWarnings.length === 1 ? "" : "s"} included in route scoring` : "no active gauge warnings found" : "live gauge warnings unavailable"}{riverReading ? ` · latest observation ${riverReading.level.toFixed(2)} m` : ""}</span></div>
               <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-700"><Mountain className="h-4 w-4 shrink-0 text-amber-600" /><span><strong>Landslides:</strong> {state.landslides.length ? `official warning in ${shelter.district}` : "no matching official warning found"}</span></div>
               <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-700"><AlertTriangle className="h-4 w-4 shrink-0 text-red-600" /><span><strong>Mapped alerts:</strong> {state.alerts.filter((alert) => String(alert.status || "").toLowerCase() === "active").length} active alerts loaded</span></div>
             </div>

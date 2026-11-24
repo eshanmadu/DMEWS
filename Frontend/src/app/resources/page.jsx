@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import DistributionRouteModal from "@/components/DistributionRouteModal";
+import RouteModal from "@/components/RouteModal";
 import {
   Package,
   Pill,
@@ -21,9 +21,15 @@ import {
   Navigation,
   Sparkles,
 } from "lucide-react";
+import {
+  buildGaugeFeedUrl,
+  getStationStatus,
+  parseArcGISFeed,
+} from "@/lib/riverGauges";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const PROGRAMS_CACHE_KEY = "dmews_resource_programs_cache";
+const DISTRICTS_GEOJSON_URL = "/sri-lanka-districts.geojson";
 
 function formatDateOnly(d) {
   return d.toISOString().slice(0, 10);
@@ -33,6 +39,115 @@ function normalizePhoneDigits(value) {
   const digits = String(value || "").replace(/\D/g, "");
   if (digits.length === 12 && digits.startsWith("94")) return digits.slice(2);
   return digits;
+}
+
+function normalizeAreaName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\bdistrict\b/g, "")
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function districtName(feature) {
+  return String(
+    feature?.properties?.shapeName ||
+      feature?.properties?.NAME_2 ||
+      feature?.properties?.name ||
+      ""
+  ).replace(/\s+district$/i, "").trim();
+}
+
+function pointInRing(point, ring) {
+  let inside = false;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const [x, y] = ring[index];
+    const [previousX, previousY] = ring[previous];
+    const intersects =
+      y > point[1] !== previousY > point[1] &&
+      point[0] < ((previousX - x) * (point[1] - y)) / (previousY - y) + x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInGeometry(point, geometry) {
+  if (!geometry) return false;
+  if (geometry.type === "Polygon") {
+    return geometry.coordinates[0]?.length > 3 && pointInRing(point, geometry.coordinates[0]);
+  }
+  if (geometry.type === "MultiPolygon") {
+    return geometry.coordinates.some(
+      (polygon) => polygon[0]?.length > 3 && pointInRing(point, polygon[0])
+    );
+  }
+  return false;
+}
+
+function findStationDistrict(station, geoJson) {
+  if (!Number.isFinite(station.longitude) || !Number.isFinite(station.latitude)) return "";
+  const feature = geoJson?.features?.find((item) =>
+    pointInGeometry([station.longitude, station.latitude], item.geometry)
+  );
+  return districtName(feature);
+}
+
+function collectAlertAreas(stations, warnings, geoJson) {
+  const areas = new Map();
+  const ensureArea = (district, fallbackName) => {
+    const name = district || fallbackName;
+    const key = normalizeAreaName(name);
+    if (!areas.has(key)) {
+      areas.set(key, {
+        key,
+        district: district || "",
+        label: name,
+        priority: 0,
+        alerts: [],
+      });
+    }
+    return areas.get(key);
+  };
+
+  stations.forEach((station) => {
+    const status = getStationStatus(station);
+    if (status.label === "Normal" || status.label === "No flood levels") return;
+    const district = findStationDistrict(station, geoJson);
+    const area = ensureArea(district, station.station);
+    const priority = status.label === "Major flood" ? 3 : status.label === "Minor flood" ? 2 : 1;
+    area.priority = Math.max(area.priority, priority);
+    area.alerts.push({
+      type: "water",
+      severity: status.label,
+      areas: [station.station],
+      detail: `${station.basin} basin`,
+      hazards: [
+        {
+          latitude: station.latitude,
+          longitude: station.longitude,
+          label: `${station.station} (${station.basin} basin)`,
+          source: "Water-level alert",
+        },
+      ],
+    });
+  });
+
+  warnings.forEach((warning) => {
+    const district = String(warning?.district || "").trim();
+    const level = Number(warning?.level);
+    if (!district || !Number.isFinite(level)) return;
+    const area = ensureArea(district, district);
+    area.priority = Math.max(area.priority, level);
+    area.alerts.push({
+      type: "landslide",
+      severity: level >= 3 ? "Red" : level === 2 ? "Amber" : "Yellow",
+      areas: Array.isArray(warning.divisions) ? warning.divisions : [],
+      detail: `Level ${level}`,
+    });
+  });
+
+  return [...areas.values()];
 }
 
 const RESOURCE_TYPES = [
@@ -83,6 +198,117 @@ function resourceNeedsCondition(resourceId) {
   return ALL_RESOURCE_TYPES.find((resource) => resource.id === resourceId)?.requiresCondition === true;
 }
 
+function ResourceCategorySelector({ form, resourceItems, setField, toggleResourceType, updateResourceItem, tr }) {
+  return (
+    <div id="resource-categories" className="scroll-mt-6">
+      <div className="mb-4">
+        <h3 className="text-base font-semibold text-slate-900">
+          {tr("Choose resources to contribute", "දායක කිරීමට සම්පත් තෝරන්න")}
+        </h3>
+        <p className="mt-1 text-sm text-slate-600">
+          {tr(
+            "Select resource types and add a quantity and the requested details for each.",
+            "සම්පත් වර්ග තෝරා එක් එක් වර්ගයට ප්‍රමාණය සහ ඉල්ලා ඇති විස්තර ඇතුළත් කරන්න."
+          )}
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {ALL_RESOURCE_TYPES.map((resource) => {
+          const Icon = resource.icon;
+          const selected = (form.resourceTypes || []).includes(resource.id);
+          const item = resourceItems[resource.id] || { quantity: "", unit: "units", condition: "new" };
+          return (
+            <article
+              key={resource.id}
+              className={`rounded-xl border p-4 transition ${
+                selected
+                  ? "border-rose-400 bg-rose-50/50 shadow-md ring-2 ring-rose-100"
+                  : "border-slate-200 bg-white hover:-translate-y-0.5 hover:shadow-md"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => toggleResourceType(resource.id, !selected)}
+                className="flex w-full items-start gap-3 text-left"
+              >
+                <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${resource.color} text-white`}>
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-slate-900">{resource.title}</span>
+                  <span className="mt-1 block text-sm text-slate-600">{resource.examples}</span>
+                </span>
+                <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? "border-rose-600 bg-rose-600 text-white" : "border-slate-300 bg-white"}`}>
+                  {selected ? "✓" : ""}
+                </span>
+              </button>
+              {selected && (
+                <div className="mt-4 grid grid-cols-2 gap-2 border-t border-rose-100 pt-3">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Quantity
+                    <input
+                      required
+                      min="1"
+                      type="number"
+                      step="0.01"
+                      value={item.quantity}
+                      onChange={(event) => updateResourceItem(resource.id, "quantity", event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Unit
+                    <select
+                      value={item.unit}
+                      onChange={(event) => updateResourceItem(resource.id, "unit", event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900"
+                    >
+                      <option value="units">Units</option>
+                      <option value="kg">kg</option>
+                      <option value="liters">Liters</option>
+                      <option value="boxes">Boxes</option>
+                      <option value="cartons">Cartons</option>
+                      <option value="packs">Packs</option>
+                      <option value="kits">Kits</option>
+                      <option value="pairs">Pairs</option>
+                    </select>
+                  </label>
+                  {resourceNeedsCondition(resource.id) && (
+                    <label className="col-span-2 text-xs font-semibold text-slate-600">
+                      Condition
+                      <select
+                        value={item.condition}
+                        onChange={(event) => updateResourceItem(resource.id, "condition", event.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900"
+                      >
+                        {CONDITION_OPTIONS.map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {resource.id === OTHER_RESOURCE_ID && (
+                    <label className="col-span-2 text-xs font-semibold text-slate-600">
+                      Describe essential
+                      <input
+                        required
+                        value={form.otherResource}
+                        onChange={(event) => setField("otherResource", event.target.value)}
+                        placeholder="e.g. hygiene kits"
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900"
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function ResourcesPage() {
   const { i18n } = useTranslation();
   const si = String(i18n.language || "").startsWith("si");
@@ -113,6 +339,10 @@ export default function ResourcesPage() {
   const [resourceItems, setResourceItems] = useState({});
   const [demandPrediction, setDemandPrediction] = useState(null);
   const [demandLoading, setDemandLoading] = useState(true);
+  const [demandError, setDemandError] = useState("");
+  const [alertAreas, setAlertAreas] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [alertsError, setAlertsError] = useState("");
   const [distributionRoute, setDistributionRoute] = useState(null);
 
   const selectedResources = useMemo(
@@ -125,6 +355,22 @@ export default function ResourcesPage() {
     if (!Number.isFinite(qty) || qty <= 0) return 0;
     return Math.max(1, Math.floor(qty / 5));
   }, [resourceItems]);
+  const prioritizedAlertAreas = useMemo(() => {
+    const predictions = new Map(
+      (demandPrediction?.predictions || []).map((prediction) => [
+        normalizeAreaName(prediction.district),
+        prediction,
+      ])
+    );
+    return [...alertAreas].sort((left, right) => {
+      const priorityDifference = right.priority - left.priority;
+      if (priorityDifference) return priorityDifference;
+      return (
+        (predictions.get(normalizeAreaName(right.district))?.score || 0) -
+        (predictions.get(normalizeAreaName(left.district))?.score || 0)
+      );
+    });
+  }, [alertAreas, demandPrediction]);
   const minAvailableDate = useMemo(() => formatDateOnly(new Date()), []);
   const maxAvailableDate = useMemo(() => {
     const d = new Date();
@@ -251,17 +497,86 @@ export default function ResourcesPage() {
     let cancelled = false;
     async function loadDemandPrediction() {
       setDemandLoading(true);
+      setDemandError("");
       try {
         const res = await fetch(`${API_BASE}/resource-demand/predictions`, { cache: "no-store" });
         const data = await res.json().catch(() => null);
-        if (!cancelled && res.ok) setDemandPrediction(data);
-      } catch {
-        if (!cancelled) setDemandPrediction(null);
+        if (!res.ok) throw new Error(data?.message || "Could not load resource demand.");
+        if (!Array.isArray(data?.predictions)) throw new Error("Resource demand response is invalid.");
+        if (!cancelled) setDemandPrediction(data);
+      } catch (loadError) {
+        if (!cancelled) {
+          setDemandPrediction(null);
+          setDemandError(loadError?.message || "Could not load resource demand.");
+        }
       } finally {
         if (!cancelled) setDemandLoading(false);
       }
     }
     loadDemandPrediction();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchJson(url, label) {
+      const response = await fetch(url, { cache: "no-store" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.message || `${label} could not be loaded.`);
+      if (data?.error) throw new Error(data.error.message || `${label} could not be loaded.`);
+      return data;
+    }
+
+    async function loadAlertAreas() {
+      setAlertsLoading(true);
+      setAlertsError("");
+      const [waterResult, landslideResult, boundariesResult] = await Promise.allSettled([
+        fetchJson(buildGaugeFeedUrl(), "Water-level alerts"),
+        fetchJson(`${API_BASE}/landslide-warnings`, "Landslide alerts"),
+        fetchJson(DISTRICTS_GEOJSON_URL, "District boundaries"),
+      ]);
+      if (cancelled) return;
+
+      const errors = [];
+      let stations = [];
+      if (waterResult.status === "fulfilled" && Array.isArray(waterResult.value?.features)) {
+        stations = parseArcGISFeed(waterResult.value);
+      } else {
+        errors.push(
+          waterResult.status === "rejected"
+            ? waterResult.reason?.message || "Water-level alerts could not be loaded."
+            : "Water-level alert response is invalid."
+        );
+      }
+
+      let warnings = [];
+      if (landslideResult.status === "fulfilled" && Array.isArray(landslideResult.value?.warnings)) {
+        warnings = landslideResult.value.warnings;
+      } else {
+        errors.push(
+          landslideResult.status === "rejected"
+            ? landslideResult.reason?.message || "Landslide alerts could not be loaded."
+            : "Landslide alert response is invalid."
+        );
+      }
+
+      const boundaries =
+        boundariesResult.status === "fulfilled" &&
+        Array.isArray(boundariesResult.value?.features)
+          ? boundariesResult.value
+          : null;
+      if (waterResult.status === "fulfilled" && !boundaries) {
+        errors.push("District boundaries are unavailable; water alerts are shown by gauge.");
+      }
+
+      setAlertAreas(collectAlertAreas(stations, warnings, boundaries));
+      setAlertsError(errors.join(" "));
+      setAlertsLoading(false);
+    }
+
+    loadAlertAreas();
     return () => {
       cancelled = true;
     };
@@ -409,183 +724,138 @@ export default function ResourcesPage() {
         </div>
       </section>
 
-      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-3 lg:px-8">
-        <section className="space-y-5 lg:col-span-2">
+      <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+        <section className="space-y-5">
           <div className="rounded-2xl border border-violet-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-sky-50 px-5 py-4">
               <div>
                 <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-slate-800">
                   <Sparkles className="h-5 w-5 text-violet-600" />
-                  {tr("AI resource priority areas", "AI සම්පත් ප්‍රමුඛතා ප්‍රදේශ")}
+                  {tr("Live alert-affected areas", "සජීවී අනතුරු ඇඟවීම් බලපාන ප්‍රදේශ")}
                 </h2>
                 <p className="mt-1 text-sm text-slate-600">
                   {tr(
-                    "Areas where recent incidents and active alerts indicate the greatest resource need.",
-                    "මෑත සිදුවීම් සහ සක්‍රීය අනතුරු ඇඟවීම් මගින් විශාලතම සම්පත් අවශ්‍යතාව පෙන්වන ප්‍රදේශ."
+                    "Prioritized from live river-level alerts and official DMC landslide warnings. Demand and stock are shown for matching districts.",
+                    "සජීවී ගංගා ජල මට්ටම් අනතුරු ඇඟවීම් සහ නිල DMC නායයෑම් අනතුරු ඇඟවීම් අනුව ප්‍රමුඛතාව දක්වයි. ගැළපෙන දිස්ත්‍රික්ක සඳහා අවශ්‍යතා සහ තොග පෙන්වයි."
                   )}
                 </p>
               </div>
             </div>
-            {demandLoading ? (
+            {(alertsError || demandError) && (
+              <p role="alert" className="mx-5 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {[alertsError, demandError].filter(Boolean).join(" ")}
+              </p>
+            )}
+            {alertsLoading || demandLoading ? (
               <div className="flex justify-center py-10">
                 <Loader2 className="h-6 w-6 animate-spin text-violet-600" />
               </div>
-            ) : !demandPrediction?.predictions?.length ? (
+            ) : !prioritizedAlertAreas.length ? (
               <p className="px-5 py-8 text-center text-sm text-slate-500">
-                {tr("No affected-area demand signals are available yet.", "දැනට බලපෑමට ලක් වූ ප්‍රදේශවල අවශ්‍යතා නොමැත.")}
+                {tr("No active water-level or landslide alert areas were found in the available feeds.", "ලබාගත හැකි දත්තවල සක්‍රීය ජල මට්ටම් හෝ නායයෑම් අනතුරු ඇඟවීම් ප්‍රදේශ හමු නොවීය.")}
               </p>
             ) : (
               <div className="grid gap-3 p-5 md:grid-cols-2">
-                {demandPrediction.predictions.slice(0, 6).map((prediction, index) => (
-                  <article key={prediction.district} className="rounded-xl border border-slate-200 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600">
-                          {tr(`Priority #${index + 1}`, `ප්‍රමුඛතාව #${index + 1}`)}
-                        </p>
-                        <h3 className="mt-1 flex items-center gap-1.5 font-bold text-slate-900">
-                          <MapPin className="h-4 w-4 text-rose-600" />
-                          {prediction.district}
-                        </h3>
-                      </div>
-                      <span className="rounded-full bg-violet-100 px-2 py-1 text-[11px] font-bold text-violet-800">
-                        {prediction.score}
-                      </span>
-                    </div>
-                    <div className="mt-3 space-y-1.5">
-                      {(prediction.needs || []).filter((need) => need.severity !== "Covered").slice(0, 3).map((need) => (
-                        <div key={need.resourceType} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs">
-                          <span className="font-semibold text-slate-800">{need.resourceType}</span>
-                          <span className={`font-bold ${need.severity === "High" ? "text-rose-700" : "text-amber-700"}`}>
-                            {need.severity === "Covered"
-                              ? tr("Stock covered", "තොගය ප්‍රමාණවත්")
-                              : tr(`${need.severity} demand priority`, `${need.severity} අවශ්‍යතා ප්‍රමුඛතාව`)}
-                          </span>
+                {prioritizedAlertAreas.slice(0, 6).map((area, index) => {
+                  const prediction = (demandPrediction?.predictions || []).find(
+                    (item) => normalizeAreaName(item.district) === normalizeAreaName(area.district)
+                  );
+                  const uncoveredNeeds = (prediction?.needs || []).filter(
+                    (need) => need.severity !== "Covered"
+                  );
+                  const firstNeed = uncoveredNeeds.find((need) =>
+                    (need.sources || []).some((source) => source.center)
+                  );
+                  const source = firstNeed?.sources?.find((item) => item.center);
+                  return (
+                    <article key={area.key} className="rounded-xl border border-slate-200 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600">
+                            {tr(`Priority #${index + 1}`, `ප්‍රමුඛතාව #${index + 1}`)}
+                          </p>
+                          <h3 className="mt-1 flex items-center gap-1.5 font-bold text-slate-900">
+                            <MapPin className="h-4 w-4 text-rose-600" />
+                            {area.label}
+                          </h3>
                         </div>
-                      ))}
-                    </div>
-                    {prediction.topAreas?.length > 0 && (
-                      <p className="mt-3 text-[11px] text-slate-500">
-                        {tr("Frequent areas:", "නිරන්තර ප්‍රදේශ:")} {prediction.topAreas.map((area) => area.area).join(", ")}
-                      </p>
-                    )}
-                    {prediction.center && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const firstNeed = (prediction.needs || []).find((need) => need.sources?.length);
-                          const source = firstNeed?.sources?.[0];
-                          setDistributionRoute({
-                            origin: source?.center
-                              ? { latitude: source.center.latitude, longitude: source.center.longitude, label: `${source.storageLocation} (${source.district})` }
-                              : null,
-                            destination: prediction.center,
-                            destinationLabel: `${prediction.district} affected area`,
-                            resourceType: firstNeed?.resourceType || "Resource",
-                          });
-                        }}
-                        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800"
-                      >
-                        <Navigation className="h-3.5 w-3.5" />
-                        {tr("Distribution route", "බෙදාහැරීමේ මාර්ගය")}
-                      </button>
-                    )}
-                  </article>
-                ))}
+                        {prediction && (
+                          <span className="rounded-full bg-violet-100 px-2 py-1 text-[11px] font-bold text-violet-800">
+                            {tr("Demand", "අවශ්‍යතාව")} {prediction.score}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {area.alerts.map((alert, alertIndex) => (
+                          <div key={`${alert.type}-${alertIndex}`} className="rounded-lg bg-rose-50 px-3 py-2 text-xs">
+                            <p className="font-bold text-rose-800">
+                              {alert.type === "water"
+                                ? tr(`Water-level alert · ${alert.severity}`, `ජල මට්ටම් අනතුරු ඇඟවීම · ${alert.severity}`)
+                                : tr(`Landslide alert · ${alert.severity}`, `නායයෑම් අනතුරු ඇඟවීම · ${alert.severity}`)}
+                            </p>
+                            <p className="mt-1 text-slate-700">
+                              {[alert.areas.join(", "), alert.detail].filter(Boolean).join(" · ")}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 space-y-1.5">
+                        {uncoveredNeeds.slice(0, 3).map((need) => (
+                          <div key={need.resourceType} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                            <span className="font-semibold text-slate-800">{need.resourceType}</span>
+                            <span className={`font-bold ${need.severity === "High" ? "text-rose-700" : "text-amber-700"}`}>
+                              {tr(`${need.severity} demand priority`, `${need.severity} අවශ්‍යතා ප්‍රමුඛතාව`)}
+                            </span>
+                          </div>
+                        ))}
+                        {prediction && uncoveredNeeds.length === 0 && (
+                          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
+                            {tr("Tracked stock currently covers forecast needs.", "දැනට ඇති තොගයෙන් පුරෝකථනය කළ අවශ්‍යතා සපුරාලේ.")}
+                          </p>
+                        )}
+                        {!prediction && (
+                          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                            {tr("No demand forecast is available for this alert area yet.", "මෙම අනතුරු ඇඟවීම් ප්‍රදේශය සඳහා තවම අවශ්‍යතා පුරෝකථනයක් නොමැත.")}
+                          </p>
+                        )}
+                      </div>
+                      {prediction?.topAreas?.length > 0 && (
+                        <p className="mt-3 text-[11px] text-slate-500">
+                          {tr("Frequent areas:", "නිරන්තර ප්‍රදේශ:")} {prediction.topAreas.map((item) => item.area).join(", ")}
+                        </p>
+                      )}
+                      {prediction?.center && source && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDistributionRoute({
+                              origin: { latitude: source.center.latitude, longitude: source.center.longitude, label: `${source.storageLocation} (${source.district})` },
+                              shelter: {
+                                name: `${firstNeed.resourceType} distribution to ${area.label}`,
+                                district: prediction.district,
+                                latitude: prediction.center.latitude,
+                                longitude: prediction.center.longitude,
+                              },
+                              originLabel: `${source.storageLocation} (${source.district})`,
+                              additionalHazards: area.alerts.flatMap((alert) => alert.hazards || []),
+                            });
+                          }}
+                          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800"
+                        >
+                          <Navigation className="h-3.5 w-3.5" />
+                          {tr("Distribution route", "බෙදාහැරීමේ මාර්ගය")}
+                        </button>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
             )}
           </div>
 
-          <div id="resource-categories" className="rounded-2xl border border-slate-200 bg-white shadow-sm scroll-mt-6">
-            <div className="border-b border-slate-100 bg-gradient-to-r from-sky-50 to-indigo-50/50 px-5 py-4">
-              <h2 className="text-lg font-semibold text-slate-800">
-                {tr("Choose resources to contribute", "දායක කිරීමට සම්පත් තෝරන්න")}
-              </h2>
-              <p className="mt-1 text-sm text-slate-600">
-                {tr("Select one or more categories, then add the quantity and relevant details for each.", "එක් හෝ වැඩි සම්පත් වර්ග තෝරා එක් එක් වර්ගයට ප්‍රමාණය සහ අදාළ විස්තර එක් කරන්න.")}
-              </p>
-            </div>
-            <div className="grid gap-4 p-5 sm:grid-cols-2">
-              {ALL_RESOURCE_TYPES.map((resource) => {
-                const Icon = resource.icon;
-                const selected = (form.resourceTypes || []).includes(resource.id);
-                const item = resourceItems[resource.id] || { quantity: "", unit: "units", condition: "new" };
-                return (
-                  <article
-                    key={resource.id}
-                    className={`rounded-xl border p-4 transition ${selected ? "border-rose-400 bg-rose-50/50 shadow-md ring-2 ring-rose-100" : "border-slate-200 bg-white hover:-translate-y-0.5 hover:shadow-md"}`}
-                  >
-                    <button type="button" onClick={() => toggleResourceType(resource.id, !selected)} className="flex w-full items-start gap-3 text-left">
-                      <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${resource.color} text-white`}><Icon className="h-5 w-5" /></span>
-                      <span className="min-w-0 flex-1"><span className="block font-semibold text-slate-900">{resource.title}</span><span className="mt-1 block text-sm text-slate-600">{resource.examples}</span></span>
-                      <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? "border-rose-600 bg-rose-600 text-white" : "border-slate-300 bg-white"}`}>{selected ? "✓" : ""}</span>
-                    </button>
-                    {selected && <div className="mt-4 grid grid-cols-2 gap-2 border-t border-rose-100 pt-3"><label className="text-xs font-semibold text-slate-600">Quantity<input required min="1" type="number" step="0.01" value={item.quantity} onChange={(e) => updateResourceItem(resource.id, "quantity", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900" /></label><label className="text-xs font-semibold text-slate-600">Unit<select value={item.unit} onChange={(e) => updateResourceItem(resource.id, "unit", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900"><option value="units">Units</option><option value="kg">kg</option><option value="liters">Liters</option><option value="boxes">Boxes</option><option value="cartons">Cartons</option><option value="packs">Packs</option><option value="kits">Kits</option><option value="pairs">Pairs</option></select></label>{resourceNeedsCondition(resource.id) && <label className="col-span-2 text-xs font-semibold text-slate-600">Condition<select value={item.condition} onChange={(e) => updateResourceItem(resource.id, "condition", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900">{CONDITION_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}{resource.id === OTHER_RESOURCE_ID && <label className="col-span-2 text-xs font-semibold text-slate-600">Describe essential<input required value={form.otherResource} onChange={(e) => setField("otherResource", e.target.value)} placeholder="e.g. hygiene kits" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm font-normal text-slate-900" /></label>}</div>}
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-
-          <div id="active-resource-programs" className="rounded-2xl border border-slate-200 bg-white shadow-sm scroll-mt-6">
-            <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-teal-50/50 px-5 py-4">
-              <h2 className="text-lg font-semibold text-slate-800">
-                {tr("Active Allocation Programs", "සක්‍රීය බෙදාහැරීමේ වැඩසටහන්")}
-              </h2>
-            </div>
-            <div className="space-y-3 p-5">
-              {programsLoading ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-sky-600" />
-                </div>
-              ) : programs.length === 0 ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  {tr(
-                    "No active allocation programs right now. Admin can add programs from the admin panel.",
-                    "දැනට සක්‍රීය බෙදාහැරීමේ වැඩසටහන් නොමැත. පරිපාලක මණ්ඩලයෙන් වැඩසටහන් එක් කළ හැක."
-                  )}
-                </div>
-              ) : (
-                programs.map((program) => (
-                <div
-                  key={program.id || program._id || program.name}
-                  className="rounded-xl border border-slate-200 bg-slate-50/50 p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div><h3 className="font-semibold text-slate-900">{program.name}</h3><p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-slate-500"><MapPin className="h-3.5 w-3.5" />{program.location || tr("District not specified", "දිස්ත්‍රික්කය සඳහන් කර නැත")}</p></div>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
-                      <CalendarDays className="h-3.5 w-3.5" />
-                      {program.status === "active" ? tr("Active", "සක්‍රීය") : program.status}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-slate-700">{program.target}</p>
-                  {program.location && (
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      {tr("Location:", "ස්ථානය:")} {program.location}
-                    </p>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(Array.isArray(program.resourceFocus)
-                      ? program.resourceFocus
-                      : []
-                    ).map((focus) => (
-                      <span
-                        key={focus}
-                        className="rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700"
-                      >
-                        {focus}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3"><p className="text-xs text-slate-500">{tr("Confirmed stock figures are shown only after warehouse receipt.", "තහවුරු කළ තොග සංඛ්‍යා පෙන්වන්නේ ගබඩා ලැබීමෙන් පසුව පමණි.")}</p><button type="button" onClick={() => { setStep(1); scrollToSection("resource-contribution-form"); }} className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500">{tr("Contribute to this program", "මෙම වැඩසටහනට දායක වන්න")}<ArrowRight className="h-3.5 w-3.5" /></button></div>
-                </div>
-                ))
-              )}
-            </div>
-          </div>
         </section>
 
-        <aside className="space-y-5">
+        <section className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 bg-gradient-to-r from-rose-50 to-orange-50/50 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-800">
@@ -595,14 +865,24 @@ export default function ResourcesPage() {
                 {tr("Register your available resources for dispatch planning.", "බෙදාහැරීමේ සැලසුම් සඳහා ඔබගේ තිබෙන සම්පත් ලියාපදිංචි කරන්න.")}
               </p>
             </div>
-            <form id="resource-contribution-form" onSubmit={handleSubmit} className="space-y-3 p-5 scroll-mt-6">
+            <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <form id="resource-contribution-form" onSubmit={handleSubmit} className="space-y-5 scroll-mt-6">
               <div className="mb-5 grid grid-cols-3 gap-2" aria-label="Contribution steps">
                 {["Choose resources", "Arrange delivery", "Your details"].map((label, index) => {
                   const number = index + 1;
                   return <div key={label} className={`border-t-2 pt-2 text-[11px] font-semibold ${step >= number ? "border-rose-600 text-rose-700" : "border-slate-200 text-slate-400"}`}><span>{number}. </span>{tr(label, ["සම්පත් තෝරන්න", "බෙදාහැරීම සකසන්න", "ඔබගේ විස්තර"][index])}</div>;
                 })}
               </div>
-              {step === 1 && <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-3 text-sm text-slate-700"><p className="font-semibold text-slate-900">{tr("Choose resources", "සම්පත් තෝරන්න")}</p><p className="mt-1 text-xs text-slate-600">{tr("Select cards on the left and add quantity, unit, and any requested condition details for each selected item. Food, medical supplies, and water are recorded as new/unused.", "වම් පස ඇති කාඩ්පත් තෝරා එක් එක් සම්පතට ප්‍රමාණය, ඒකකය සහ ඉල්ලා ඇති තත්ත්ව විස්තර එක් කරන්න. ආහාර, වෛද්‍ය සැපයුම් සහ ජලය නව/භාවිත නොකළ ලෙස සටහන් වේ.")}</p>{selectedResources.length > 0 && <ul className="mt-3 space-y-1 text-xs">{selectedResources.map((resource) => <li key={resource.id} className="flex items-center justify-between"><span>{resource.title}</span><span className="font-semibold">{resourceItems[resource.id]?.quantity || "—"} {resourceItems[resource.id]?.unit || ""}</span></li>)}</ul>}</div>}
+              {step === 1 && (
+                <ResourceCategorySelector
+                  form={form}
+                  resourceItems={resourceItems}
+                  setField={setField}
+                  toggleResourceType={toggleResourceType}
+                  updateResourceItem={updateResourceItem}
+                  tr={tr}
+                />
+              )}
               {step === 3 && <>
               <input
                 required
@@ -718,8 +998,8 @@ export default function ResourcesPage() {
                 </p>
               )}
             </form>
-          </div>
 
+            <aside className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
               {tr("Impact Preview", "බලපෑම් පෙරදසුන")}
@@ -766,15 +1046,87 @@ export default function ResourcesPage() {
               <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{tr("Reference number", "යොමු අංකය")}</p><p className="mt-1 font-mono text-sm font-bold text-slate-900">{submittedReference || "Pending"}</p></div>
             </div>
           )}
-        </aside>
+            </aside>
+            </div>
+          </div>
+        </section>
+
+        <section id="active-resource-programs" className="rounded-2xl border border-slate-200 bg-white shadow-sm scroll-mt-6">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-teal-50/50 px-5 py-4">
+            <h2 className="text-lg font-semibold text-slate-800">
+              {tr("Active Allocation Programs", "සක්‍රීය බෙදාහැරීමේ වැඩසටහන්")}
+            </h2>
+          </div>
+          <div className="space-y-3 p-5">
+            {programsLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-sky-600" />
+              </div>
+            ) : programs.length === 0 ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {tr(
+                  "No active allocation programs right now. Admin can add programs from the admin panel.",
+                  "දැනට සක්‍රීය බෙදාහැරීමේ වැඩසටහන් නොමැත. පරිපාලක මණ්ඩලයෙන් වැඩසටහන් එක් කළ හැක."
+                )}
+              </div>
+            ) : (
+              programs.map((program) => (
+                <div
+                  key={program.id || program._id || program.name}
+                  className="rounded-xl border border-slate-200 bg-slate-50/50 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-slate-900">{program.name}</h3>
+                      <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-slate-500">
+                        <MapPin className="h-3.5 w-3.5" />
+                        {program.location || tr("District not specified", "දිස්ත්‍රික්කය සඳහන් කර නැත")}
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      {program.status === "active" ? tr("Active", "සක්‍රීය") : program.status}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-700">{program.target}</p>
+                  {program.location && (
+                    <p className="mt-1 text-xs font-medium text-slate-500">
+                      {tr("Location:", "ස්ථානය:")} {program.location}
+                    </p>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(Array.isArray(program.resourceFocus) ? program.resourceFocus : []).map((focus) => (
+                      <span key={focus} className="rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                        {focus}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
+                    <p className="text-xs text-slate-500">
+                      {tr("Confirmed stock figures are shown only after warehouse receipt.", "තහවුරු කළ තොග සංඛ්‍යා පෙන්වන්නේ ගබඩා ලැබීමෙන් පසුව පමණි.")}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setStep(1); scrollToSection("resource-contribution-form"); }}
+                      className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500"
+                    >
+                      {tr("Contribute to this program", "මෙම වැඩසටහනට දායක වන්න")}
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       </div>
 
-      {distributionRoute?.origin && distributionRoute?.destination && (
-        <DistributionRouteModal
-          origin={distributionRoute.origin}
-          destination={distributionRoute.destination}
-          destinationLabel={distributionRoute.destinationLabel}
-          resourceType={distributionRoute.resourceType}
+      {distributionRoute?.origin && distributionRoute?.shelter && (
+        <RouteModal
+          shelter={distributionRoute.shelter}
+          userLocation={distributionRoute.origin}
+          originLabel={distributionRoute.originLabel}
+          additionalHazards={distributionRoute.additionalHazards}
           onClose={() => setDistributionRoute(null)}
         />
       )}
